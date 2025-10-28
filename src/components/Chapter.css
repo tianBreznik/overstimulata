@@ -101,6 +101,13 @@
   font-family: 'Times New Roman', Times, serif;
 }
 
+.chapter-content mark {
+  background-color: #ffeb3b;
+  color: black;
+  padding: 0.1em 0.2em;
+  border-radius: 0.2em;
+}
+
 .child-chapters {
   margin-top: 0.5rem;
 }

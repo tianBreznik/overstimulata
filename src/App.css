@@ -3,6 +3,18 @@
   background: white;
 }
 
+.app.with-editor .app-main {
+  padding-right: 580px; /* make room for side panel */
+}
+
+.app.with-editor .app-header {
+  padding-right: 580px;
+}
+
+.app.with-editor .bottom-actions {
+  right: calc(2rem + 620px); /* base 2rem + side panel width */
+}
+
 .app-header {
   background: white;
   padding: 2rem 0;

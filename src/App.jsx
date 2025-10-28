@@ -54,7 +54,7 @@ function App() {
   };
 
   return (
-    <div className="app">
+    <div className={`app ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''}`}>
       <header className="app-header">
         <div className="header-content">
           <p className="book-concept">

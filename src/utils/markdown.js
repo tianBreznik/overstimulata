@@ -17,6 +17,10 @@ export function renderMarkdown(text) {
     .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
     // Italic: *text* -> <em>text</em> (but not **text**)
     .replace(/(?<!\*)\*([^*\s]+(?:\s+[^*\s]+)*?)\*(?!\*)/g, '<em>$1</em>')
+    // Highlighting: ==text== -> <mark>text</mark>
+    .replace(/==(.*?)==/g, '<mark>$1</mark>')
+    // Custom highlight colors: ==color:text== -> <mark style="background-color: color">text</mark>
+    .replace(/==([^:]+):(.*?)==/g, '<mark style="background-color: $1">$2</mark>')
     // Strikethrough: -text- -> <del>text</del> (but not in HTML attributes)
     .replace(/(?<!["\w])-([^-\s]+(?:\s+[^-\s]+)*?)-(?!["\w])/g, '<del>$1</del>')
     // Line breaks: double newline -> paragraph break
