@@ -1,6 +1,90 @@
 .app {
   min-height: 100vh;
   background: white;
+  position: relative; /* anchor overlay */
+}
+
+/* Subtle grayscale e‑ink texture (very light) */
+.app.eink::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(rgba(0,0,0,0.06) 1px, transparent 1.4px) 0 0/3px 3px,
+    radial-gradient(rgba(0,0,0,0.04) 1px, transparent 1.4px) 1.5px 1.5px/3px 3px,
+    linear-gradient(0deg, rgba(0,0,0,0.03) 50%, transparent 50%) 0 0/1px 2px; /* very light scanline */
+  opacity: 0.08; /* subtle paper texture */
+}
+
+.app.eink::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 90px rgba(0,0,0,0.06);
+}
+
+/* Ink bleed effect on text - same as header text */
+.book-concept,
+.chapters-list .chapter-content,
+.chapters-list .chapter-content p,
+.chapters-list .chapter-content li {
+  color: #0c0c0c; /* match header color */
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22); /* same as header */
+}
+
+.chapters-list .chapter-header h3 {
+  color: #0c0c0c;
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+}
+
+/* Printed list marker feel (tabular numbers/letters with ink edge) */
+.book-concept li::marker,
+.chapters-list .chapter-content li::marker {
+  color: #0c0c0c;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "lnum" 0;
+  text-shadow:
+    0 0 0.5px rgba(0,0,0,0.55),
+    0 0.18px 0.7px rgba(0,0,0,0.26);
+}
+
+.book-concept ul, .book-concept ol,
+.chapters-list .chapter-content ul,
+.chapters-list .chapter-content ol { padding-left: 1.6rem; }
+
+/* Link styling: highlighted like marker underlay with strong ink edges */
+.book-concept a,
+.chapters-list .chapter-content a {
+  color: #0b0b0b;
+  text-decoration: none;
+  background-image: linear-gradient(transparent 70%, #fff49a 70%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+  text-shadow:
+    0 0 0.7px rgba(0,0,0,0.55),
+    0 0.25px 0.9px rgba(0,0,0,0.30),
+   -0.25px 0 0.9px rgba(0,0,0,0.24);
+  box-shadow: inset 0 -1px 0 #d6c95a;
+}
+
+.book-concept a:hover,
+.chapters-list .chapter-content a:hover {
+  background-image: linear-gradient(transparent 68%, #ffef6d 68%);
+  box-shadow: inset 0 -1px 0 #cdbf45;
 }
 
 .app.with-editor .app-main {
@@ -65,7 +149,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  max-width: 600px;
+  max-width: 800px; /* match intro width */
   margin: 0 auto;
 }
 

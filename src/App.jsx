@@ -5,6 +5,7 @@ import { EditorSetup } from './pages/EditorSetup';
 import { useEditorMode } from './hooks/useEditorMode';
 import { getChapters, getSubchapters, addChapter, addSubchapter, updateChapter, updateSubchapter, deleteChapter, deleteSubchapter } from './services/firestore';
 import './App.css';
+import { getBookmark } from './utils/bookmark';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { DraggableChapter } from './components/DraggableChapter';
@@ -18,6 +19,7 @@ function App() {
   const [showNewChapterEditor, setShowNewChapterEditor] = useState(false);
   const [parentChapterForNewSub, setParentChapterForNewSub] = useState(null);
   const [chapters, setChapters] = useState([]);
+  const [defaultExpandedChapterId, setDefaultExpandedChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
 
@@ -35,6 +37,18 @@ function App() {
         })
       );
       setChapters(withChildren);
+      // After loading, try to restore bookmark
+      const bm = getBookmark();
+      if (bm?.chapterId) {
+        setDefaultExpandedChapterId(bm.chapterId);
+        // Scroll after paint
+        requestAnimationFrame(() => {
+          const el = document.getElementById(`chapter-${bm.chapterId}`);
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        });
+      } else {
+        setDefaultExpandedChapterId(null);
+      }
       setLoadError('');
     } catch (e) {
       console.error('[Firestore] Load error', e);
@@ -54,7 +68,7 @@ function App() {
   };
 
   return (
-    <div className={`app ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''}`}>
+    <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''}`}>
       <header className="app-header">
         <div className="header-content">
           <p className="book-concept">
@@ -109,6 +123,7 @@ function App() {
                         deleteChapter(BOOK_ID, chapterId).then(() => refresh());
                       }
                     }}
+                    defaultExpandedChapterId={defaultExpandedChapterId}
                   />
                 ))}
               </SortableContext>

@@ -37,6 +37,21 @@ export function renderMarkdownWithParagraphs(text) {
   
   console.log('renderMarkdownWithParagraphs - Original text:', text);
   
+  // Check if content already contains HTML tags (from editor with formatting)
+  const hasHtmlTags = /<[^>]+>/.test(text);
+  
+  if (hasHtmlTags) {
+    // Content is already HTML from the editor - return as-is, but ensure it's wrapped in <p> if needed
+    const trimmed = text.trim();
+    const startsWithBlockTag = trimmed.match(/^<(p|h[1-6]|div|ul|ol|blockquote)/i);
+    
+    if (!startsWithBlockTag) {
+      // Wrap HTML content in <p> if it doesn't start with a block tag
+      return `<p>${trimmed}</p>`;
+    }
+    return trimmed;
+  }
+  
   // Process custom large text syntax: #text -> <span class="large-text">text</span>
   let result = text
     .replace(/#([^\s#][^#]*?)(?=\s|$)/g, '<span class="large-text">$1</span>');
@@ -45,6 +60,15 @@ export function renderMarkdownWithParagraphs(text) {
   
   // Now render the rest of the markdown
   result = renderMarkdown(result);
+  
+  // Ensure content is wrapped in <p> tags if it's not already
+  const trimmed = result.trim();
+  const startsWithBlockTag = trimmed.match(/^<(p|h[1-6]|div|ul|ol|blockquote)/i);
+  
+  if (trimmed && !startsWithBlockTag) {
+    // Wrap in <p> if it's not already wrapped
+    result = `<p>${trimmed}</p>`;
+  }
   
   console.log('Final result from renderMarkdownWithParagraphs:', result);
   return result;

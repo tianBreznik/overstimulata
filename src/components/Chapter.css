@@ -1,8 +1,23 @@
 .chapter {
-  background: white;
-  margin-bottom: 0.75rem;
+  background: transparent;
+  margin-bottom: 1.1rem; /* generous leading between entries */
   text-align: left;
   width: 100%;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+  hyphens: auto;
+}
+
+/* Scoped print-style typography for chapter content only (not headers) */
+.chapters-list .chapter-content,
+.chapters-list .chapter-content * {
+  font-family: 'Times New Roman', Times, serif;
+  letter-spacing: 0.004em;
+  line-height: 1.6;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
 }
 
 .chapter[style*="margin-left: 1.5rem"] {
@@ -10,64 +25,212 @@
 }
 
 .chapter-header {
-  padding: 0.25rem 0;
+  padding: 0.35rem 0; /* air around titles */
   cursor: pointer;
-  display: inline-flex;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   user-select: none;
-  background: white;
+  background: transparent;
+  width: 100%;
+  position: relative; /* anchor invisible drag handle */
+  z-index: 1;
 }
 
-.chapter-header:hover h3 {
-  text-decoration: underline;
-}
+/* Do not underline when header is hovered unless the h3 itself is hovered */
+.chapter-header:hover h3:not(:hover) { text-decoration: none; }
 
 .chapter-header h3 {
-  margin: 0 0 0 0.5rem;
-  font-size: 1.2rem;
-  color: black;
-  font-weight: bold;
-  font-family: 'Times New Roman', Times, serif;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
+  margin: 0;
+  font-size: 1.55rem; /* slightly reduced for better print-like bleed */
+  color: #0c0c0c;
+  font-weight: 520; /* test non-bold for better ink look */
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  text-transform: none;
+  letter-spacing: 0.015em;
+  text-align: center;
+  width: auto; /* avoid covering buttons area */
+  display: inline-block; /* only wrap the text */
+  text-shadow: 0 0 0.9px rgba(0,0,0,0.5), 0 0 1.4px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
 }
+
+/* Title/subtitle specific hover underline - more visible */
+.chapter-title:hover,
+.subchapter-title:hover { 
+  text-decoration: underline;
+  text-decoration-color: #000000;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 2px;
+}
+
+/* Ensure the very first letter is uppercase while keeping the rest as typed */
+.chapter-header h3::first-letter { text-transform: uppercase; }
 
 .chapter[style*="margin-left: 1.5rem"] .chapter-header h3 {
-  font-size: 1rem;
+  font-size: 1.05rem; /* slightly reduced */
   text-transform: none;
-  font-weight: normal;
+  font-weight: 500; /* increased to match main titles and content visually */
+  letter-spacing: 0.01em;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  text-align: center;
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22); /* match main title stroke */
 }
 
+/* Hide numbering and toggle symbols */
+.chapter-number { display: none; }
+.toggle-icon { display: none; }
+
+/* Invisible drag handle area on the right edge (no icon shown) */
+.chapter-header [aria-label="Drag handle"] {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #999;
+}
+
+.chapter-header [aria-label="Drag handle"]:hover {
+  color: #999; /* no hover color change */
+}
+
+/* Inline action buttons (editor mode) */
+.chapter-actions-inline {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-left: 4px;
+  z-index: 2; /* sit above title text */
+}
+
+.chapter-actions-inline .btn-action {
+  padding: 2px 6px;
+  font-size: 11px;
+  border: 1px solid #cfcfcf;
+  background: #fff;
+  cursor: pointer;
+  border-radius: 4px;
+  font-family: 'Times New Roman', Times, serif;
+}
+
+.chapter-actions-inline .btn-action:hover,
+.chapter-actions-inline .btn-action:focus,
+.chapter-actions-inline .btn-action:active,
+.chapter-actions-inline .btn-action:focus-visible {
+  background: #fff !important; /* no hover effect */
+  color: inherit !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.chapter-actions-inline .btn-delete { color: #d33; border-color: #d9a1a1; }
+.chapter-actions-inline .btn-add-sub { color: #0066cc; border-color: #a7c7e9; }
+
 .chapter-number {
-  font-weight: bold;
+  font-weight: 600;
   margin-right: 0.5rem;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-variant-numeric: oldstyle-nums; /* classic numerals */
+  letter-spacing: 0.01em;
+}
+
+/* Style the § symbol for subchapters */
+.chapter[style*="margin-left: 1.5rem"] .chapter-number {
+  font-weight: 600;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
 }
 
 .toggle-icon {
-  font-size: 1rem;
-  color: black;
-  font-weight: normal;
+  font-size: 1.1rem;
+  color: #333;
+  font-weight: 600;
   min-width: 1rem;
+  display: inline-block;
+  transform: rotate(0deg);
+  transition: transform 160ms ease, color 160ms ease;
 }
 
+.chapter.expanded .toggle-icon { transform: rotate(90deg); color: #000; }
+.chapter.subchapter .toggle-icon { transform: none; color: #444; }
+
 .chapter-body {
-  padding: 0.5rem 0 0.5rem 2rem;
-  text-align: left;
+  padding: 0.3rem 0 0.5rem 0; /* align body flush with title edge */
+  padding-left: 2rem; /* match header-content padding for alignment */
+  text-align: justify; /* match header text alignment */
+}
+
+/* Subchapter body should align with main chapter content, so counteract parent margin-left */
+.chapter[style*="margin-left: 1.5rem"] .chapter-body {
+  margin-left: -2.0rem; /* counteract parent's margin-left to align with main chapters */
+  padding-left: 2rem; /* keep same padding as main chapters */
 }
 
 .chapter-content {
   margin-bottom: 1rem;
-  padding: 0;
-  line-height: 1.6;
+  padding: 0.15rem 0 0 0;
+  padding-left: 0; /* no left padding for main chapters */
+  line-height: 1.8;
   font-family: 'Times New Roman', Times, serif;
-  font-size: 1rem;
-  color: black;
+  font-size: 1rem; /* body size tuned down */
+  font-weight: 300; /* lighter weight to match subtitle appearance */
+  letter-spacing: 0.004em;
+  color: #0c0c0c; /* match header color exactly */
+  text-align: justify; /* match header text alignment */
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22); /* match header stroke exactly */
+}
+
+/* Subchapter content should align with main chapter content, so counteract parent margin-left */
+.chapter[style*="margin-left: 1.5rem"] .chapter-content {
+  margin-left: -1.5rem; /* counteract parent's margin-left to align with main chapters */
+  padding-left: 0;
 }
 
 .chapter-content p {
   margin: 0 0 1rem 0;
   line-height: 1.6;
-  font-family: 'Times New Roman', Times, serif;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
+  font-weight: 400 !important; /* match header weight exactly */
+  font-size: 1rem;
+  color: #0c0c0c !important; /* match header color */
+  text-align: justify; /* match header text alignment */
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18) !important;
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22) !important; /* ensure stroke is applied */
+}
+
+/* Ensure all inline elements inside paragraphs also use Garamond */
+.chapter-content p *,
+.chapter-content p span,
+.chapter-content p strong,
+.chapter-content p em,
+.chapter-content p mark,
+.chapter-content p del {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+}
+
+.chapter-content del,
+.chapter-content s {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
+  font-weight: 400 !important; /* match header weight exactly */
+  color: #0c0c0c !important; /* match header color */
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18) !important;
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22) !important; /* ensure stroke is applied */
 }
 
 .chapter-content p:last-child {
@@ -108,8 +271,23 @@
   border-radius: 0.2em;
 }
 
+.chapter-content img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+}
+
+.chapter-content iframe {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 1rem 0;
+  aspect-ratio: 16 / 9;
+}
+
 .child-chapters {
-  margin-top: 0.5rem;
+  margin-top: 0.25rem;
 }
 
 .chapter-actions {
@@ -134,8 +312,8 @@
 }
 
 .btn-edit:hover {
-  background: black;
-  color: white;
+  background: white; /* no hover effect */
+  color: black;
 }
 
 .btn-delete {
@@ -145,8 +323,8 @@
 }
 
 .btn-delete:hover {
-  background: #d33;
-  color: white;
+  background: white; /* no hover effect */
+  color: #d33;
 }
 
 .btn-add-sub {
@@ -156,7 +334,7 @@
 }
 
 .btn-add-sub:hover {
-  background: #0066cc;
-  color: white;
+  background: white; /* no hover effect */
+  color: #0066cc;
 }
 

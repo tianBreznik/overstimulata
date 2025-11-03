@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { convertImageToBase64 } from '../services/storage';
 import './ChapterEditor.css';
 
 export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDelete }) => {
@@ -17,7 +18,10 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     textColor: false
   });
   const textareaRef = useRef(null);
+  const imageInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
+  const [showVideoDialog, setShowVideoDialog] = useState(false);
+  const [videoUrl, setVideoUrl] = useState('');
 
   const refreshToolbarState = () => {
     try {
@@ -189,6 +193,128 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     refreshToolbarState();
   };
 
+  const handleImageButtonClick = () => {
+    if (imageInputRef.current) imageInputRef.current.click();
+  };
+
+  const handleVideoButtonClick = () => {
+    setShowVideoDialog(true);
+    setVideoUrl('');
+  };
+
+  const convertVideoUrlToEmbed = (url) => {
+    // YouTube - handles various formats, use nocookie domain to reduce branding
+    const youtubeRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/;
+    const youtubeMatch = url.match(youtubeRegex);
+    if (youtubeMatch) {
+      return `<iframe width="560" height="315" src="https://www.youtube-nocookie.com/embed/${youtubeMatch[1]}" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen style="max-width:100%;height:auto;display:block;margin:8px 0;"></iframe>`;
+    }
+
+    // Vimeo
+    const vimeoRegex = /(?:vimeo\.com\/)(?:channels\/|groups\/[^\/]*\/videos\/|album\/\d+\/video\/|video\/|)(\d+)/;
+    const vimeoMatch = url.match(vimeoRegex);
+    if (vimeoMatch) {
+      return `<iframe src="https://player.vimeo.com/video/${vimeoMatch[1]}" width="560" height="315" frameborder="0" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="max-width:100%;height:auto;display:block;margin:8px 0;"></iframe>`;
+    }
+
+    // If no match, return as-is (user might paste custom embed code)
+    return url;
+  };
+
+  const handleInsertVideo = () => {
+    if (!videoUrl.trim()) return;
+    
+    const editor = textareaRef.current;
+    if (!editor) return;
+
+    const embedHtml = convertVideoUrlToEmbed(videoUrl.trim());
+    
+    editor.focus();
+    try {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const temp = document.createElement('div');
+        temp.innerHTML = embedHtml;
+        const frag = document.createDocumentFragment();
+        let node, lastNode;
+        while ((node = temp.firstChild)) {
+          lastNode = frag.appendChild(node);
+        }
+        range.insertNode(frag);
+        if (lastNode) {
+          const after = document.createTextNode('\u00A0');
+          lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
+          const newRange = document.createRange();
+          newRange.setStartAfter(after);
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
+      } else {
+        editor.insertAdjacentHTML('beforeend', embedHtml);
+      }
+    } catch {
+      document.execCommand('insertHTML', false, embedHtml);
+    }
+    
+    setShowVideoDialog(false);
+    setVideoUrl('');
+    refreshToolbarState();
+  };
+
+  const handleImageSelected = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const dataUri = await convertImageToBase64(file);
+      const editor = textareaRef.current;
+      if (!editor) return;
+      editor.focus();
+      const imgHtml = `<img src="${dataUri}" alt="" style="max-width:100%;height:auto;display:block;margin:8px 0;" />`;
+      try {
+        // Prefer modern Selection/Range insertion
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          const temp = document.createElement('div');
+          temp.innerHTML = imgHtml;
+          const frag = document.createDocumentFragment();
+          let node, lastNode;
+          while ((node = temp.firstChild)) {
+            lastNode = frag.appendChild(node);
+          }
+          range.insertNode(frag);
+          // Move caret after inserted image
+          if (lastNode) {
+            const after = document.createTextNode('\u00A0');
+            lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
+            const newRange = document.createRange();
+            newRange.setStartAfter(after);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+          }
+        } else {
+          // Fallback: append at end of editor
+          editor.insertAdjacentHTML('beforeend', imgHtml);
+        }
+      } catch {
+        // Legacy fallback
+        document.execCommand('insertHTML', false, imgHtml);
+      }
+      refreshToolbarState();
+    } catch (err) {
+      console.error('Image conversion failed', err);
+      alert(err.message || 'Image conversion failed. Please try a smaller image.');
+    } finally {
+      // reset input so selecting the same file again still triggers change
+      if (imageInputRef.current) imageInputRef.current.value = '';
+    }
+  };
+
   return (
     <div className="editor-overlay side-panel">
       <div className="editor-modal side-panel-modal">
@@ -201,7 +327,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="new chapter"
+              placeholder="naslov poglavja"
               className="title-input"
             />
           </div>
@@ -236,6 +362,21 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   title="Underline"
                 >
                   <span style={{textDecoration: 'underline'}}>U</span>
+                </button>
+                <button
+                  onClick={handleImageButtonClick}
+                  className="toolbar-btn"
+                  title="Insert Image"
+                >
+                  🖼
+                </button>
+                <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageSelected} style={{ display: 'none' }} />
+                <button
+                  onClick={handleVideoButtonClick}
+                  className="toolbar-btn"
+                  title="Insert Video (YouTube/Vimeo)"
+                >
+                  🎥
                 </button>
                 {/* Text color picker (no button) */}
                 <div className="color-group">
@@ -296,7 +437,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 onClick={handleSave}
                 disabled={!title.trim() || saving}
               >
-                {saving ? 'Saving…' : 'Save Draft'}
+                {saving ? 'Publishing…' : 'Publish'}
               </button>
             </div>
             <div 
@@ -313,6 +454,40 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
         {/* bottom actions removed in favor of floating save */}
       </div>
+
+      {/* Video embed dialog */}
+      {showVideoDialog && (
+        <div className="video-dialog-overlay" onClick={(e) => {
+          if (e.target === e.currentTarget) setShowVideoDialog(false);
+        }}>
+          <div className="video-dialog">
+            <h3>Insert Video</h3>
+            <p style={{ fontSize: '12px', color: '#666', marginBottom: '12px' }}>
+              Paste a YouTube or Vimeo URL, or embed code
+            </p>
+            <input
+              type="text"
+              value={videoUrl}
+              onChange={(e) => setVideoUrl(e.target.value)}
+              placeholder="https://www.youtube.com/watch?v=..."
+              className="video-url-input"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleInsertVideo();
+                if (e.key === 'Escape') setShowVideoDialog(false);
+              }}
+              autoFocus
+            />
+            <div className="video-dialog-actions">
+              <button onClick={() => setShowVideoDialog(false)} className="btn-cancel">
+                Cancel
+              </button>
+              <button onClick={handleInsertVideo} className="btn-save" disabled={!videoUrl.trim()}>
+                Insert
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
