@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { convertImageToBase64 } from '../services/storage';
 import './ChapterEditor.css';
 
@@ -20,8 +20,213 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const textareaRef = useRef(null);
   const imageInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
+  const colorInputRef = useRef(null);
+  const userChangedColorRef = useRef(false); // Track when user manually changes color
   const [showVideoDialog, setShowVideoDialog] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
+
+  // Extract color from HTML string (for initial load)
+  // Finds colors in <p> and <span> elements and returns the LAST one found
+  const extractColorFromHTML = (html) => {
+    if (!html) return '#000000';
+    try {
+      console.log('extractColorFromHTML - Input HTML:', html);
+      let lastColor = '#000000';
+      
+      // Helper to convert color to hex and normalize to 6-digit format
+      const colorToHex = (color) => {
+        const trimmed = color.trim();
+        if (trimmed.startsWith('rgb')) {
+          const rgb = trimmed.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            const hex = '#' + rgb.slice(0, 3).map(x => {
+              const val = parseInt(x);
+              return (val < 16 ? '0' : '') + val.toString(16);
+            }).join('');
+            return normalizeHex(hex);
+          }
+        }
+        if (trimmed.startsWith('#')) {
+          return normalizeHex(trimmed);
+        }
+        return null;
+      };
+      
+      // Normalize hex color to 6-digit format (e.g., #f00 -> #ff0000, #ff0000ff -> #ff0000)
+      const normalizeHex = (hex) => {
+        if (!hex || !hex.startsWith('#')) return null;
+        // Remove # and convert to uppercase
+        let clean = hex.slice(1).toLowerCase();
+        // Handle 3-digit hex (e.g., #f00 -> #ff0000)
+        if (clean.length === 3) {
+          clean = clean.split('').map(c => c + c).join('');
+        }
+        // Take only first 6 characters (ignore alpha channel if present)
+        if (clean.length >= 6) {
+          clean = clean.slice(0, 6);
+        }
+        // Ensure it's exactly 6 characters
+        if (clean.length < 6) {
+          clean = clean.padEnd(6, '0');
+        }
+        return '#' + clean;
+      };
+      
+      // Find all <p> and <span> tags (including self-closing and with attributes)
+      const allTags = html.matchAll(/<(p|span)([^>]*)>/gi);
+      
+      for (const match of allTags) {
+        const fullTag = match[0];
+        const attributes = match[2] || '';
+        
+        console.log('Found tag:', fullTag);
+        
+        // Extract color from style attribute - improved regex
+        // Match: style="color: #ff0000" or style='color: rgb(255,0,0)' or style="...color: red..."
+        const styleAttrMatch = attributes.match(/style\s*=\s*["']([^"']*)["']/i);
+        if (styleAttrMatch && styleAttrMatch[1]) {
+          const styleContent = styleAttrMatch[1];
+          // Look for color property in style
+          const colorMatch = styleContent.match(/color\s*:\s*([^;]+)/i);
+          if (colorMatch && colorMatch[1]) {
+            const colorValue = colorMatch[1].trim();
+            console.log('Found color in style:', colorValue);
+            const hex = colorToHex(colorValue);
+            if (hex && hex !== '#000000') {
+              console.log('Setting lastColor to:', hex);
+              lastColor = hex;
+            }
+          }
+        }
+        
+        // Also check for <font color="..."> format
+        const fontColorMatch = attributes.match(/color\s*=\s*["']([^"']+)["']/i);
+        if (fontColorMatch && fontColorMatch[1]) {
+          const colorValue = fontColorMatch[1].trim();
+          console.log('Found color attribute:', colorValue);
+          const hex = colorToHex(colorValue);
+          if (hex && hex !== '#000000') {
+            console.log('Setting lastColor to:', hex);
+            lastColor = hex;
+          }
+        }
+      }
+      
+      // Normalize the final color to ensure it's in correct format
+      const finalColor = lastColor !== '#000000' ? normalizeHex(lastColor) || '#000000' : '#000000';
+      console.log('extractColorFromHTML - Final color:', finalColor);
+      return finalColor;
+    } catch (error) {
+      console.error('extractColorFromHTML error:', error);
+      return '#000000';
+    }
+  };
+
+  // Get current text color from selection/computed style
+  const getCurrentTextColor = () => {
+    try {
+      const editor = textareaRef.current;
+      if (!editor) return '#000000';
+      
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) {
+        // If no selection, try to get color from the last element or cursor position
+        // Place cursor at end and check
+        try {
+          const range = document.createRange();
+          range.selectNodeContents(editor);
+          range.collapse(false);
+          const tempSel = window.getSelection();
+          tempSel.removeAllRanges();
+          tempSel.addRange(range);
+          
+          // Now check the color at cursor position
+          const range2 = tempSel.getRangeAt(0);
+          let element = range2.commonAncestorContainer;
+          
+          if (element.nodeType === Node.TEXT_NODE) {
+            element = element.parentElement;
+          }
+          
+          if (element) {
+            return getColorFromElement(element);
+          }
+        } catch {}
+        return '#000000';
+      }
+      
+      const range = selection.getRangeAt(0);
+      let element = range.commonAncestorContainer;
+      
+      // If it's a text node, get its parent element
+      if (element.nodeType === Node.TEXT_NODE) {
+        element = element.parentElement;
+      } else if (element.nodeType === Node.ELEMENT_NODE) {
+        element = element;
+      } else {
+        return '#000000';
+      }
+      
+      if (!element) return '#000000';
+      
+      return getColorFromElement(element);
+    } catch {
+      return '#000000';
+    }
+  };
+
+  // Helper to extract color from an element
+  const getColorFromElement = (element) => {
+    if (!element) return '#000000';
+    
+    // Walk up the DOM to find the first element with explicit color
+    let current = element;
+    while (current && current !== textareaRef.current) {
+      // Check if this element has inline color style first (most specific)
+      if (current.style && current.style.color && current.style.color !== '') {
+        const color = current.style.color;
+        // Convert rgb/rgba to hex if needed
+        if (color.startsWith('rgb')) {
+          const rgb = color.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            const hex = '#' + rgb.slice(0, 3).map(x => {
+              const val = parseInt(x);
+              return (val < 16 ? '0' : '') + val.toString(16);
+            }).join('');
+            return hex;
+          }
+        }
+        // If it's already hex or named color, return as-is
+        if (color.startsWith('#')) {
+          return color;
+        }
+      }
+      
+      // Check computed style
+      const computedStyle = window.getComputedStyle(current);
+      const color = computedStyle.color;
+      
+      // If color is not black/default, return it
+      if (color && color !== 'rgb(0, 0, 0)' && color !== '#000000' && color !== '#000') {
+        // Convert rgb/rgba to hex
+        if (color.startsWith('rgb')) {
+          const rgb = color.match(/\d+/g);
+          if (rgb && rgb.length >= 3) {
+            const hex = '#' + rgb.slice(0, 3).map(x => {
+              const val = parseInt(x);
+              return (val < 16 ? '0' : '') + val.toString(16);
+            }).join('');
+            return hex;
+          }
+        }
+        return color;
+      }
+      
+      current = current.parentElement;
+    }
+    
+    return '#000000';
+  };
 
   const refreshToolbarState = () => {
     try {
@@ -36,6 +241,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         alignRight: document.queryCommandState('justifyRight'),
       };
       setActiveFormats(prev => ({ ...prev, ...state }));
+      
+      // Only sync color picker with current text color if user didn't just manually change it
+      // This prevents the color picker from being overridden when user picks a new color
+      if (!userChangedColorRef.current) {
+        const currentColor = getCurrentTextColor();
+        setTextColor(currentColor);
+      }
     } catch {}
   };
 
@@ -43,15 +255,79 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     if (chapter) {
       setTitle(chapter.title);
       if (textareaRef.current) {
-        textareaRef.current.innerHTML = chapter.content || '';
+        // Get the HTML content from the chapter being edited
+        // Check both contentHtml (from database) and content (mapped property)
+        const content = chapter.contentHtml || chapter.content || '';
+        console.log('ChapterEditor - Loading chapter content:', content);
+        textareaRef.current.innerHTML = content;
+        
+        // After DOM is ready, detect color from the actual DOM (same way refreshToolbarState does)
+        // This is more reliable than HTML parsing because it uses the same logic as when cursor moves
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              if (textareaRef.current) {
+                // Place cursor at end (this creates a selection)
+                const range = document.createRange();
+                const sel = window.getSelection();
+                range.selectNodeContents(textareaRef.current);
+                range.collapse(false);
+                sel.removeAllRanges();
+                sel.addRange(range);
+                
+                // Small delay to ensure selection is applied
+                setTimeout(() => {
+                  // Now get the color from the DOM at the cursor position (same as refreshToolbarState)
+                  const detectedColor = getCurrentTextColor();
+                  console.log('ChapterEditor - Detected color from DOM:', detectedColor);
+                  
+                  // Update state first
+                  setTextColor(detectedColor);
+                  
+                  // Then update DOM directly after React has a chance to update
+                  setTimeout(() => {
+                    if (colorInputRef.current) {
+                      colorInputRef.current.value = detectedColor;
+                      console.log('ChapterEditor - Set color input DOM value to:', detectedColor);
+                      // Force update with both input and change events
+                      colorInputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+                      colorInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    
+                    // Refresh toolbar to sync all states (this will also call getCurrentTextColor again)
+                    refreshToolbarState();
+                  }, 0);
+                }, 10);
+              }
+            }, 10);
+          });
+        });
       }
     } else if (parentChapter) {
       setTitle('');
       if (textareaRef.current) {
         textareaRef.current.innerHTML = '';
       }
+      // Reset to black for new chapter
+      setTextColor('#000000');
     }
   }, [chapter, parentChapter]);
+
+  // Force color input to update visually immediately when textColor changes
+  useLayoutEffect(() => {
+    if (colorInputRef.current && textColor) {
+      // Force update the color input's value to ensure visual representation updates
+      // This runs synchronously before browser paint, so visual updates immediately
+      const input = colorInputRef.current;
+      if (input.value !== textColor) {
+        input.value = textColor;
+        // Force browser to update the visual swatch by triggering a reflow
+        input.style.display = 'none';
+        void input.offsetHeight; // force reflow
+        input.style.display = '';
+      }
+    }
+  }, [textColor]);
 
   // Handle content changes from contentEditable for autosave
   const handleEditorInput = () => {
@@ -85,7 +361,12 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   // Sync toolbar with selection changes
   useEffect(() => {
-    const handleSelection = () => refreshToolbarState();
+    const handleSelection = () => {
+      // Don't sync if user just manually changed the color picker
+      if (!userChangedColorRef.current) {
+        refreshToolbarState();
+      }
+    };
     document.addEventListener('selectionchange', handleSelection);
     return () => document.removeEventListener('selectionchange', handleSelection);
   }, []);
@@ -157,12 +438,35 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   const handleTextColorChange = (e) => {
     const value = e.target.value;
+    
+    // Mark that user is manually changing the color - prevent refreshToolbarState from overriding
+    // Set this BEFORE any operations that might trigger selection changes
+    userChangedColorRef.current = true;
+    
+    // Update state immediately - useLayoutEffect will handle visual update
     setTextColor(value);
+    
+    // Force immediate visual update of the color picker swatch
+    if (colorInputRef.current) {
+      colorInputRef.current.value = value;
+    }
+    
     const editor = textareaRef.current;
     if (editor) {
-      editor.focus();
+      // Apply color to current selection/caret position BEFORE focusing
+      // This way the color is applied to the caret position
       document.execCommand('foreColor', false, value);
-      refreshToolbarState();
+      
+      editor.focus();
+      
+      // Keep the flag true for longer to prevent any selection changes from overriding
+      // Only reset after user starts typing or a significant delay
+      setTimeout(() => {
+        userChangedColorRef.current = false;
+      }, 500); // Longer delay to prevent immediate override
+      
+      // Don't call refreshToolbarState here - it will override the color
+      // Let it sync naturally when user types or moves cursor
     }
   };
 
@@ -381,6 +685,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 {/* Text color picker (no button) */}
                 <div className="color-group">
                   <input
+                    ref={colorInputRef}
                     type="color"
                     value={textColor}
                     onChange={handleTextColorChange}
@@ -445,6 +750,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               contentEditable
               ref={textareaRef}
               onInput={handleEditorInput}
+              onClick={refreshToolbarState}
+              onFocus={refreshToolbarState}
               suppressContentEditableWarning={true}
             />
           </div>
