@@ -8,10 +8,29 @@
   hyphens: auto;
 }
 
+.chapter[style*="margin-left: 1.5rem"],
+.chapter[style*="margin-left: 3rem"] {
+  margin-left: 0 !important;
+}
+
+.chapter[style*="margin-left: 1.5rem"] .chapter-header,
+.chapter[style*="margin-left: 3rem"] .chapter-header {
+  margin-left: 0;
+  width: 100%;
+}
+
+.chapter[style*="margin-left: 1.5rem"] .chapter-body,
+.chapter[style*="margin-left: 3rem"] .chapter-body,
+.chapter[style*="margin-left: 1.5rem"] .chapter-content,
+.chapter[style*="margin-left: 3rem"] .chapter-content {
+  margin-left: 0;
+  padding-left: 2rem;
+}
+
 /* Scoped print-style typography for chapter content only (not headers) */
 .chapters-list .chapter-content,
 .chapters-list .chapter-content * {
-  font-family: 'Times New Roman', Times, serif;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
   letter-spacing: 0.004em;
   line-height: 1.6;
   text-rendering: optimizeLegibility;
@@ -20,8 +39,14 @@
   font-variant-ligatures: common-ligatures;
 }
 
-.chapter[style*="margin-left: 1.5rem"] {
-  margin-bottom: 0.4rem;
+.chapters-list .chapter-content .karaoke-player,
+.chapters-list .chapter-content .karaoke-player * {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  font-weight: 400 !important;
+  font-size: 1rem;
+  line-height: 1.6;
+  letter-spacing: 0.004em;
+  color: #0c0c0c;
 }
 
 .chapter-header {
@@ -67,11 +92,6 @@
 
 /* Ensure the very first letter is uppercase while keeping the rest as typed */
 .chapter-header h3::first-letter { text-transform: uppercase; }
-
-.chapter[style*="margin-left: 1.5rem"] .chapter-header {
-  margin-left: -1.5rem; /* counteract parent shift to align with main chapters */
-  width: calc(100% + 1.5rem); /* extend width to account for the negative margin */
-}
 
 .chapter[style*="margin-left: 1.5rem"] .chapter-header h3 {
   font-size: 1.05rem; /* slightly reduced */
@@ -168,49 +188,41 @@
   text-align: justify; /* match header text alignment */
 }
 
-/* Subchapter body should align with main chapter content, so counteract parent margin-left */
-.chapter[style*="margin-left: 1.5rem"] .chapter-body {
-  margin-left: -2.0rem; /* counteract parent's margin-left to align with main chapters */
-  padding-left: 2rem; /* keep same padding as main chapters */
+/* Subchapter content should sit on the same baseline as main chapters */
+.chapter[style*="margin-left: 1.5rem"] .chapter-body,
+.chapter[style*="margin-left: 1.5rem"] .chapter-content {
+  padding-left: calc(2rem - 1.5rem);
 }
 
 .chapter-content {
-  margin-bottom: 1rem;
-  padding: 0.15rem 0 0 0;
-  padding-left: 0; /* no left padding for main chapters */
-  line-height: 1.8;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 1rem; /* body size tuned down */
-  font-weight: 300; /* lighter weight to match subtitle appearance */
-  letter-spacing: 0.004em;
-  color: #0c0c0c; /* match header color exactly */
-  text-align: justify; /* match header text alignment */
-  text-shadow:
-    0 0 0.8px rgba(0,0,0,0.5),
-    0 0.25px 1px rgba(0,0,0,0.22),
-   -0.25px 0 1px rgba(0,0,0,0.18);
-  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22); /* match header stroke exactly */
-}
-
-/* Subchapter content should align with main chapter content, so counteract parent margin-left */
-.chapter[style*="margin-left: 1.5rem"] .chapter-content {
-  margin-left: -1.5rem; /* counteract parent's margin-left to align with main chapters */
+  margin: 0;
   padding-left: 0;
+  line-height: 1.8;
+  font-size: 1rem;
+  font-weight: 300;
+  letter-spacing: 0.004em;
+  color: #0c0c0c;
+  text-align: justify;
+  text-shadow:
+    0 0 0.8px currentColor,
+    0 0.25px 1px currentColor,
+   -0.25px 0 1px currentColor;
+  -webkit-text-stroke: 0.2px currentColor;
 }
 
-.chapter-content p {
-  margin: 0 0 1rem 0;
-  line-height: 1.6;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
-  font-weight: 400 !important; /* match header weight exactly */
-  font-size: 1rem;
-  color: #0c0c0c !important; /* match header color */
-  text-align: justify; /* match header text alignment */
+.chapter-content p,
+.chapter-content p *,
+.chapter-content del,
+.chapter-content del *,
+.chapter-content s,
+.chapter-content s * {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  font-weight: 400 !important;
   text-shadow:
-    0 0 0.8px rgba(0,0,0,0.5),
-    0 0.25px 1px rgba(0,0,0,0.22),
-   -0.25px 0 1px rgba(0,0,0,0.18) !important;
-  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22) !important; /* ensure stroke is applied */
+    0 0 0.8px currentColor,
+    0 0.25px 1px currentColor,
+   -0.25px 0 1px currentColor;
+  -webkit-text-stroke: 0.2px currentColor;
 }
 
 /* Ensure all inline elements inside paragraphs also use Garamond */
@@ -230,12 +242,11 @@
 .chapter-content s {
   font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
   font-weight: 400 !important; /* match header weight exactly */
-  color: #0c0c0c !important; /* match header color */
   text-shadow:
-    0 0 0.8px rgba(0,0,0,0.5),
-    0 0.25px 1px rgba(0,0,0,0.22),
-   -0.25px 0 1px rgba(0,0,0,0.18) !important;
-  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22) !important; /* ensure stroke is applied */
+    0 0 0.8px currentColor,
+    0 0.25px 1px currentColor,
+   -0.25px 0 1px currentColor;
+  -webkit-text-stroke: 0.2px currentColor;
 }
 
 .chapter-content p:last-child {
@@ -296,4 +307,55 @@
 }
 
 /* Removed legacy .chapter-actions and .btn-* rules no longer used */
+
+.karaoke-player {
+  position: relative;
+  display: inline;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.karaoke-player .karaoke-char {
+  position: relative;
+  display: inline-block;
+  white-space: pre;
+  color: inherit;
+  --karaoke-fill: 0;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-shadow: none;
+  -webkit-text-stroke: none;
+}
+
+.karaoke-player .karaoke-char[data-ink="1"] {
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+}
+
+.karaoke-player .karaoke-char::after {
+  content: attr(data-char);
+  position: absolute;
+  inset: 0;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+  opacity: var(--karaoke-fill);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  -webkit-text-stroke: 0.75px rgba(255, 214, 0, 0.95);
+  text-shadow: none;
+  transition: opacity 90ms linear;
+}
+
+.karaoke-player .karaoke-char.karaoke-char-complete,
+.karaoke-player .karaoke-char.karaoke-char-active {
+  color: inherit;
+}
 

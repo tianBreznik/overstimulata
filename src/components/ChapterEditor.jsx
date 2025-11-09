@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { convertImageToBase64 } from '../services/storage';
+import { generateWordTimingsWithDeepgram } from '../services/autoTiming';
 import './ChapterEditor.css';
 
 export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDelete }) => {
@@ -22,15 +24,25 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const autosaveTimerRef = useRef(null);
   const colorInputRef = useRef(null);
   const userChangedColorRef = useRef(false); // Track when user manually changes color
+  const dialogOpenRef = useRef(false); // Track if dialog is open to prevent editor interference
   const [showVideoDialog, setShowVideoDialog] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
+  const [showKaraokeDialog, setShowKaraokeDialog] = useState(false);
+  const [karaokeText, setKaraokeText] = useState('');
+  const [karaokeAudioFile, setKaraokeAudioFile] = useState(null);
+  const [karaokeAudioUrl, setKaraokeAudioUrl] = useState('');
+  const [karaokeTimingFile, setKaraokeTimingFile] = useState(null);
+  const [karaokeTimingMethod, setKaraokeTimingMethod] = useState('upload'); // 'upload' or 'auto'
+  const [generatingTimings, setGeneratingTimings] = useState(false);
+  const [pendingInsertTick, setPendingInsertTick] = useState(0);
+
+  const pendingKaraokeHtmlRef = useRef(null);
 
   // Extract color from HTML string (for initial load)
   // Finds colors in <p> and <span> elements and returns the LAST one found
   const extractColorFromHTML = (html) => {
     if (!html) return '#000000';
     try {
-      console.log('extractColorFromHTML - Input HTML:', html);
       let lastColor = '#000000';
       
       // Helper to convert color to hex and normalize to 6-digit format
@@ -76,10 +88,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       const allTags = html.matchAll(/<(p|span)([^>]*)>/gi);
       
       for (const match of allTags) {
-        const fullTag = match[0];
         const attributes = match[2] || '';
-        
-        console.log('Found tag:', fullTag);
         
         // Extract color from style attribute - improved regex
         // Match: style="color: #ff0000" or style='color: rgb(255,0,0)' or style="...color: red..."
@@ -90,10 +99,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
           const colorMatch = styleContent.match(/color\s*:\s*([^;]+)/i);
           if (colorMatch && colorMatch[1]) {
             const colorValue = colorMatch[1].trim();
-            console.log('Found color in style:', colorValue);
             const hex = colorToHex(colorValue);
             if (hex && hex !== '#000000') {
-              console.log('Setting lastColor to:', hex);
               lastColor = hex;
             }
           }
@@ -103,10 +110,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         const fontColorMatch = attributes.match(/color\s*=\s*["']([^"']+)["']/i);
         if (fontColorMatch && fontColorMatch[1]) {
           const colorValue = fontColorMatch[1].trim();
-          console.log('Found color attribute:', colorValue);
           const hex = colorToHex(colorValue);
           if (hex && hex !== '#000000') {
-            console.log('Setting lastColor to:', hex);
             lastColor = hex;
           }
         }
@@ -114,7 +119,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       
       // Normalize the final color to ensure it's in correct format
       const finalColor = lastColor !== '#000000' ? normalizeHex(lastColor) || '#000000' : '#000000';
-      console.log('extractColorFromHTML - Final color:', finalColor);
       return finalColor;
     } catch (error) {
       console.error('extractColorFromHTML error:', error);
@@ -258,7 +262,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         // Get the HTML content from the chapter being edited
         // Check both contentHtml (from database) and content (mapped property)
         const content = chapter.contentHtml || chapter.content || '';
-        console.log('ChapterEditor - Loading chapter content:', content);
         textareaRef.current.innerHTML = content;
         
         // After DOM is ready, detect color from the actual DOM (same way refreshToolbarState does)
@@ -279,7 +282,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 setTimeout(() => {
                   // Now get the color from the DOM at the cursor position (same as refreshToolbarState)
                   const detectedColor = getCurrentTextColor();
-                  console.log('ChapterEditor - Detected color from DOM:', detectedColor);
                   
                   // Update state first
                   setTextColor(detectedColor);
@@ -288,7 +290,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   setTimeout(() => {
                     if (colorInputRef.current) {
                       colorInputRef.current.value = detectedColor;
-                      console.log('ChapterEditor - Set color input DOM value to:', detectedColor);
                       // Force update with both input and change events
                       colorInputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
                       colorInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
@@ -371,9 +372,40 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     return () => document.removeEventListener('selectionchange', handleSelection);
   }, []);
 
+  // Update dialog ref when dialog state changes
+  useEffect(() => {
+    dialogOpenRef.current = showKaraokeDialog || showVideoDialog;
+    // Add/remove body class for CSS targeting
+    if (showKaraokeDialog || showVideoDialog) {
+      document.body.classList.add('dialog-open');
+    } else {
+      document.body.classList.remove('dialog-open');
+    }
+    return () => {
+      document.body.classList.remove('dialog-open');
+    };
+  }, [showKaraokeDialog, showVideoDialog]);
+
+  useEffect(() => {
+    if (!showKaraokeDialog && pendingKaraokeHtmlRef.current) {
+      scheduleEditorInsertion(pendingKaraokeHtmlRef.current);
+    }
+  }, [showKaraokeDialog, pendingInsertTick]);
+
   // Keyboard shortcuts
   useEffect(() => {
     const onKeyDown = (e) => {
+      // Check if the event target is within a dialog - if so, let it through completely
+      const target = e.target;
+      if (target && (target.closest('.karaoke-dialog') || target.closest('.video-dialog'))) {
+        return; // Let the dialog handle it
+      }
+      
+      // Don't capture keyboard events when dialogs are open
+      if (dialogOpenRef.current) {
+        return; // Dialog is open but event not from dialog - ignore completely
+      }
+      
       if (!textareaRef.current) return;
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
@@ -387,14 +419,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         default: break;
       }
     };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    document.addEventListener('keydown', onKeyDown, false); // Use bubbling phase, not capture
+    return () => document.removeEventListener('keydown', onKeyDown, false);
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
     const currentContent = textareaRef.current ? textareaRef.current.innerHTML : '';
-    console.log('Saving data:', { title, contentHtml: currentContent });
     await onSave({ title, contentHtml: currentContent });
     setSaving(false);
   };
@@ -568,6 +599,298 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     refreshToolbarState();
   };
 
+  // Parse SRT/VTT file to extract word timings
+  const parseTimingFile = async (file) => {
+    const text = await file.text();
+    const lines = text.split('\n').map(l => l.trim()).filter(l => l);
+    
+    // Try SRT format first
+    if (lines.some(l => l.includes('-->'))) {
+      return parseSRT(text);
+    }
+    
+    // Try VTT format
+    if (text.includes('WEBVTT')) {
+      return parseVTT(text);
+    }
+    
+    throw new Error('Unsupported timing file format. Please use SRT or VTT.');
+  };
+
+  const parseSRT = (text) => {
+    const blocks = text.split(/\n\s*\n/).filter(b => b.trim());
+    const wordTimings = [];
+    
+    for (const block of blocks) {
+      const lines = block.split('\n').filter(l => l.trim());
+      if (lines.length < 2) continue;
+      
+      // Find time line (e.g., "00:00:00,000 --> 00:00:03,000")
+      const timeLine = lines.find(l => l.includes('-->'));
+      if (!timeLine) continue;
+      
+      const timeMatch = timeLine.match(/(\d{2}):(\d{2}):(\d{2})[,.](\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})[,.](\d{3})/);
+      if (!timeMatch) continue;
+      
+      const startTime = parseFloat(
+        parseInt(timeMatch[1]) * 3600 +
+        parseInt(timeMatch[2]) * 60 +
+        parseInt(timeMatch[3]) +
+        parseInt(timeMatch[4]) / 1000
+      );
+      const endTime = parseFloat(
+        parseInt(timeMatch[5]) * 3600 +
+        parseInt(timeMatch[6]) * 60 +
+        parseInt(timeMatch[7]) +
+        parseInt(timeMatch[8]) / 1000
+      );
+      
+      // Get text (all lines after the time line)
+      const textLines = lines.slice(lines.indexOf(timeLine) + 1);
+      const text = textLines.join(' ').replace(/<[^>]+>/g, ''); // Remove HTML tags
+      
+      // Split text into words and distribute timing evenly
+      const words = text.split(/\s+/).filter(w => w);
+      if (words.length === 0) continue;
+      
+      const duration = endTime - startTime;
+      const timePerWord = duration / words.length;
+      
+      words.forEach((word, i) => {
+        wordTimings.push({
+          word: word.replace(/[.,!?;:]/g, ''), // Remove punctuation for matching
+          start: startTime + (i * timePerWord),
+          end: startTime + ((i + 1) * timePerWord)
+        });
+      });
+    }
+    
+    return wordTimings;
+  };
+
+  const parseVTT = (text) => {
+    const lines = text.split('\n');
+    const wordTimings = [];
+    let currentStart = 0;
+    let currentEnd = 0;
+    let currentText = '';
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      
+      // Time cue line (e.g., "00:00:00.000 --> 00:00:03.000")
+      if (line.includes('-->')) {
+        const timeMatch = line.match(/(\d{2}):(\d{2}):(\d{2})\.(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2})\.(\d{3})/);
+        if (timeMatch) {
+          currentStart = parseFloat(
+            parseInt(timeMatch[1]) * 3600 +
+            parseInt(timeMatch[2]) * 60 +
+            parseInt(timeMatch[3]) +
+            parseInt(timeMatch[4]) / 1000
+          );
+          currentEnd = parseFloat(
+            parseInt(timeMatch[5]) * 3600 +
+            parseInt(timeMatch[6]) * 60 +
+            parseInt(timeMatch[7]) +
+            parseInt(timeMatch[8]) / 1000
+          );
+        }
+      } else if (line && !line.startsWith('WEBVTT') && !line.startsWith('NOTE') && !line.match(/^\d+$/)) {
+        // Text line
+        currentText = line.replace(/<[^>]+>/g, ''); // Remove HTML tags
+        const words = currentText.split(/\s+/).filter(w => w);
+        if (words.length > 0 && currentEnd > currentStart) {
+          const duration = currentEnd - currentStart;
+          const timePerWord = duration / words.length;
+          
+          words.forEach((word, idx) => {
+            wordTimings.push({
+              word: word.replace(/[.,!?;:]/g, ''),
+              start: currentStart + (idx * timePerWord),
+              end: currentStart + ((idx + 1) * timePerWord)
+            });
+          });
+        }
+      }
+    }
+    
+    return wordTimings;
+  };
+
+  const handleKaraokeAudioFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setKaraokeAudioFile(file);
+      setKaraokeAudioUrl(''); // Clear URL if file selected
+    }
+  };
+
+  const handleKaraokeTimingFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setKaraokeTimingFile(file);
+    }
+  };
+
+  const insertHtmlIntoEditor = (html) => {
+    const editor = textareaRef.current;
+    if (!editor) {
+      return false;
+    }
+
+    editor.focus();
+    try {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        const frag = document.createDocumentFragment();
+        let node;
+        let lastNode;
+        while ((node = temp.firstChild)) {
+          lastNode = frag.appendChild(node);
+        }
+        range.insertNode(frag);
+        if (lastNode) {
+          const after = document.createTextNode('\u00A0');
+          lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
+          const newRange = document.createRange();
+          newRange.setStartAfter(after);
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
+      } else {
+        editor.insertAdjacentHTML('beforeend', html);
+      }
+    } catch (err) {
+      console.error('Falling back to execCommand insertion due to error:', err);
+      document.execCommand('insertHTML', false, html);
+    }
+
+    refreshToolbarState();
+    return true;
+  };
+
+  const scheduleEditorInsertion = (html, attempt = 0) => {
+    const MAX_ATTEMPTS = 10;
+    if (insertHtmlIntoEditor(html)) {
+      pendingKaraokeHtmlRef.current = null;
+      return;
+    }
+
+    if (attempt < MAX_ATTEMPTS) {
+      requestAnimationFrame(() => scheduleEditorInsertion(html, attempt + 1));
+    } else {
+      console.error('Failed to insert karaoke object: editor not available.');
+    }
+  };
+
+  const handleInsertKaraoke = async () => {
+    if (!karaokeText.trim()) {
+      alert('Please enter the karaoke text.');
+      return;
+    }
+    
+    if (!karaokeAudioFile && !karaokeAudioUrl.trim()) {
+      alert('Please upload an audio file or provide an audio URL.');
+      return;
+    }
+    
+    let audioUrl = '';
+    let wordTimings = [];
+    
+    // Handle audio: convert file to base64 or use URL
+    if (karaokeAudioFile) {
+      try {
+        // Convert audio to base64 (similar to images)
+        const reader = new FileReader();
+        audioUrl = await new Promise((resolve, reject) => {
+          reader.onload = (e) => resolve(e.target.result);
+          reader.onerror = reject;
+          reader.readAsDataURL(karaokeAudioFile);
+        });
+      } catch (err) {
+        alert('Failed to process audio file: ' + err.message);
+        return;
+      }
+    } else {
+      audioUrl = karaokeAudioUrl.trim();
+    }
+    
+    // Handle timings: parse file or auto-generate
+    if (karaokeTimingMethod === 'upload' && karaokeTimingFile) {
+      try {
+        wordTimings = await parseTimingFile(karaokeTimingFile);
+      } catch (err) {
+        alert('Failed to parse timing file: ' + err.message);
+        return;
+      }
+    } else if (karaokeTimingMethod === 'auto') {
+      try {
+        setGeneratingTimings(true);
+        const audioSource = karaokeAudioFile || audioUrl;
+        if (!audioSource) {
+          alert('Please provide an audio file or URL for auto-generation.');
+          setGeneratingTimings(false);
+          return;
+        }
+        
+        // Generate word timings using Deepgram API
+        wordTimings = await generateWordTimingsWithDeepgram(audioSource, karaokeText.trim());
+        
+        if (wordTimings.length === 0) {
+          alert('Failed to generate word timings. Please try uploading a timing file instead.');
+          setGeneratingTimings(false);
+          return;
+        }
+        setGeneratingTimings(false);
+      } catch (err) {
+        setGeneratingTimings(false);
+        alert('Failed to auto-generate timings: ' + err.message);
+        return;
+      }
+    } else {
+      alert('Please either upload a timing file or select auto-generation.');
+      return;
+    }
+    
+    if (wordTimings.length === 0) {
+      alert('No word timings found. Please check your timing file.');
+      return;
+    }
+    
+    // Create karaoke object
+    const karaokeData = {
+      type: 'karaoke',
+      text: karaokeText.trim(),
+      audioUrl: audioUrl,
+      wordTimings: wordTimings
+    };
+    
+    // Insert as a data attribute in a special element
+    const karaokeId = `karaoke-${Date.now()}`;
+    const karaokePayload = encodeURIComponent(JSON.stringify(karaokeData));
+    const container = document.createElement('div');
+    container.className = 'karaoke-object';
+    container.dataset.karaoke = karaokePayload;
+    container.dataset.karaokeId = karaokeId;
+    container.textContent = karaokeText.trim();
+    const karaokeHtml = container.outerHTML;
+    
+    // Close dialog and reset form; insertion happens after editor re-mounts
+    pendingKaraokeHtmlRef.current = karaokeHtml;
+    setShowKaraokeDialog(false);
+    setKaraokeText('');
+    setKaraokeAudioFile(null);
+    setKaraokeAudioUrl('');
+    setKaraokeTimingFile(null);
+    setGeneratingTimings(false);
+    setPendingInsertTick((tick) => tick + 1);
+  };
+
   const handleImageSelected = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -682,6 +1005,25 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 >
                   🎥
                 </button>
+                <button
+                  onClick={() => {
+                    // Disable editor and blur it before opening dialog
+                    if (textareaRef.current) {
+                      textareaRef.current.blur();
+                      textareaRef.current.contentEditable = 'false';
+                    }
+                    setShowKaraokeDialog(true);
+                    setKaraokeText('');
+                    setKaraokeAudioFile(null);
+                    setKaraokeAudioUrl('');
+                    setKaraokeTimingFile(null);
+                    setKaraokeTimingMethod('upload');
+                  }}
+                  className="toolbar-btn"
+                  title="Insert Karaoke"
+                >
+                  🎤
+                </button>
                 {/* Text color picker (no button) */}
                 <div className="color-group">
                   <input
@@ -745,15 +1087,17 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 {saving ? 'Publishing…' : 'Publish'}
               </button>
             </div>
-            <div 
-              className="content-editor page-area"
-              contentEditable
-              ref={textareaRef}
-              onInput={handleEditorInput}
-              onClick={refreshToolbarState}
-              onFocus={refreshToolbarState}
-              suppressContentEditableWarning={true}
-            />
+            {!showKaraokeDialog && !showVideoDialog && (
+              <div 
+                className="content-editor page-area"
+                contentEditable="true"
+                ref={textareaRef}
+                suppressContentEditableWarning={true}
+                onInput={handleEditorInput}
+                onClick={refreshToolbarState}
+                onFocus={refreshToolbarState}
+              />
+            )}
           </div>
 
           {/* shortcuts removed per design */}
@@ -794,6 +1138,130 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
             </div>
           </div>
         </div>
+      )}
+
+      {/* Karaoke dialog - modal overlay, but editor is hidden from DOM */}
+      {showKaraokeDialog && createPortal(
+        <div 
+          className="karaoke-dialog-overlay" 
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowKaraokeDialog(false);
+              setKaraokeText('');
+              setKaraokeAudioFile(null);
+              setKaraokeAudioUrl('');
+              setKaraokeTimingFile(null);
+              setGeneratingTimings(false);
+            }
+          }}
+        >
+          <div 
+            className="karaoke-dialog" 
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button className="close-btn close-top" onClick={() => {
+              setShowKaraokeDialog(false);
+              setKaraokeText('');
+              setKaraokeAudioFile(null);
+              setKaraokeAudioUrl('');
+              setKaraokeTimingFile(null);
+              setGeneratingTimings(false);
+            }}>✕</button>
+            <div className="karaoke-dialog-content">
+              <h3>Insert Karaoke</h3>
+              <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+                Enter the text, upload audio, and provide word timings
+              </p>
+              
+              <div>
+                <label>Karaoke Text:</label>
+                <textarea
+                  value={karaokeText}
+                  onChange={(e) => setKaraokeText(e.target.value)}
+                  placeholder="Enter the text that will be highlighted..."
+                  rows={3}
+                />
+              </div>
+
+              <div>
+                <label>Audio:</label>
+                <input
+                  type="file"
+                  accept="audio/*"
+                  onChange={handleKaraokeAudioFileSelected}
+                />
+                <div className="karaoke-form-divider">or</div>
+                <input
+                  type="text"
+                  value={karaokeAudioUrl}
+                  onChange={(e) => {
+                    setKaraokeAudioUrl(e.target.value);
+                    setKaraokeAudioFile(null);
+                  }}
+                  placeholder="Paste audio URL..."
+                />
+              </div>
+
+              <div>
+                <label>Word Timings:</label>
+                <div className="karaoke-form-radio-group">
+                  <label>
+                    <input
+                      type="radio"
+                      checked={karaokeTimingMethod === 'upload'}
+                      onChange={() => setKaraokeTimingMethod('upload')}
+                    />
+                    Upload SRT/VTT file
+                  </label>
+                  <label>
+                    <input
+                      type="radio"
+                      checked={karaokeTimingMethod === 'auto'}
+                      onChange={() => setKaraokeTimingMethod('auto')}
+                    />
+                    Auto-generate
+                  </label>
+                </div>
+                {karaokeTimingMethod === 'upload' && (
+                  <input
+                    type="file"
+                    accept=".srt,.vtt,text/vtt"
+                    onChange={handleKaraokeTimingFileSelected}
+                  />
+                )}
+                {karaokeTimingMethod === 'auto' && (
+                  <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
+                    {generatingTimings ? 'Generating word timings...' : 'Word timings will be automatically generated from the audio using Deepgram API.'}
+                  </div>
+                )}
+              </div>
+
+              <div className="karaoke-dialog-actions">
+                <button 
+                  onClick={() => {
+                    setShowKaraokeDialog(false);
+                    setKaraokeText('');
+                    setKaraokeAudioFile(null);
+                    setKaraokeAudioUrl('');
+                    setKaraokeTimingFile(null);
+                    setGeneratingTimings(false);
+                  }} 
+                  className="btn-cancel"
+                >
+                  Cancel
+                </button>
+                <button 
+                  onClick={handleInsertKaraoke} 
+                  className="btn-save"
+                  disabled={!karaokeText.trim() || (!karaokeAudioFile && !karaokeAudioUrl.trim()) || generatingTimings}
+                >
+                  {generatingTimings ? 'Generating...' : 'Insert'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

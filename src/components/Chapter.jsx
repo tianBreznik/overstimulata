@@ -6,6 +6,295 @@ import { SortableSubchapters } from './SortableSubchapters';
 import { setBookmark } from '../utils/bookmark';
 import { IsolatedButton } from './IsolatedButton';
 
+const KARAOKE_DEBUG = true;
+
+const TOKEN_REGEX = /[\p{L}\p{N}'’]+/gu;
+const NORMALIZE_REGEX = /[^a-z0-9']+/g;
+
+const isWhitespace = (char) => /\s/.test(char);
+const isPunctuation = (char) => /[\p{P}\u2019\u2018]/u.test(char);
+
+const normalizeWord = (value) => {
+  if (!value) return '';
+  return value
+    .normalize('NFKD')
+    .replace(/’/g, "'")
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9']+/g, '');
+};
+
+const tokenizeText = (text) => {
+  const tokens = [];
+  const iterator = text.matchAll(TOKEN_REGEX);
+
+  for (const match of iterator) {
+    const raw = match[0];
+    const start = match.index ?? 0;
+    const end = start + raw.length;
+    const indices = [];
+    for (let i = start; i < end; i += 1) {
+      indices.push(i);
+    }
+    tokens.push({
+      raw,
+      start,
+      end,
+      indices,
+      normalized: normalizeWord(raw),
+    });
+  }
+
+  return tokens;
+};
+
+const assignLetterTimings = (text, wordTimings = []) => {
+  const letterTimings = new Array(text.length).fill(null);
+  const tokens = tokenizeText(text);
+  const debug = {
+    text,
+    wordTimingsCount: wordTimings.length,
+    totalChars: text.length,
+    totalAssigned: 0,
+    words: [],
+    unmatched: [],
+  };
+
+  let tokenPointer = 0;
+
+  wordTimings.forEach(({ word, start, end }, wordIdx) => {
+    const normalizedWord = normalizeWord(word);
+    if (!normalizedWord) {
+      if (KARAOKE_DEBUG) debug.unmatched.push({ word, reason: 'empty', wordIdx });
+      return;
+    }
+
+    let matchedToken = null;
+    while (tokenPointer < tokens.length) {
+      const candidate = tokens[tokenPointer];
+      if (!candidate.normalized) {
+        tokenPointer += 1;
+        continue;
+      }
+      if (candidate.normalized === normalizedWord) {
+        matchedToken = candidate;
+        break;
+      }
+      tokenPointer += 1;
+    }
+
+    if (!matchedToken) {
+      if (KARAOKE_DEBUG) debug.unmatched.push({ word, start, end, wordIdx, reason: 'no token match' });
+      return;
+    }
+
+    const duration = Math.max((end ?? 0) - (start ?? 0), 0.001);
+    const indices = matchedToken.indices;
+    const spanLength = indices.length || 1;
+
+    indices.forEach((idx, position) => {
+      const ratioStart = position / spanLength;
+      const ratioEnd = (position + 1) / spanLength;
+      letterTimings[idx] = {
+        start: (start ?? 0) + duration * ratioStart,
+        end: (start ?? 0) + duration * ratioEnd,
+      };
+    });
+
+    if (KARAOKE_DEBUG) {
+      debug.words.push({
+        word,
+        token: matchedToken.raw,
+        normalizedWord,
+        indices: indices.slice(),
+        start,
+        end,
+        wordIdx,
+        tokenIndex: tokenPointer,
+      });
+    }
+
+    tokenPointer += 1;
+  });
+
+  if (KARAOKE_DEBUG) {
+    debug.totalAssigned = letterTimings.filter(Boolean).length;
+  }
+
+  return { letterTimings, debug };
+};
+
+const initializeKaraokePlayer = (rootElement, karaokeData) => {
+  if (!rootElement || !karaokeData) return () => {};
+
+  const { text = rootElement.textContent || '', audioUrl, wordTimings = [] } = karaokeData;
+  if (!audioUrl || wordTimings.length === 0 || !text) return () => {};
+
+  const { letterTimings, debug } = assignLetterTimings(text, wordTimings);
+
+  if (KARAOKE_DEBUG) {
+    const summary = {
+      sample: text.slice(0, 60),
+      words: wordTimings.length,
+      assignedCharacters: debug.totalAssigned,
+      totalCharacters: debug.totalChars,
+      unmatchedWords: debug.unmatched.length,
+    };
+    // eslint-disable-next-line no-console
+    console.groupCollapsed('Karaoke debug', summary);
+    // eslint-disable-next-line no-console
+    console.log('Detailed debug info:', debug);
+    if (!window.__KARAOKE_DEBUG__) window.__KARAOKE_DEBUG__ = [];
+    window.__KARAOKE_DEBUG__.push({ debug, karaokeData });
+    // eslint-disable-next-line no-console
+    console.groupEnd();
+  }
+
+  // Prepare DOM
+  rootElement.innerHTML = '';
+  rootElement.classList.add('karaoke-player');
+  rootElement.style.whiteSpace = 'pre-wrap';
+
+  const timings = letterTimings;
+  const charSpans = [];
+  const fragment = document.createDocumentFragment();
+
+  Array.from(text).forEach((char, index) => {
+    const span = document.createElement('span');
+    span.className = 'karaoke-char';
+    span.textContent = char;
+    span.dataset.char = char === ' ' ? '\u00A0' : char;
+
+    if (!isWhitespace(char) && !isPunctuation(char) && Math.random() < 0.35) {
+      span.dataset.ink = '1';
+    }
+
+    const timing = timings[index];
+    if (timing) {
+      span.dataset.start = String(timing.start);
+      span.dataset.end = String(timing.end);
+    }
+    fragment.appendChild(span);
+    charSpans.push(span);
+  });
+
+  rootElement.appendChild(fragment);
+
+  const audio = new Audio(audioUrl);
+  audio.preload = 'auto';
+  audio.crossOrigin = 'anonymous';
+
+  let rafId = null;
+  let hasUserGesture = false;
+
+  const resetChars = () => {
+    charSpans.forEach((span) => {
+      span.classList.remove('karaoke-char-active', 'karaoke-char-complete');
+      span.style.setProperty('--karaoke-fill', '0');
+    });
+  };
+
+  const cancelAnimation = () => {
+    if (rafId !== null) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+  };
+
+  const step = () => {
+    const current = audio.currentTime;
+    charSpans.forEach((span) => {
+      const start = parseFloat(span.dataset.start);
+      const end = parseFloat(span.dataset.end);
+      if (Number.isNaN(start) || Number.isNaN(end)) return;
+
+      if (current >= end) {
+        span.classList.add('karaoke-char-complete');
+        span.classList.remove('karaoke-char-active');
+        span.style.setProperty('--karaoke-fill', '1');
+      } else if (current >= start) {
+        const duration = Math.max(end - start, 0.001);
+        const progress = Math.min(Math.max((current - start) / duration, 0), 1);
+        span.classList.add('karaoke-char-active');
+        span.classList.remove('karaoke-char-complete');
+        span.style.setProperty('--karaoke-fill', progress.toFixed(3));
+      } else {
+        span.classList.remove('karaoke-char-active', 'karaoke-char-complete');
+        span.style.setProperty('--karaoke-fill', '0');
+      }
+    });
+
+    rafId = requestAnimationFrame(step);
+  };
+
+  const stopPlayback = () => {
+    rootElement.classList.remove('karaoke-playing');
+    cancelAnimation();
+    audio.pause();
+    audio.currentTime = 0;
+    resetChars();
+  };
+
+  const startPlayback = async () => {
+    if (!hasUserGesture) {
+      // Attempt resume in case autoplay is blocked
+      try {
+        await audio.play();
+      } catch (err) {
+        console.warn('Karaoke playback blocked until user interaction', err);
+        return;
+      }
+      audio.pause();
+      audio.currentTime = 0;
+      hasUserGesture = true;
+    }
+
+    resetChars();
+    rootElement.classList.add('karaoke-playing');
+    try {
+      await audio.play();
+      cancelAnimation();
+      rafId = requestAnimationFrame(step);
+    } catch (err) {
+      console.warn('Karaoke playback failed', err);
+    }
+  };
+
+  audio.addEventListener('ended', () => {
+    stopPlayback();
+  });
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+          startPlayback();
+        } else {
+          stopPlayback();
+        }
+      });
+    },
+    { threshold: [0, 0.5, 0.75, 1] }
+  );
+
+  observer.observe(rootElement);
+
+  // Allow manual click to play when autoplay is blocked
+  const handleClick = () => {
+    hasUserGesture = true;
+    startPlayback();
+  };
+
+  rootElement.addEventListener('click', handleClick);
+
+  return () => {
+    rootElement.removeEventListener('click', handleClick);
+    observer.disconnect();
+    stopPlayback();
+    audio.src = '';
+  };
+};
+
 export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumber = null, parentChapterId = null, onEdit, onAddSubchapter, onDelete, dragHandleProps, defaultExpandedChapterId }) => {
   const [isExpanded, setIsExpanded] = useState(chapter.id === defaultExpandedChapterId);
   const { isEditor } = useEditorMode();
@@ -36,62 +325,53 @@ export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumbe
   useEffect(() => {
     if (!isExpanded || !contentRef.current) return;
     
-    // Find all elements with inline color styles
-    const coloredElements = contentRef.current.querySelectorAll('[style*="color"]');
-    
-    coloredElements.forEach((el) => {
-      // Skip if it's a background color, not text color
-      const style = el.getAttribute('style') || '';
-      if (style.includes('background') && !style.includes('color:')) return;
-      
-      // Get the computed color
-      const computedStyle = window.getComputedStyle(el);
-      const color = computedStyle.color;
-      
-      // Skip if it's black/default color (already has proper shadows)
-      if (color === 'rgb(0, 0, 0)' || color === '#000000' || color === '#000') return;
-      
-      // Convert color to rgba format for shadows
-      let shadowColor;
-      if (color.startsWith('rgb')) {
-        // Extract RGB values
-        const rgb = color.match(/\d+/g);
-        if (rgb && rgb.length >= 3) {
-          // Use the same RGB values with appropriate opacity for shadows
-          shadowColor = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.5)`;
-          const shadowColor2 = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.22)`;
-          const shadowColor3 = `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, 0.18)`;
-          
-          // Apply matching shadows - remove black shadows first
-          el.style.textShadow = `0 0 0.8px ${shadowColor}, 0 0.25px 1px ${shadowColor2}, -0.25px 0 1px ${shadowColor3}`;
-          el.style.webkitTextStroke = `0.2px ${shadowColor2}`;
+    const karaokeElements = contentRef.current.querySelectorAll('.karaoke-object');
+    if (karaokeElements.length === 0) return;
+
+    const cleanups = [];
+    karaokeElements.forEach((element) => {
+      const dataAttr = element.getAttribute('data-karaoke');
+      if (!dataAttr) return;
+      try {
+        let parsed = dataAttr;
+        try {
+          parsed = decodeURIComponent(dataAttr);
+        } catch (decodeErr) {
+          console.warn('Failed to decode karaoke data, attempting raw JSON', decodeErr);
         }
-      } else if (color.startsWith('#')) {
-        // Convert hex to rgb
-        const hex = color.replace('#', '');
-        // Handle both 3-digit and 6-digit hex
-        const r = hex.length === 3 
-          ? parseInt(hex[0] + hex[0], 16)
-          : parseInt(hex.substring(0, 2), 16);
-        const g = hex.length === 3
-          ? parseInt(hex[1] + hex[1], 16)
-          : parseInt(hex.substring(2, 4), 16);
-        const b = hex.length === 3
-          ? parseInt(hex[2] + hex[2], 16)
-          : parseInt(hex.substring(4, 6), 16);
-        shadowColor = `rgba(${r}, ${g}, ${b}, 0.5)`;
-        const shadowColor2 = `rgba(${r}, ${g}, ${b}, 0.22)`;
-        const shadowColor3 = `rgba(${r}, ${g}, ${b}, 0.18)`;
-        
-        el.style.textShadow = `0 0 0.8px ${shadowColor}, 0 0.25px 1px ${shadowColor2}, -0.25px 0 1px ${shadowColor3}`;
-        el.style.webkitTextStroke = `0.2px ${shadowColor2}`;
+        const karaokeData = JSON.parse(parsed);
+        const cleanup = initializeKaraokePlayer(element, karaokeData);
+        if (cleanup) {
+          cleanups.push(cleanup);
+        }
+      } catch (err) {
+        console.error('Failed to initialize karaoke element', err, { dataAttr });
       }
     });
+
+    return () => {
+      cleanups.forEach((cleanup) => {
+        if (typeof cleanup === 'function') {
+          cleanup();
+        }
+      });
+    };
   }, [isExpanded, chapter.content]);
 
   return (
-    <div id={`chapter-${chapter.id}`} className={`chapter ${level > 0 ? 'subchapter' : ''} ${isExpanded ? 'expanded' : ''}`} style={{ marginLeft: `${level * 1.5}rem` }}>
-      <div className="chapter-header" onClick={() => { const next = !isExpanded; setIsExpanded(next); if (next) setBookmark(chapter.id); }}>
+    <div
+      id={`chapter-${chapter.id}`}
+      className={`chapter ${level > 0 ? 'subchapter' : ''} ${isExpanded ? 'expanded' : ''}`}
+      style={{ marginLeft: `${level * 1.5}rem` }}
+    >
+      <div
+        className="chapter-header"
+        onClick={() => {
+          const next = !isExpanded;
+          setIsExpanded(next);
+          if (next) setBookmark(chapter.id);
+        }}
+      >
         {/** Title element with class per level for precise styling/hover */}
         <h3 className={level === 0 ? 'chapter-title' : 'subchapter-title'}>
           <span className="chapter-number">{getFormalNumber()}</span> {formatTitle(chapter.title)}
@@ -103,24 +383,30 @@ export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumbe
               {level === 0 && (
                 <IsolatedButton label="Add" variant="add" onClick={() => onAddSubchapter(chapter)} />
               )}
-              <IsolatedButton label="Del" variant="delete" onClick={() => onDelete(chapter.id, level > 0, level > 0 ? parentChapterId : null)} />
+              <IsolatedButton
+                label="Del"
+                variant="delete"
+                onClick={() => onDelete(chapter.id, level > 0, level > 0 ? parentChapterId : null)}
+              />
             </div>
-            <span {...(dragHandleProps || {})} style={{ userSelect: 'none' }} aria-label="Drag handle">⋮⋮</span>
+            <span {...(dragHandleProps || {})} style={{ userSelect: 'none' }} aria-label="Drag handle">
+              ⋮⋮
+            </span>
           </div>
         )}
       </div>
-      
+
       {isExpanded && (
         <div className="chapter-body">
           {/* Show chapter content if it exists (both main and subchapters) */}
           {chapter.content && (
-            <div 
+            <div
               ref={contentRef}
               className="chapter-content"
               dangerouslySetInnerHTML={{ __html: renderMarkdownWithParagraphs(chapter.content) }}
             />
           )}
-          
+
           {/* Render child chapters recursively */}
           {chapter.children && chapter.children.length > 0 && (
             <div className="child-chapters">
@@ -152,9 +438,6 @@ export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumbe
           )}
         </div>
       )}
-      
-      {/* Removed large action buttons block in favor of inline actions */}
     </div>
   );
 };
-
