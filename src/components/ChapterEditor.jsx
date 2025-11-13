@@ -330,23 +330,86 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     }
   }, [chapter, parentChapter]);
 
-  // Force color input to update visually immediately when textColor changes
-  useLayoutEffect(() => {
-    if (colorInputRef.current && textColor) {
-      // Force update the color input's value to ensure visual representation updates
-      // This runs synchronously before browser paint, so visual updates immediately
-      const input = colorInputRef.current;
-      if (input.value !== textColor) {
-        input.value = textColor;
-        // Force browser to update the visual swatch by triggering a reflow
-        input.style.display = 'none';
-        void input.offsetHeight; // force reflow
-        input.style.display = '';
-      }
-    }
-  }, [textColor]);
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalDocOverflow = document.documentElement.style.overflow;
 
-  // Rehydrate editor content after dialogs unmount (editor re-mounts)
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+
+    const el = textareaRef.current;
+    if (!el) return;
+
+    let touchStartY = 0;
+
+    const handleWheel = (event) => {
+      const target = textareaRef.current;
+      if (!target) return;
+
+      const delta = event.deltaY;
+      const { scrollTop, scrollHeight, clientHeight } = target;
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight;
+
+      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      target.scrollTop = Math.min(
+        Math.max(scrollTop + delta, 0),
+        scrollHeight - clientHeight
+      );
+    };
+
+    const handleTouchStart = (event) => {
+      if (event.touches.length !== 1) return;
+      touchStartY = event.touches[0].clientY;
+    };
+
+    const handleTouchMove = (event) => {
+      const target = textareaRef.current;
+      if (!target || event.touches.length !== 1) return;
+      const currentY = event.touches[0].clientY;
+      const delta = touchStartY - currentY;
+
+      const { scrollTop, scrollHeight, clientHeight } = target;
+      const atTop = scrollTop <= 0;
+      const atBottom = scrollTop + clientHeight >= scrollHeight;
+
+      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+      target.scrollTop = Math.min(
+        Math.max(scrollTop + delta, 0),
+        scrollHeight - clientHeight
+      );
+      touchStartY = currentY;
+    };
+
+    const handleTouchEnd = () => {
+      touchStartY = 0;
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: false });
+    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+      document.body.style.overflow = originalBodyOverflow;
+      document.documentElement.style.overflow = originalDocOverflow;
+    };
+  }, []);
+
   useEffect(() => {
     if (showKaraokeDialog || showVideoDialog) return;
     const editor = textareaRef.current;
@@ -1202,6 +1265,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     }
   };
 
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.focus({ preventScroll: true });
+      }
+    }, 100);
+    return () => clearTimeout(timer);
+  }, []);
+
   return (
     <div className="editor-overlay side-panel">
       <div className="editor-modal side-panel-modal">
@@ -1329,7 +1401,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 </button>
                 
               </div>
-              <div className="toolbar-status">{autosaveStatus}</div>
+              <div className="toolbar-actions">
+                <button 
+                  className="toolbar-save-btn"
+                  onClick={handleSave}
+                  disabled={!title.trim() || saving}
+                >
+                  {saving ? 'Publishing…' : 'Objavi'}
+                </button>
+              </div>
             </div>
             <div className="ruler">
               <div className="ruler-track">
@@ -1337,15 +1417,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <span key={i} className="ruler-num">{i + 1}</span>
                 ))}
               </div>
-            </div>
-            <div className="floating-actions">
-              <button 
-                className="btn-save btn-floating" 
-                onClick={handleSave}
-                disabled={!title.trim() || saving}
-              >
-                {saving ? 'Publishing…' : 'Objavi'}
-              </button>
             </div>
             {!showKaraokeDialog && !showVideoDialog && (
               <div 
