@@ -10,133 +10,91 @@ export const IsolatedButton = ({ label, onClick, variant = 'default', title }) =
       shadowRef.current = hostRef.current.attachShadow({ mode: 'open' });
       const style = document.createElement('style');
       style.textContent = `
-        :host { 
+        :host {
           display: inline-block !important;
           cursor: pointer !important;
         }
-        button, button:*, button::* {
-          all: initial;
-          display: inline-block !important;
-          box-sizing: border-box !important;
-          padding: 2px 6px !important;
-          border: 1px solid #cfcfcf !important;
-          border-radius: 4px !important;
-          background: #fff !important;
+        button {
+          all: unset;
           cursor: pointer !important;
-          font-family: Helvetica, Arial, sans-serif !important;
-          font-size: 12px !important;
-          line-height: 1 !important;
-          font-weight: 400 !important;
-          font-style: normal !important;
-          color: #111 !important;
-          text-decoration: none !important;
-          outline: none !important;
-          user-select: none !important;
-          font-synthesis: none !important;
-          -webkit-font-smoothing: antialiased !important;
-          text-rendering: auto !important;
-          text-shadow: none !important;
-          -webkit-text-stroke: 0 !important;
-          font-variant-ligatures: none !important;
-          font-feature-settings: normal !important;
-          letter-spacing: 0 !important;
-          text-transform: none !important;
-          filter: none !important;
-          transform: none !important;
+          position: relative;
+          display: inline-flex !important;
+          align-items: center !important;
+          justify-content: center !important;
+          border-radius: 14px !important;
+          background: transparent !important;
+          padding: 0 !important;
+          box-shadow: none !important;
+          transition: transform 200ms ease !important;
+        }
+        button::after {
+          content: none !important;
         }
         button:hover,
-        button:focus,
-        button:active,
-        button:focus-visible,
-        button:focus-within,
-        button:visited,
-        button:any-link {
-          background: #fff !important;
-          color: inherit !important;
-          outline: none !important;
-          border-radius: 4px !important;
-          border-width: 1px !important;
-          cursor: pointer !important;
+        button:focus-visible {
+          box-shadow: none !important;
+        }
+        .button-inner {
+          border-radius: 9px !important;
+          padding: 0.13em 0.6em !important;
+          background-image: linear-gradient(135deg, rgba(236,236,238,1), rgba(196,196,200,1)) !important;
+          box-shadow:
+            inset -0.05em -0.05em 0.05em rgba(5,5,5,0.3),
+            inset 0 0 0.04em 0.18em rgba(255,255,255,0.26),
+            inset 0.024em 0.05em 0.1em rgba(255,255,255,0.98),
+            inset 0.12em 0.12em 0.12em rgba(255,255,255,0.28),
+            inset -0.07em -0.2em 0.2em 0.08em rgba(5,5,5,0.22) !important;
+          transition: box-shadow 220ms ease, transform 200ms ease, background-image 200ms ease !important;
+        }
+        button:hover .button-inner,
+        button:focus-visible .button-inner {
+          box-shadow:
+            inset 0.055em 0.1em 0.038em rgba(5,5,5,0.66),
+            inset -0.018em -0.02em 0.035em rgba(5,5,5,0.44),
+            inset 0.15em 0.15em 0.11em rgba(5,5,5,0.38),
+            inset 0 0 0.026em 0.28em rgba(255,255,255,0.18) !important;
+        }
+        button:active .button-inner {
+          transform: scale(0.97) !important;
+        }
+        .button-label {
+          display: inline-flex !important;
+          position: relative !important;
+          z-index: 2 !important;
           font-family: Helvetica, Arial, sans-serif !important;
-          font-size: 12px !important;
-          font-weight: 400 !important;
-          font-style: normal !important;
-          text-shadow: none !important;
-          -webkit-text-stroke: 0 !important;
-          font-variant-ligatures: none !important;
-          letter-spacing: 0 !important;
-          text-transform: none !important;
-          filter: none !important;
-          transform: none !important;
+          font-size: 10px !important;
+          font-weight: 600 !important;
+          letter-spacing: 0.012em !important;
+          color: rgba(30,30,36,0.96) !important;
+          text-shadow: 0 0 0.05em rgba(0,0,0,0.14) !important;
+          user-select: none !important;
+          align-items: center !important;
+          justify-content: center !important;
+          line-height: 1 !important;
         }
-        button svg {
-          display: block !important;
-          width: auto !important; /* let JS set exact width */
-          height: 18px !important;
-          max-width: 100% !important;
-          overflow: visible !important;
-          vertical-align: middle !important;
+        button:hover .button-label,
+        button:focus-visible .button-label {
+          transform: scale(0.978) !important;
         }
-        button svg text {
-          font-family: Helvetica, Arial, sans-serif !important;
-          font-size: 13px !important;
-          font-weight: 400 !important;
-        }
-        button.edit { color: #111 !important; border-color: #cfcfcf !important; border-radius: 4px !important; background: #fff !important; }
-        button.add { color: #0066cc !important; border-color: #a7c7e9 !important; border-radius: 4px !important; background: #fff !important; }
-        button.del { color: #d33 !important; border-color: #d9a1a1 !important; border-radius: 4px !important; background: #fff !important; }
-        button.edit:hover, button.edit:focus, button.edit:active { color: #111 !important; border-color: #cfcfcf !important; }
-        button.add:hover, button.add:focus, button.add:active { color: #0066cc !important; }
-        button.del:hover, button.del:focus, button.del:active { color: #d33 !important; }
+        button.add .button-inner { background-image: linear-gradient(135deg, rgba(232,240,255,1), rgba(204,216,245,1)) !important; }
+        button.del .button-inner { background-image: linear-gradient(135deg, rgba(255,244,245,1), rgba(238,207,212,1)) !important; }
+        button.add .button-label { color: rgba(22,68,168,0.95) !important; text-shadow: 0 0 0.05em rgba(22,68,168,0.18) !important; }
+        button.del .button-label { color: rgba(168,40,48,0.95) !important; text-shadow: 0 0 0.05em rgba(168,40,48,0.18) !important; }
       `;
       const btn = document.createElement('button');
       btn.className = variant === 'delete' ? 'del' : variant === 'add' ? 'add' : 'edit';
       if (title) btn.title = title;
       
-      // Use SVG text contained within button
-      const textWidth = label.length * 7; // tighter fallback width
-      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      svg.setAttribute('width', `${textWidth}`);
-      svg.setAttribute('height', '18');
-      svg.setAttribute('viewBox', `0 0 ${textWidth} 18`);
-      svg.style.display = 'inline-block';
-      svg.style.width = `${textWidth}px`;
-      svg.style.height = '18px';
-      svg.style.verticalAlign = 'middle';
-      svg.style.setProperty('height','18px','important');
-      
-      const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      text.setAttribute('x', `${textWidth / 2}`);
-      text.setAttribute('y', '12');
-      text.setAttribute('text-anchor', 'middle');
-      text.setAttribute('font-family', 'Helvetica, Arial, sans-serif');
-      text.setAttribute('font-size', '13');
-      text.setAttribute('font-weight', '400');
-      text.setAttribute('fill', variant === 'delete' ? '#d33' : variant === 'add' ? '#0066cc' : '#111');
-      text.textContent = label;
-      svg.appendChild(text);
-      
-      btn.appendChild(svg);
-      btn.style.display = 'inline-flex';
-      btn.style.alignItems = 'center';
-      btn.style.justifyContent = 'center';
-      btn.style.padding = '2px 6px';
-      btn.style.setProperty('min-width','44px','important');
-      btn.style.setProperty('cursor', 'pointer', 'important');
+      const inner = document.createElement('div');
+      inner.className = 'button-inner';
 
-      // After mount, measure actual text width and size the svg precisely
-      const sizeSvg = () => {
-        try {
-          const paddingX = 4; // px padding inside SVG
-          const measured = Math.ceil(text.getComputedTextLength ? text.getComputedTextLength() : text.getBBox().width);
-          const finalWidth = Math.max(measured + paddingX * 2, label.length * 7);
-          svg.setAttribute('width', `${finalWidth}`);
-          svg.setAttribute('viewBox', `0 0 ${finalWidth} 18`);
-          svg.style.width = `${finalWidth}px`;
-          text.setAttribute('x', `${finalWidth / 2}`);
-        } catch {}
-      };
-      requestAnimationFrame(sizeSvg);
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'button-label';
+      labelSpan.textContent = label;
+      inner.appendChild(labelSpan);
+
+      btn.appendChild(inner);
+      btn.style.setProperty('cursor', 'pointer', 'important');
       
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
@@ -148,19 +106,6 @@ export const IsolatedButton = ({ label, onClick, variant = 'default', title }) =
       // Lock ALL font properties inline - prevent ANY changes
       const lockStyles = () => {
         btn.style.setProperty('cursor', 'pointer', 'important');
-        btn.style.setProperty('font-family', 'Helvetica, Arial, sans-serif', 'important');
-        btn.style.setProperty('font-size', '12px', 'important');
-        btn.style.setProperty('font-weight', '400', 'important');
-        btn.style.setProperty('font-style', 'normal', 'important');
-        btn.style.setProperty('letter-spacing', '0', 'important');
-        btn.style.setProperty('text-shadow', 'none', 'important');
-        btn.style.setProperty('-webkit-text-stroke', '0', 'important');
-        btn.style.setProperty('font-variant-ligatures', 'none', 'important');
-        btn.style.setProperty('text-transform', 'none', 'important');
-        btn.style.setProperty('text-rendering', 'auto', 'important');
-        btn.style.setProperty('-webkit-font-smoothing', 'antialiased', 'important');
-        btn.style.setProperty('filter', 'none', 'important');
-        btn.style.setProperty('transform', 'none', 'important');
       };
       
       lockStyles();
@@ -180,23 +125,9 @@ export const IsolatedButton = ({ label, onClick, variant = 'default', title }) =
       if (btn) {
         btn.className = variant === 'delete' ? 'del' : variant === 'add' ? 'add' : 'edit';
         if (title) btn.title = title;
-        
-        // Update SVG text
-        const svg = btn.querySelector('svg');
-        if (svg) {
-          const text = svg.querySelector('text');
-          if (text) {
-            text.textContent = label;
-            text.setAttribute('fill', variant === 'delete' ? '#d33' : variant === 'add' ? '#0066cc' : '#111');
-            // Recompute true width after text change
-            const paddingX = 4;
-            const measured = Math.ceil(text.getComputedTextLength ? text.getComputedTextLength() : text.getBBox().width);
-            const finalWidth = Math.max(measured + paddingX * 2, label.length * 7);
-            svg.setAttribute('width', `${finalWidth}`);
-            svg.setAttribute('viewBox', `0 0 ${finalWidth} 18`);
-            svg.style.width = `${finalWidth}px`;
-            text.setAttribute('x', `${finalWidth / 2}`);
-          }
+        const labelSpan = btn.querySelector('.button-label');
+        if (labelSpan) {
+          labelSpan.textContent = label;
         }
       }
     }
