@@ -37,7 +37,7 @@ export const IsolatedButton = ({ label, onClick, variant = 'default', title }) =
         .button-inner {
           border-radius: 9px !important;
           padding: 0.13em 0.6em !important;
-          background-image: linear-gradient(135deg, rgba(236,236,238,1), rgba(196,196,200,1)) !important;
+          background-image: linear-gradient(135deg, rgba(240,240,242,1), rgba(210,210,214,1)) !important;
           box-shadow:
             inset -0.05em -0.05em 0.05em rgba(5,5,5,0.3),
             inset 0 0 0.04em 0.18em rgba(255,255,255,0.26),
@@ -76,10 +76,10 @@ export const IsolatedButton = ({ label, onClick, variant = 'default', title }) =
         button:focus-visible .button-label {
           transform: scale(0.978) !important;
         }
-        button.add .button-inner { background-image: linear-gradient(135deg, rgba(232,240,255,1), rgba(204,216,245,1)) !important; }
-        button.del .button-inner { background-image: linear-gradient(135deg, rgba(255,244,245,1), rgba(238,207,212,1)) !important; }
-        button.add .button-label { color: rgba(22,68,168,0.95) !important; text-shadow: 0 0 0.05em rgba(22,68,168,0.18) !important; }
-        button.del .button-label { color: rgba(168,40,48,0.95) !important; text-shadow: 0 0 0.05em rgba(168,40,48,0.18) !important; }
+        button.add .button-inner { background-image: linear-gradient(135deg, rgba(236,241,250,1), rgba(214,222,242,1)) !important; }
+        button.del .button-inner { background-image: linear-gradient(135deg, rgba(253,244,245,1), rgba(242,215,218,1)) !important; }
+        button.add .button-label { color: rgba(48,84,156,0.9) !important; text-shadow: 0 0 0.04em rgba(48,84,156,0.2) !important; }
+        button.del .button-label { color: rgba(158,58,64,0.9) !important; text-shadow: 0 0 0.04em rgba(158,58,64,0.2) !important; }
       `;
       const btn = document.createElement('button');
       btn.className = variant === 'delete' ? 'del' : variant === 'add' ? 'add' : 'edit';

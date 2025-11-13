@@ -121,35 +121,44 @@
   text-align: justify;
 }
 
-.setup-link {
-  padding: 0.5rem 1rem;
-  border: 1px solid black;
-  background: white;
+.mode-toggle,
+.setup-link,
+.add-chapter-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 16px;
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f4f6 100%);
+  color: #111;
   cursor: pointer;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.8rem;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   white-space: nowrap;
+  transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+  min-height: 32px;
+  user-select: none;
 }
 
-.setup-link:hover {
-  background: black;
-  color: white;
+.mode-toggle:hover,
+.mode-toggle:focus-visible,
+.setup-link:hover,
+.setup-link:focus-visible,
+.add-chapter-btn:hover,
+.add-chapter-btn:focus-visible {
+  background: #f6f7f9;
+  border-color: #e0e1e6;
+  color: #111;
 }
 
-.mode-toggle {
-  padding: 0.5rem 1rem;
-  border: 1px solid black;
-  background: black;
-  color: white;
-  cursor: pointer;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.8rem;
-  white-space: nowrap;
-}
-
-.mode-toggle:hover {
-  background: white;
-  color: black;
+.mode-toggle:active,
+.setup-link:active,
+.add-chapter-btn:active {
+  background: #eef0f4;
+  border-color: #d4d6dc;
 }
 
 .app-main {
@@ -185,22 +194,6 @@
 .reader-preview [aria-label="Drag handle"] {
   display: none !important;
   visibility: hidden !important;
-}
-
-.add-chapter-btn {
-  padding: 0.5rem 1rem;
-  border: 1px solid black;
-  background: white;
-  cursor: pointer;
-  font-family: 'Times New Roman', Times, serif;
-  font-size: 0.8rem;
-  font-weight: bold;
-  white-space: nowrap;
-}
-
-.add-chapter-btn:hover {
-  background: black;
-  color: white;
 }
 
 body {
