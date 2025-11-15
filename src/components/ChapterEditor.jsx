@@ -11,6 +11,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
   const [highlightColor, setHighlightColor] = useState('#ffeb3b');
   const [textColor, setTextColor] = useState('#000000');
+  const [fontSize, setFontSize] = useState('16');
   const [entityVersion, setEntityVersion] = useState(chapter?.version ?? 0);
   const [activeFormats, setActiveFormats] = useState({
     bold: false,
@@ -266,6 +267,10 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         const currentColor = getCurrentTextColor();
         setTextColor(currentColor);
       }
+      
+      // Sync font size
+      const currentFontSize = getCurrentFontSize();
+      setFontSize(currentFontSize);
     } catch {}
   };
 
@@ -598,6 +603,50 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     refreshToolbarState();
   };
   const applyTextColor = () => toggleFormatting('textColor', 'foreColor', textColor);
+  const applyFontSize = (size) => {
+    const editor = textareaRef.current;
+    if (!editor) return;
+    editor.focus();
+    
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+    
+    const range = selection.getRangeAt(0);
+    
+    try {
+      // If there's a selection, wrap it in a span with font-size
+      if (!range.collapsed) {
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        try {
+          range.surroundContents(span);
+        } catch {
+          // If surroundContents fails, extract content and replace
+          const contents = range.extractContents();
+          span.appendChild(contents);
+          range.insertNode(span);
+        }
+      } else {
+        // For collapsed selection (cursor position), insert a span
+        const span = document.createElement('span');
+        span.style.fontSize = `${size}px`;
+        span.innerHTML = '\u200B'; // Zero-width space
+        range.insertNode(span);
+        // Move cursor after the span
+        range.setStartAfter(span);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    } catch (err) {
+      // Fallback: use insertHTML
+      const selectedText = selection.toString();
+      const html = `<span style="font-size: ${size}px;">${selectedText || '\u200B'}</span>`;
+      document.execCommand('insertHTML', false, html);
+    }
+    
+    refreshToolbarState();
+  };
   const alignLeft = () => toggleFormatting('alignLeft', 'justifyLeft');
   const alignCenter = () => toggleFormatting('alignCenter', 'justifyCenter');
   const alignRight = () => toggleFormatting('alignRight', 'justifyRight');
@@ -684,37 +733,37 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
           setVideoUploadProgress(progress);
         }
       });
-      
-      const editor = textareaRef.current;
-      if (!editor) return;
-      editor.focus();
+    
+    const editor = textareaRef.current;
+    if (!editor) return;
+    editor.focus();
       const videoHtml = `<video src="${downloadURL}" controls style="max-width:100%;height:auto;display:block;margin:8px 0;"></video>`;
-      try {
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
-          const range = selection.getRangeAt(0);
-          range.deleteContents();
-          const temp = document.createElement('div');
+    try {
+      const selection = window.getSelection();
+      if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        const temp = document.createElement('div');
           temp.innerHTML = videoHtml;
-          const frag = document.createDocumentFragment();
-          let node, lastNode;
-          while ((node = temp.firstChild)) {
-            lastNode = frag.appendChild(node);
-          }
-          range.insertNode(frag);
-          if (lastNode) {
-            const after = document.createTextNode('\u00A0');
-            lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
-            const newRange = document.createRange();
-            newRange.setStartAfter(after);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-          }
-        } else {
-          editor.insertAdjacentHTML('beforeend', videoHtml);
+        const frag = document.createDocumentFragment();
+        let node, lastNode;
+        while ((node = temp.firstChild)) {
+          lastNode = frag.appendChild(node);
         }
-      } catch {
+        range.insertNode(frag);
+        if (lastNode) {
+          const after = document.createTextNode('\u00A0');
+          lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
+          const newRange = document.createRange();
+          newRange.setStartAfter(after);
+          newRange.collapse(true);
+          selection.removeAllRanges();
+          selection.addRange(newRange);
+        }
+      } else {
+          editor.insertAdjacentHTML('beforeend', videoHtml);
+      }
+    } catch {
         document.execCommand('insertHTML', false, videoHtml);
       }
       refreshToolbarState();
@@ -1328,6 +1377,29 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 >
                   <span style={{textDecoration: 'underline'}}>U</span>
                 </button>
+                {/* Font size selector */}
+                <select
+                  value={fontSize}
+                  onChange={(e) => {
+                    const size = e.target.value;
+                    setFontSize(size);
+                    applyFontSize(size);
+                  }}
+                  className="toolbar-font-size"
+                  title="Font Size"
+                >
+                  <option value="10">10</option>
+                  <option value="12">12</option>
+                  <option value="14">14</option>
+                  <option value="16">16</option>
+                  <option value="18">18</option>
+                  <option value="20">20</option>
+                  <option value="24">24</option>
+                  <option value="28">28</option>
+                  <option value="32">32</option>
+                  <option value="36">36</option>
+                  <option value="48">48</option>
+                </select>
                 <button
                   onClick={handleImageButtonClick}
                   className={`toolbar-btn ${uploadingImage ? 'uploading' : ''}`}
@@ -1436,15 +1508,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               </div>
             </div>
             {!showKaraokeDialog && (
-              <div 
-                className="content-editor page-area"
+            <div 
+              className="content-editor page-area"
                 contentEditable="true"
-                ref={textareaRef}
-                suppressContentEditableWarning={true}
+              ref={textareaRef}
+              suppressContentEditableWarning={true}
                 onInput={handleEditorInput}
                 onClick={refreshToolbarState}
                 onFocus={refreshToolbarState}
-              />
+            />
             )}
           </div>
 
@@ -1505,8 +1577,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   onChange={handleKaraokeAudioFileSelected}
                 />
                 <div className="karaoke-form-divider">or</div>
-                <input
-                  type="text"
+            <input
+              type="text"
                   value={karaokeAudioUrl}
                   onChange={(e) => {
                     setKaraokeAudioUrl(e.target.value);
@@ -1562,18 +1634,18 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   }} 
                   className="btn-cancel"
                 >
-                  Cancel
-                </button>
+                Cancel
+              </button>
                 <button 
                   onClick={handleInsertKaraoke} 
                   className="btn-save"
                   disabled={!karaokeText.trim() || (!karaokeAudioFile && !karaokeAudioUrl.trim()) || generatingTimings}
                 >
                   {generatingTimings ? 'Generating...' : 'Insert'}
-                </button>
-              </div>
+              </button>
             </div>
           </div>
+        </div>
         </div>,
         document.body
       )}
