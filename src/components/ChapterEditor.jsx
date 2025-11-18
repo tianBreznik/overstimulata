@@ -1496,7 +1496,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   onClick={handleSave}
                   disabled={!title.trim() || saving}
                 >
-                  {saving ? 'Publishing…' : 'Objavi'}
+                  {saving ? 'Objavljam' : 'Objavi'}
                 </button>
               </div>
             </div>

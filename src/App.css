@@ -96,7 +96,14 @@
 }
 
 .app.with-editor .bottom-actions {
-  right: calc(1rem + 620px); /* base 1rem + side panel width */
+  display: none !important;
+}
+
+.app.with-editor .app-main,
+.app.with-editor .app-header,
+.app.with-editor .chapters-list {
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 .app-header {

@@ -231,7 +231,7 @@
   }
   .chapter[style*="margin-left: 1.5rem"] .chapter-body,
   .chapter[style*="margin-left: 1.5rem"] .chapter-content {
-    padding-left: calc(1rem - 1.5rem);
+    padding-left: 0.5rem; /* slightly indented to align with main content column */
   }
   .chapter-content {
     font-size: 0.98rem;

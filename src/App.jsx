@@ -196,18 +196,18 @@ function App() {
       <div className="bottom-actions">
         {canToggleEditorMode && (
           <button className="mode-toggle" onClick={togglePreviewMode}>
-            {previewingAsReader ? 'Return to Editor Mode' : 'Preview Reader View'}
+            {previewingAsReader ? 'Return to Editor Mode' : 'Knjižni vpogled'}
           </button>
         )}
         <button className="setup-link" onClick={() => setShowSetup(true)}>
-          ⚙ Setup
+          ⚙ Nastavitve
         </button>
         {isEditor && (
           <button 
             className="add-chapter-btn"
             onClick={() => setShowNewChapterEditor(true)}
           >
-            + Add New Chapter
+            + Dodaj poglavje
           </button>
         )}
       </div>
