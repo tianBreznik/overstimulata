@@ -220,7 +220,11 @@
   }
   
   /* Tighter, mobile-friendly rhythm */
-  .chapter { margin-bottom: 0.9rem; }
+  .chapter { 
+    margin-bottom: 0.9rem;
+    padding-left: 0.125rem; /* Small padding from left edge (half) */
+    padding-right: 25px; /* Account for right border image (20px + 5px spacing) */
+  }
   .chapter-header { 
     padding: 0.25rem 0; 
   }
@@ -232,6 +236,9 @@
   .chapter-body {
     padding-left: 1rem; /* Original padding */
     text-align: left;   /* easier reading on mobile */
+  }
+  .chapter-content {
+    padding-right: 0; /* Already accounted for in parent .chapter */
   }
   /* Adjust subchapter headers */
   .chapter[style*="margin-left: 1.5rem"] .chapter-header {

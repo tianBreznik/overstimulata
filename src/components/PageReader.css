@@ -1,0 +1,370 @@
+.page-reader {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  z-index: 1;
+  color: #1f140a;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+}
+
+.page-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1.5rem 0.5rem;
+  box-sizing: border-box;
+}
+
+.page-sheet {
+  width: min(640px, 94vw);
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.2rem;
+  text-align: center;
+  font-family: 'Iowan Old Style', 'Baskerville', 'Baskerville Old Face', 'Garamond', 'Cormorant Garamond', serif;
+  color: #1b1209;
+}
+
+.page-sheet.content-page {
+  align-items: flex-start;
+  gap: 0.4rem;
+  text-align: left;
+  width: min(660px, 94vw);
+}
+
+.page-header {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  text-align: center;
+  color: #16100a;
+}
+
+.page-title {
+  font-size: clamp(2.15rem, 5vw, 2.8rem);
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.page-subtitle {
+  font-size: clamp(0.95rem, 2.7vw, 1.15rem);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #534b3b;
+}
+
+.page-author {
+  font-size: clamp(1rem, 2.8vw, 1.2rem);
+  font-style: italic;
+  color: #3c3427;
+}
+
+.page-ampersand {
+  font-size: 2.1rem;
+  color: #40392f;
+  margin-top: 0.1rem;
+}
+
+.page-body {
+  width: 100%;
+  flex: 1;
+  line-height: 1.62;
+  font-size: 1.18rem;
+  letter-spacing: 0.006em;
+  padding: 0.5rem 0 0 0;
+  position: relative;
+  overflow: hidden;
+}
+
+
+.content-page .page-body {
+  text-align: left; /* Left-align like in the image */
+  word-spacing: normal;
+  hyphens: auto;
+  -webkit-hyphens: auto;
+  -moz-hyphens: auto;
+  hyphenate-limit-chars: 6 3 2; /* min word length, min before hyphen, min after */
+}
+
+.content-page.page-with-heading .page-body {
+  padding-top: calc(2.8rem + env(safe-area-inset-top));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.content-page.page-without-heading .page-body {
+  padding-top: calc(1.15rem + env(safe-area-inset-top));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.content-body::before {
+  display: none;
+}
+
+.page-content {
+  width: 100%;
+  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 1.18rem; /* Fixed font size - never dynamic */
+  line-height: 1.62; /* Fixed line height - never dynamic */
+  word-spacing: normal;
+  letter-spacing: 0.006em; /* Match page-body letter-spacing */
+}
+
+.page-content * {
+  font-size: inherit; /* All child elements inherit the same fixed font size */
+  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Force Times New Roman on all elements */
+}
+
+/* Ink effect for irregular shadows - JavaScript applies via .ink-char-mobile spans */
+.ink-char-mobile {
+  display: inline;
+  font: inherit;
+  color: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+}
+
+.ink-char-mobile[data-ink="1"] {
+  /* Slightly more intense; use currentColor so shadow matches text color */
+  /* Use !important to ensure shadows persist during transitions */
+  text-shadow:
+    0 0 0.2px currentColor,
+    0 0.06px 0.28px currentColor,
+   -0.06px 0 0.28px currentColor !important;
+  -webkit-text-stroke: 0.06px currentColor !important;
+}
+
+/* Exclude chapter and subchapter headings from Times New Roman */
+.page-content .chapter-header-title,
+.page-content h3.chapter-header-title,
+.page-content h4.chapter-header-title {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Keep original font for headings - override universal rule */
+}
+
+/* Subchapter titles (h4) should be italic and not bold */
+.page-content h4.chapter-header-title {
+  font-style: italic !important;
+  font-weight: normal !important;
+}
+
+.page-content p {
+  margin-bottom: 0.85rem;
+  text-align: left; /* Left-align paragraphs like in the image */
+  word-spacing: normal;
+  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Explicit font for paragraphs */
+}
+
+.page-content p:last-child {
+  margin-bottom: 0;
+}
+
+.page-content ul,
+.page-content ol {
+  padding-left: 1.4rem;
+  margin-bottom: 0.85rem;
+}
+
+.page-content li {
+  margin-bottom: 0.4rem;
+}
+
+/* Chapter and subchapter title styling - match original Chapter.css styling */
+.page-content .chapter-header-title,
+.page-content h3.chapter-header-title {
+  margin: 1.5rem 0 1rem 0;
+  font-size: 1.35rem;
+  color: #0c0c0c;
+  font-weight: 520;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  text-transform: none;
+  letter-spacing: 0.015em;
+  text-align: center;
+  text-shadow: 0 0 0.9px rgba(0,0,0,0.5), 0 0 1.4px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+}
+
+.page-content .chapter-header-title::first-letter {
+  text-transform: uppercase;
+}
+
+/* Subchapter titles (h4) */
+.page-content h4.chapter-header-title {
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.8rem 0;
+}
+
+/* Fade transition - smoother and slower */
+.page-container .page-sheet {
+  opacity: 1;
+  transition: opacity 1s ease-in-out;
+  will-change: opacity; /* Optimize for opacity transitions */
+}
+
+.page-container.transitioning .page-sheet {
+  opacity: 0;
+  transition: opacity 1s ease-in-out;
+}
+
+/* Preserve ink effect shadows during transition - ensure they fade with text */
+/* Apply to all states to ensure consistency */
+.page-container .page-sheet .ink-char-mobile[data-ink="1"],
+.page-container.transitioning .page-sheet .ink-char-mobile[data-ink="1"] {
+  /* Shadows must persist - use !important to override any other rules */
+  /* These shadows will fade naturally with the parent's opacity transition */
+  /* Match the base shadow values to ensure consistency */
+  text-shadow:
+    0 0 0.2px currentColor,
+    0 0.06px 0.28px currentColor,
+   -0.06px 0 0.28px currentColor !important;
+  -webkit-text-stroke: 0.06px currentColor !important;
+}
+
+.page-reader-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  width: 100vw;
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 10000;
+  background: transparent; /* Use body background (speckled texture) */
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  color: #0a0a0a;
+  font-size: 1rem;
+}
+
+/* Page number in bottom right corner */
+.page-number {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 0.9rem;
+  color: #1f140a;
+  opacity: 0.6;
+  z-index: 100;
+  padding: 0.25rem 0.5rem;
+  pointer-events: none;
+}
+
+/* Desktop: hide page reader */
+/* Karaoke highlighting styles */
+.karaoke-slice .karaoke-char,
+.karaoke-player .karaoke-char,
+.karaoke-slice .karaoke-word,
+.karaoke-player .karaoke-word {
+  position: relative;
+  display: inline-block;
+  white-space: pre;
+  color: inherit;
+  --karaoke-fill: 0;
+  font: inherit;
+  line-height: inherit;
+  letter-spacing: inherit;
+  text-shadow: none;
+  -webkit-text-stroke: none;
+}
+
+.karaoke-slice .karaoke-char[data-ink="1"],
+.karaoke-player .karaoke-char[data-ink="1"],
+.karaoke-slice .karaoke-word[data-ink="1"],
+.karaoke-player .karaoke-word[data-ink="1"] {
+  text-shadow:
+    0 0 0.8px rgba(0,0,0,0.5),
+    0 0.25px 1px rgba(0,0,0,0.22),
+   -0.25px 0 1px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+}
+
+.karaoke-slice .karaoke-char::after,
+.karaoke-player .karaoke-char::after {
+  content: attr(data-char);
+  position: absolute;
+  inset: 0;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+  opacity: var(--karaoke-fill);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  -webkit-text-stroke: 0.75px rgba(255, 214, 0, 0.95);
+  text-shadow: none;
+  transition: opacity 90ms linear;
+}
+
+.karaoke-slice .karaoke-word::after,
+.karaoke-player .karaoke-word::after {
+  content: attr(data-word);
+  position: absolute;
+  inset: 0;
+  white-space: pre;
+  color: transparent;
+  pointer-events: none;
+  opacity: var(--karaoke-fill);
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  font-weight: inherit;
+  -webkit-text-stroke: 0.75px rgba(255, 214, 0, 0.95);
+  text-shadow: none;
+  transition: opacity 90ms linear;
+}
+
+.karaoke-slice .karaoke-char.karaoke-char-complete,
+.karaoke-slice .karaoke-char.karaoke-char-active,
+.karaoke-player .karaoke-char.karaoke-char-complete,
+.karaoke-player .karaoke-char.karaoke-char-active,
+.karaoke-slice .karaoke-word.karaoke-word-complete,
+.karaoke-slice .karaoke-word.karaoke-word-active,
+.karaoke-player .karaoke-word.karaoke-word-complete,
+.karaoke-player .karaoke-word.karaoke-word-active {
+  color: inherit;
+}
+
+/* Breathing pulse animation for karaoke slices */
+.karaoke-slice {
+  cursor: pointer;
+  display: inline-block;
+  animation: karaoke-breathe 2s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.karaoke-slice[data-playing="true"] {
+  animation: none !important;
+  opacity: 1 !important;
+}
+
+.karaoke-slice .karaoke-char {
+  animation: inherit;
+}
+
+.karaoke-slice[data-playing="true"] .karaoke-char {
+  animation: none !important;
+}
+
+@keyframes karaoke-breathe {
+  0%, 100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 769px) {
+  .page-reader {
+    display: none;
+  }
+}
+

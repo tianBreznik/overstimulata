@@ -9,6 +9,8 @@ import { getBookmark } from './utils/bookmark';
 import { DndContext, closestCenter } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { DraggableChapter } from './components/DraggableChapter';
+import { PageReader } from './components/PageReader';
+import { useReadingPosition } from './hooks/useReadingPosition';
 
 const BOOK_ID = 'primary';
 
@@ -22,6 +24,11 @@ function App() {
   const [defaultExpandedChapterId, setDefaultExpandedChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const [isMobile, setIsMobile] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth <= 768;
+  });
+  const { position: readingPosition, savePosition } = useReadingPosition();
   const bookConceptRef = useRef(null);
 
   // Add/remove body class when editor opens/closes to hide flower image
@@ -140,9 +147,57 @@ function App() {
     }
   }, []);
 
+  // Detect mobile viewport
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Disable body/html scrolling when PageReader is active
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof document === 'undefined') return;
+    const isReaderActive = isMobile && !isEditor && previewingAsReader;
+    
+    if (isReaderActive) {
+      document.body.classList.add('with-page-reader');
+      document.documentElement.classList.add('with-page-reader');
+    } else {
+      document.body.classList.remove('with-page-reader');
+      document.documentElement.classList.remove('with-page-reader');
+    }
+    
+    return () => {
+      document.body.classList.remove('with-page-reader');
+      document.documentElement.classList.remove('with-page-reader');
+    };
+  }, [isMobile, isEditor, previewingAsReader]);
+
+  // Handle page change in PageReader
+  const handlePageChange = (newPosition) => {
+    savePosition(newPosition);
+  };
+
   return (
-    <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''}`}>
-      <header className="app-header">
+    <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
+      {/* Mobile: Page-based reader */}
+      {isMobile && !isEditor && previewingAsReader && chapters.length > 0 && !loading && (
+        <>
+          <PageReader
+            chapters={chapters}
+            onPageChange={handlePageChange}
+            initialPosition={readingPosition}
+          />
+        </>
+      )}
+
+      {/* Desktop: Scroll-based layout (or mobile when not in reader mode) */}
+      {/* Don't render old content if we're in mobile reader mode, even during loading */}
+      {(!isMobile || isEditor || !previewingAsReader) && (
+        <>
+          <header className="app-header">
         <div className="header-content">
           <p ref={bookConceptRef} className="book-concept">
           Welcome. You are now entering Dwellings in machinic passage[1] s, a short journey conceived 
@@ -215,6 +270,8 @@ function App() {
           </div>
         </div>
       </main>
+        </>
+      )}
 
       <div className="bottom-actions">
         {canToggleEditorMode && (

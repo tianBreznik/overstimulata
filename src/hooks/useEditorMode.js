@@ -23,12 +23,18 @@ const ensureInitialised = () => {
   sharedState.forceReaderPreview = forceReaderPreview;
 };
 
+const computePreviewing = () =>
+  sharedState.baseEditor ? sharedState.forceReaderPreview : true;
+
+const computeIsEditor = () =>
+  sharedState.baseEditor ? !sharedState.forceReaderPreview : false;
+
 const notify = () => {
   const payload = {
     deviceId: sharedState.deviceId,
     baseEditor: sharedState.baseEditor,
-    previewingAsReader: sharedState.baseEditor && sharedState.forceReaderPreview,
-    isEditor: sharedState.baseEditor && !sharedState.forceReaderPreview,
+    previewingAsReader: computePreviewing(),
+    isEditor: computeIsEditor(),
   };
   sharedState.subscribers.forEach((cb) => cb(payload));
 };
@@ -53,8 +59,8 @@ export const useEditorMode = () => {
   const [state, setState] = useState(() => ({
     deviceId: sharedState.deviceId,
     baseEditor: sharedState.baseEditor,
-    previewingAsReader: sharedState.baseEditor && sharedState.forceReaderPreview,
-    isEditor: sharedState.baseEditor && !sharedState.forceReaderPreview,
+    previewingAsReader: computePreviewing(),
+    isEditor: computeIsEditor(),
   }));
 
   useEffect(() => {
@@ -64,8 +70,8 @@ export const useEditorMode = () => {
     subscriber({
       deviceId: sharedState.deviceId,
       baseEditor: sharedState.baseEditor,
-      previewingAsReader: sharedState.baseEditor && sharedState.forceReaderPreview,
-      isEditor: sharedState.baseEditor && !sharedState.forceReaderPreview,
+      previewingAsReader: computePreviewing(),
+      isEditor: computeIsEditor(),
     });
     return () => {
       sharedState.subscribers.delete(subscriber);

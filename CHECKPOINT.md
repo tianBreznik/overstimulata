@@ -103,6 +103,24 @@ VITE_FIREBASE_APP_ID=...
 
 ## 🚧 TODO / Future Features
 
+### Known Issues / Needs Polish
+
+#### Karaoke Tapping Interaction (Mobile PageReader)
+- **Status**: Partially working, needs polish
+- **Issue**: Users sometimes need to tap multiple times on karaoke blocks to start playback
+- **Current Implementation**:
+  - Breathing animation (fade in/out) indicates karaoke blocks are tappable
+  - Touch handlers check for interactive targets to prevent swipe interference
+  - `click` listeners on `.karaoke-slice` start/restart playback and stop the breathing animation
+  - Slice initialization happens in click handler before playback
+- **Needs Work**:
+  - Make first tap on a karaoke block reliably start playback (even on small tap targets)
+  - Reduce initialization latency so karaoke starts more quickly after a tap
+  - Ensure punctuation characters (`, . ? !` etc.) are highlighted in sync even when not part of a marked karaoke word
+  - Improve handling of race conditions between slice initialization and playback
+  - Keep robust error handling and retry logic around audio playback/startup
+- **Location**: `src/components/PageReader.jsx` (karaoke slice click handlers, `playSlice`, swipe/touch handling)
+
 ### Video Hosting (Pending Decision)
 - [ ] Decide on video hosting solution:
   - Option 1: Cloudflare R2 (free tier: 10GB storage)
@@ -112,7 +130,7 @@ VITE_FIREBASE_APP_ID=...
 - [ ] Custom HTML5 video player for unbranded videos
 
 ### Potential Enhancements
-- [ ] Karaoke MP3 feature (audio sync with text highlighting)
+- [x] Karaoke MP3 feature (audio sync with text highlighting) - **Implemented but needs polish (see Known Issues)**
 - [ ] Custom markdown shortcuts (typing `**bold**` applies formatting)
 - [ ] Image drag-and-drop directly into editor
 - [ ] Video upload functionality (once hosting decided)

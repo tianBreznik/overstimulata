@@ -1,0 +1,37 @@
+.reader-top-bar {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 1rem);
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+  z-index: 1000;
+}
+
+.reader-top-bar.visible {
+  opacity: 1;
+}
+
+.reader-top-bar-content {
+  max-width: 80vw;
+  text-align: center;
+}
+
+.reader-chapter-title {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #0a0a0a;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+@media (min-width: 769px) {
+  .reader-top-bar {
+    display: none;
+  }
+}
+

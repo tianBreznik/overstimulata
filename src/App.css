@@ -4,6 +4,42 @@
   position: relative; /* anchor overlay */
 }
 
+/* Hide old content when PageReader is active */
+.app.with-page-reader .app-header,
+.app.with-page-reader .app-main,
+.app.with-page-reader .chapters-list {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  height: 0 !important;
+  overflow: hidden !important;
+  position: absolute !important;
+  left: -9999px !important;
+  top: -9999px !important;
+  pointer-events: none !important;
+  z-index: -1 !important;
+}
+
+/* Hide bottom buttons when PageReader is active */
+.app.with-page-reader .bottom-actions {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+/* Disable scrolling when PageReader is active */
+.app.with-page-reader {
+  overflow: hidden !important;
+}
+
+body.with-page-reader,
+html.with-page-reader {
+  overflow: hidden !important;
+  position: fixed !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
 /* Subtle grayscale e‑ink texture (very light) */
 .app.eink::before {
   content: "";
@@ -274,45 +310,26 @@ html[style*="overflow: hidden"] {
 /* On mobile, remove CSS text-shadow since JavaScript applies it via spans */
 /* The JavaScript wraps characters in spans and randomly applies data-ink="1" */
 @media (max-width: 768px) {
-  /* Flower image along left border - scrolling with page */
-  body::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
-    width: 20px; /* Medium size */
-    background-image: url('./assets/floral.png');
-    background-repeat: repeat-y;
-    background-size: 20px 250px; /* Width 20px, height 250px with overlap */
-    background-position: 0px -10px; /* Align to left edge, negative Y creates overlap */
-    z-index: 1;
-    pointer-events: none;
-    filter: grayscale(100%) brightness(1.2) contrast(0.8); /* Convert to white/beige tone */
-    opacity: 0.4; /* Subtle appearance */
-  }
-
   /* Flower image along right border - scrolling with page */
-  /* Use #root::after since body::before is used for texture and body::after is used for left border */
-  #root::after {
+  /* Use #root::after since body::before is used for texture */
+  /* #root::after {
     content: '';
     position: absolute;
     right: 0;
     top: 0;
     bottom: 0;
-    width: 20px; /* Medium size */
+    width: 20px; 
     background-image: url('./assets/floral.png');
     background-repeat: repeat-y;
-    background-size: 20px 250px; /* Width 20px, height 250px with overlap */
-    background-position: 0 -10px; /* Align to left edge of element (right edge of page), negative Y creates overlap */
+    background-size: 20px 250px; 
+    background-position: 0 -10px; 
     z-index: 1;
     pointer-events: none;
-    filter: grayscale(100%) brightness(1.2) contrast(0.8); /* Convert to white/beige tone */
-    opacity: 0.4; /* Subtle appearance */
-  }
+    filter: grayscale(100%) brightness(1.2) contrast(0.8); 
+    opacity: 0.4; 
+  } */
 
-  /* Hide flower images when editor is open */
-  body.editor-open::after,
+  /* Hide flower image when editor is open */
   body.editor-open #root::after {
     display: none !important;
   }
@@ -335,6 +352,7 @@ html[style*="overflow: hidden"] {
   .header-content { 
     max-width: 92vw; 
     padding: 0 1rem; 
+    padding-left: 0.125rem; /* Shift left to fill space where left border was (half) */
     margin: 0 auto; /* Center the content */
   }
   .book-concept {
@@ -364,10 +382,14 @@ html[style*="overflow: hidden"] {
   .container { 
     max-width: 92vw; 
     margin: 0 auto; /* Center the content */
+    padding-left: 0.125rem; /* Small padding from left edge (half) */
+    padding-right: 25px; /* Account for right border image (20px + 5px spacing) */
   }
   .chapters-list { 
     max-width: 92vw; 
     padding: 0 0.25rem; 
+    padding-left: 0.125rem; /* Shift left to fill space where left border was (half) */
+    padding-right: 25px; /* Account for right border image (20px + 5px spacing) */
     margin: 0 auto; /* Center the content */
   }
   

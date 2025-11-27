@@ -10,10 +10,13 @@ export function getBookmark() {
   }
 }
 
-export function setBookmark(chapterId) {
+export function setBookmark(data) {
   try {
-    const data = { chapterId, ts: Date.now() };
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    // Support both old format (just chapterId) and new format (object)
+    const bookmarkData = typeof data === 'string' 
+      ? { chapterId: data, ts: Date.now() }
+      : { ...data, ts: Date.now() };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(bookmarkData));
   } catch {}
 }
 
