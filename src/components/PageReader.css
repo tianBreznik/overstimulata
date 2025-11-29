@@ -8,6 +8,13 @@
   z-index: 1;
   color: #1f140a;
   font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  /* Force own compositing layer to preserve rendering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  /* Prevent any scrolling on the page-frame */
+  touch-action: none;
+  -webkit-overflow-scrolling: none;
 }
 
 .page-container {
@@ -18,6 +25,16 @@
   justify-content: center;
   padding: 2rem 1.5rem 0.5rem;
   box-sizing: border-box;
+  overflow: hidden;
+  /* Force own compositing layer that persists during overlays */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  isolation: isolate;
+  /* Prevent scrolling */
+  touch-action: none;
 }
 
 .page-sheet {
@@ -30,6 +47,11 @@
   text-align: center;
   font-family: 'Iowan Old Style', 'Baskerville', 'Baskerville Old Face', 'Garamond', 'Cormorant Garamond', serif;
   color: #1b1209;
+  /* Lock layout to prevent re-measurement during overlays */
+  contain: layout style;
+  min-width: 0;
+  max-width: min(640px, 94vw);
+  box-sizing: border-box;
 }
 
 .page-sheet.content-page {
@@ -37,6 +59,11 @@
   gap: 0.4rem;
   text-align: left;
   width: min(660px, 94vw);
+  /* Lock layout to prevent re-measurement during overlays */
+  contain: layout style;
+  min-width: 0;
+  max-width: min(660px, 94vw);
+  box-sizing: border-box;
 }
 
 .page-header {
@@ -82,6 +109,9 @@
   padding: 0.5rem 0 0 0;
   position: relative;
   overflow: hidden;
+  /* Prevent scrolling */
+  touch-action: none;
+  -webkit-overflow-scrolling: none;
 }
 
 
@@ -115,6 +145,12 @@
   line-height: 1.62; /* Fixed line height - never dynamic */
   word-spacing: normal;
   letter-spacing: 0.006em; /* Match page-body letter-spacing */
+  /* Prevent layout shifts from overlays */
+  contain: layout style;
+  /* Lock dimensions to prevent re-measurement */
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .page-content * {
@@ -129,16 +165,25 @@
   color: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+  /* Preserve rendering during overlays */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .ink-char-mobile[data-ink="1"] {
   /* Slightly more intense; use currentColor so shadow matches text color */
-  /* Use !important to ensure shadows persist during transitions */
+  /* Use !important to ensure shadows persist during transitions and overlays */
   text-shadow:
     0 0 0.2px currentColor,
     0 0.06px 0.28px currentColor,
    -0.06px 0 0.28px currentColor !important;
   -webkit-text-stroke: 0.06px currentColor !important;
+  /* Force hardware acceleration and preserve rendering */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: text-shadow;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
 }
 
 /* Exclude chapter and subchapter headings from Times New Roman */
@@ -205,6 +250,13 @@
   opacity: 1;
   transition: opacity 1s ease-in-out;
   will-change: opacity; /* Optimize for opacity transitions */
+  /* Preserve text shadows during overlays - create isolated compositing layer */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  isolation: isolate;
+  contain: layout style paint;
 }
 
 .page-container.transitioning .page-sheet {

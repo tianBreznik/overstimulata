@@ -3,7 +3,7 @@ import { Chapter, applyInkEffectToTextMobile } from './components/Chapter';
 import { ChapterEditor } from './components/ChapterEditor';
 import { EditorSetup } from './pages/EditorSetup';
 import { useEditorMode } from './hooks/useEditorMode';
-import { getChapters, getSubchapters, addChapter, addSubchapter, updateChapter, updateSubchapter, deleteChapter, deleteSubchapter, getChapterById, getSubchapterById } from './services/firestore';
+import { getChapters, getSubchapters, addChapter, addSubchapter, updateChapter, updateSubchapter, deleteChapter, deleteSubchapter, getChapterById, getSubchapterById, reorderChapters } from './services/firestore';
 import './App.css';
 import { getBookmark } from './utils/bookmark';
 import { DndContext, closestCenter } from '@dnd-kit/core';
@@ -182,20 +182,40 @@ function App() {
 
   return (
     <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
-      {/* Mobile: Page-based reader */}
-      {isMobile && !isEditor && previewingAsReader && chapters.length > 0 && !loading && (
+      {/* Mobile: Always show PageReader view - the old chapter list view is gone on mobile */}
+      {isMobile && chapters.length > 0 && !loading && (
         <>
           <PageReader
             chapters={chapters}
             onPageChange={handlePageChange}
             initialPosition={readingPosition}
+            onEditChapter={openEditorWithLatest}
+            onAddSubchapter={(chapter) => setParentChapterForNewSub(chapter)}
+            onDeleteChapter={async (chapterId) => {
+              await deleteChapter(BOOK_ID, chapterId);
+              await refresh();
+            }}
+            onEditSubchapter={openEditorWithLatest}
+            onDeleteSubchapter={async (subchapterId, parentChapterId) => {
+              await deleteSubchapter(BOOK_ID, parentChapterId, subchapterId);
+              await refresh();
+            }}
+            onReorderChapters={async (orderedIds) => {
+              try {
+                await reorderChapters(BOOK_ID, orderedIds);
+              } catch (err) {
+                console.error('Failed to reorder chapters', err);
+              }
+            }}
+            onOpenSettings={() => setShowSetup(true)}
+            onAddChapter={() => setShowNewChapterEditor(true)}
+            onToggleEditorReader={togglePreviewMode}
           />
         </>
       )}
 
-      {/* Desktop: Scroll-based layout (or mobile when not in reader mode) */}
-      {/* Don't render old content if we're in mobile reader mode, even during loading */}
-      {(!isMobile || isEditor || !previewingAsReader) && (
+      {/* Desktop: Scroll-based layout - mobile always uses PageReader now */}
+      {!isMobile && (
         <>
           <header className="app-header">
         <div className="header-content">
@@ -273,33 +293,36 @@ function App() {
         </>
       )}
 
-      <div className="bottom-actions">
-        {canToggleEditorMode && (
+      {/* Bottom actions - only show on desktop, mobile uses TOC footer */}
+      {!isMobile && (
+        <div className="bottom-actions">
+          {canToggleEditorMode && (
+            <button 
+              className="mode-toggle" 
+              onClick={togglePreviewMode}
+              tabIndex={window.innerWidth <= 768 ? -1 : 0}
+            >
+              {previewingAsReader ? 'Nazaj urejat' : 'Knjižni vpogled'}
+            </button>
+          )}
           <button 
-            className="mode-toggle" 
-            onClick={togglePreviewMode}
+            className="setup-link" 
+            onClick={() => setShowSetup(true)}
             tabIndex={window.innerWidth <= 768 ? -1 : 0}
           >
-            {previewingAsReader ? 'Nazaj urejat' : 'Knjižni vpogled'}
+            ⚙ Nastavitve
           </button>
-        )}
-        <button 
-          className="setup-link" 
-          onClick={() => setShowSetup(true)}
-          tabIndex={window.innerWidth <= 768 ? -1 : 0}
-        >
-          ⚙ Nastavitve
-        </button>
-        {isEditor && (
-          <button 
-            className="add-chapter-btn"
-            onClick={() => setShowNewChapterEditor(true)}
-            tabIndex={window.innerWidth <= 768 ? -1 : 0}
-          >
-            + Dodaj poglavje
-          </button>
-        )}
-      </div>
+          {isEditor && (
+            <button 
+              className="add-chapter-btn"
+              onClick={() => setShowNewChapterEditor(true)}
+              tabIndex={window.innerWidth <= 768 ? -1 : 0}
+            >
+              + Dodaj poglavje
+            </button>
+          )}
+        </div>
+      )}
 
       {showSetup && <EditorSetup onClose={() => setShowSetup(false)} />}
       

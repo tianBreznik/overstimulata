@@ -1,0 +1,574 @@
+import { useState, useEffect, useRef } from 'react';
+import { useEditorMode } from '../hooks/useEditorMode';
+import { DndContext, closestCenter } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import './MobileTOC.css';
+
+export const MobileTOC = ({
+  chapters = [],
+  pages = [],
+  currentChapterIndex,
+  currentPageIndex,
+  currentSubchapterId,
+  isOpen,
+  dragProgress = 0,
+  onClose,
+  onJumpToPage,
+  onEditChapter,
+  onAddSubchapter,
+  onDeleteChapter,
+  onEditSubchapter,
+  onDeleteSubchapter,
+  onReorderChapters,
+  onOpenSettings,
+  onAddChapter,
+  onToggleEditorReader,
+}) => {
+  const { isEditor, canToggleEditorMode, previewingAsReader } = useEditorMode();
+  const [expandedChapters, setExpandedChapters] = useState(new Set());
+  const [isClosing, setIsClosing] = useState(false);
+  // Track double-tap state
+  const lastTapRef = useRef({ time: 0, chapterId: null });
+  const singleTapTimeoutRef = useRef(null);
+
+  const handleClose = () => {
+    // Clear any pending single-tap timeout
+    if (singleTapTimeoutRef.current) {
+      clearTimeout(singleTapTimeoutRef.current);
+      singleTapTimeoutRef.current = null;
+    }
+    setIsClosing(true);
+    setTimeout(() => {
+      setIsClosing(false);
+      onClose();
+    }, 300); // Match CSS transition duration (2s + 0.6s delay)
+  };
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (singleTapTimeoutRef.current) {
+        clearTimeout(singleTapTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Find page number for a chapter or subchapter (global page number in the pages array)
+  const findPageNumber = (chapterId, subchapterId = null) => {
+    let targetPage = null;
+    if (subchapterId) {
+      // For subchapters, find the first page of that subchapter (lowest pageIndex)
+      const subchapterPages = pages.filter(
+        (p) => p.chapterId === chapterId && p.subchapterId === subchapterId
+      );
+      if (subchapterPages.length === 0) return null;
+      // Sort by pageIndex and get the first one
+      targetPage = subchapterPages.sort((a, b) => a.pageIndex - b.pageIndex)[0];
+    } else {
+      // For chapters, find the first page of that chapter (without subchapter, lowest pageIndex)
+      const chapterPages = pages.filter(
+        (p) => p.chapterId === chapterId && !p.subchapterId
+      );
+      if (chapterPages.length === 0) {
+        // If chapter has no direct pages, check if it has subchapters and use the first subchapter's first page
+        const subchapterPages = pages.filter(
+          (p) => p.chapterId === chapterId && p.subchapterId
+        );
+        if (subchapterPages.length > 0) {
+          // Sort by pageIndex and get the first one
+          targetPage = subchapterPages.sort((a, b) => a.pageIndex - b.pageIndex)[0];
+        } else {
+          return null;
+        }
+      } else {
+        // Sort by pageIndex and get the first one
+        targetPage = chapterPages.sort((a, b) => a.pageIndex - b.pageIndex)[0];
+      }
+    }
+    if (!targetPage) return null;
+    // Find the index of this page in the global pages array (1-indexed)
+    const globalIndex = pages.findIndex((p) => p === targetPage);
+    return globalIndex >= 0 ? globalIndex + 1 : null;
+  };
+
+  // Toggle chapter expansion
+  const toggleChapter = (chapterId) => {
+    const newExpanded = new Set(expandedChapters);
+    if (newExpanded.has(chapterId)) {
+      newExpanded.delete(chapterId);
+    } else {
+      newExpanded.add(chapterId);
+    }
+    setExpandedChapters(newExpanded);
+  };
+
+  // Jump to chapter's first page
+  const jumpToChapter = (chapter) => {
+    const firstPage = pages.find(
+      (p) => p.chapterId === chapter.id && p.pageIndex === 0 && !p.subchapterId
+    );
+    if (!firstPage) {
+      // If chapter has no direct pages, check if it has subchapters and use the first subchapter's first page
+      const subchapterPages = pages.filter(
+        (p) => p.chapterId === chapter.id && p.subchapterId
+      );
+      if (subchapterPages.length > 0) {
+        const sortedPages = subchapterPages.sort((a, b) => a.pageIndex - b.pageIndex);
+        const firstSubchapterPage = sortedPages[0];
+        if (firstSubchapterPage) {
+          onJumpToPage(firstSubchapterPage.chapterIndex, firstSubchapterPage.pageIndex);
+          handleClose();
+        }
+      }
+    } else {
+      onJumpToPage(firstPage.chapterIndex, firstPage.pageIndex);
+      handleClose();
+    }
+  };
+
+  // Handle chapter click with double-tap detection
+  const handleChapterClick = (chapter, chapterIndex) => {
+    const hasSubchapters = chapter.children && chapter.children.length > 0;
+    
+    // If chapter has no subchapters, single tap jumps directly
+    if (!hasSubchapters) {
+      jumpToChapter(chapter);
+      return;
+    }
+
+    // For chapters with subchapters: single tap toggles, double tap jumps
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current.time;
+    const isDoubleTap = 
+      lastTapRef.current.chapterId === chapter.id && 
+      timeSinceLastTap < 300; // 300ms threshold for double-tap
+
+    // Clear any pending single-tap action
+    if (singleTapTimeoutRef.current) {
+      clearTimeout(singleTapTimeoutRef.current);
+      singleTapTimeoutRef.current = null;
+    }
+
+    if (isDoubleTap) {
+      // Double-tap: jump to chapter
+      jumpToChapter(chapter);
+      // Reset tap tracking
+      lastTapRef.current = { time: 0, chapterId: null };
+    } else {
+      // Single-tap: toggle expand/collapse (delayed to allow double-tap detection)
+      lastTapRef.current = { time: now, chapterId: chapter.id };
+      singleTapTimeoutRef.current = setTimeout(() => {
+        toggleChapter(chapter.id);
+        singleTapTimeoutRef.current = null;
+      }, 300); // Wait 300ms to see if it's a double-tap
+    }
+  };
+
+  // Handle subchapter click
+  const handleSubchapterClick = (subchapter, chapterId) => {
+    const subchapterPages = pages.filter(
+      (p) => p.chapterId === chapterId && p.subchapterId === subchapter.id
+    );
+    if (subchapterPages.length > 0) {
+      const firstPage = subchapterPages[0];
+      onJumpToPage(firstPage.chapterIndex, firstPage.pageIndex);
+      handleClose();
+    }
+  };
+
+  // Check if chapter/subchapter is current
+  const isCurrentChapter = (chapterId) => {
+    if (!pages || pages.length === 0) return false;
+    const currentPage = pages.find(
+      (p) => p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex
+    );
+    if (!currentPage) return false;
+    // Check if this page belongs to the chapter and is not a subchapter page
+    return currentPage.chapterId === chapterId && !currentPage.subchapterId;
+  };
+
+  const isCurrentSubchapter = (subchapterId) => {
+    if (!subchapterId || !currentSubchapterId) return false;
+    return currentSubchapterId === subchapterId;
+  };
+
+  // Sortable chapter row component for drag-and-drop
+  const SortableChapterRow = ({
+    chapter,
+    chapterIndex,
+    chapters,
+    pages,
+    currentChapterIndex,
+    currentPageIndex,
+    currentSubchapterId,
+    expandedChapters,
+    setExpandedChapters,
+    lastTapRef,
+    singleTapTimeoutRef,
+    isEditor,
+    isCurrentChapter,
+    isCurrentSubchapter,
+    findPageNumber,
+    handleChapterClick,
+    handleSubchapterClick,
+    onJumpToPage,
+    onEditChapter,
+    onAddSubchapter,
+    onDeleteChapter,
+    onEditSubchapter,
+    onDeleteSubchapter,
+  }) => {
+    const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: chapter.id });
+    
+    const style = {
+      transform: CSS.Transform.toString(transform),
+      transition,
+      opacity: isDragging ? 0.5 : 1,
+    };
+
+    const isExpanded = expandedChapters.has(chapter.id);
+    const isCurrent = isCurrentChapter(chapter.id);
+    const pageNum = findPageNumber(chapter.id);
+    const hasSubchapters = chapter.children && chapter.children.length > 0;
+
+    return (
+      <div ref={setNodeRef} style={style} className="mobile-toc-chapter-row">
+        <div
+          className={`mobile-toc-chapter-item ${isCurrent ? 'mobile-toc-current' : ''} ${isExpanded ? 'mobile-toc-expanded' : ''}`}
+          onClick={() => handleChapterClick(chapter, chapterIndex)}
+        >
+          {pageNum && (
+            <span className="mobile-toc-page-number">p. {pageNum}:</span>
+          )}
+          <span className="mobile-toc-chapter-title">{chapter.title}</span>
+          {isEditor && (
+            <div className="mobile-toc-editor-controls-inline">
+              <button
+                className="mobile-toc-btn-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onEditChapter) onEditChapter(chapter);
+                }}
+                title="Edit"
+              >
+                ✎
+              </button>
+              <button
+                className="mobile-toc-btn-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAddSubchapter(chapter);
+                }}
+                title="Add subchapter"
+              >
+                +
+              </button>
+              <button
+                className="mobile-toc-btn-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteChapter(chapter.id);
+                }}
+                title="Delete"
+              >
+                ×
+              </button>
+              <span 
+                className="mobile-toc-drag-handle-inline" 
+                title="Drag to reorder"
+                {...attributes}
+                {...listeners}
+              >
+                ☰
+              </span>
+            </div>
+          )}
+        </div>
+
+        {isExpanded && hasSubchapters && (
+          <div className="mobile-toc-subchapters">
+            {chapter.children.map((subchapter) => {
+              const isCurrentSub = isCurrentSubchapter(subchapter.id);
+              const subPageNum = findPageNumber(chapter.id, subchapter.id);
+              
+              return (
+                <div
+                  key={subchapter.id}
+                  className={`mobile-toc-subchapter-item ${isCurrentSub ? 'mobile-toc-current' : ''}`}
+                  onClick={() => handleSubchapterClick(subchapter, chapter.id)}
+                >
+                  {subPageNum && (
+                    <span className="mobile-toc-page-number">p. {subPageNum}:</span>
+                  )}
+                  <span className="mobile-toc-subchapter-title">{subchapter.title}</span>
+                  {isEditor && (
+                    <div className="mobile-toc-editor-controls-inline">
+                      <button
+                        className="mobile-toc-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onEditSubchapter) onEditSubchapter({ ...subchapter, parentChapterId: chapter.id });
+                        }}
+                        title="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        className="mobile-toc-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSubchapter(subchapter.id, chapter.id);
+                        }}
+                        title="Delete"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Always render overlay so we can update it via DOM during drag
+  // This prevents React re-renders from affecting page content
+  // Don't early return - always render the full component so DOM updates work
+
+  // Calculate transform based on drag progress
+  // When closed: translateY = -100% (fully above viewport)
+  // When dragging: translateY = -100% + (progress * 100%) (slides down like a curtain)
+  // When open: translateY = 0% (fully visible)
+  const translateY = isOpen ? 0 : Math.max(-100, -100 + (dragProgress * 100));
+  const baseOpacity = isOpen ? 1 : Math.max(0, Math.min(1, dragProgress));
+  // Make text fully visible during drag, independent of overlay opacity
+  const textOpacity = (isOpen || dragProgress > 0) ? 1 : 0;
+  // Text color: bright during drag/open, slightly dimmer when fully closed
+  const textColor = (isOpen || dragProgress > 0) ? 'white' : 'rgba(255, 255, 255, 0.6)';
+  // Disable transition during drag, enable it when snapping to final position
+  const isDragging = dragProgress > 0 && dragProgress < 1 && !isOpen;
+
+  // During the closing phase we want the overlay fully visible so that the
+  // CSS `.mobile-toc-overlay.mobile-toc-closing` rules (including blur) can
+  // animate. For dragging, keep opacity at 1 so the text feels like a solid
+  // curtain being pulled down, without showing the background yet.
+  const overlayOpacity = isClosing
+    ? 1
+    : (isOpen || (dragProgress > 0 && !isClosing) ? 1 : 0);
+
+  return (
+    <div 
+      className={`mobile-toc-overlay ${isOpen && !isClosing ? 'mobile-toc-open' : ''} ${isClosing ? 'mobile-toc-closing' : ''}`}
+      style={{ opacity: overlayOpacity, pointerEvents: (isOpen || dragProgress > 0) ? 'auto' : 'none' }}
+    >
+      <div 
+        className="mobile-toc-container"
+        style={{ 
+          transform: `translateY(${translateY}%)`,
+          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), color 0.3s ease-out',
+          opacity: 1,
+          color: textColor
+        }}
+      >
+        <div className="mobile-toc-header">
+          <h2 className="mobile-toc-title">Table of Contents</h2>
+          <button className="mobile-toc-close" onClick={handleClose}>
+            ×
+          </button>
+        </div>
+        
+        <div className="mobile-toc-content">
+          {isEditor && onReorderChapters ? (
+            <DndContext
+              collisionDetection={closestCenter}
+              onDragEnd={async ({ active, over }) => {
+                if (!over || active.id === over.id) return;
+                const oldIndex = chapters.findIndex(c => c.id === active.id);
+                const newIndex = chapters.findIndex(c => c.id === over.id);
+                if (oldIndex === -1 || newIndex === -1) return;
+                const reordered = arrayMove(chapters, oldIndex, newIndex);
+                const orderedIds = reordered.map(c => c.id);
+                if (onReorderChapters) {
+                  await onReorderChapters(orderedIds);
+                }
+              }}
+            >
+              <SortableContext items={chapters.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                {chapters.map((chapter, chapterIndex) => {
+                  return <SortableChapterRow
+                    key={chapter.id}
+                    chapter={chapter}
+                    chapterIndex={chapterIndex}
+                    chapters={chapters}
+                    pages={pages}
+                    currentChapterIndex={currentChapterIndex}
+                    currentPageIndex={currentPageIndex}
+                    currentSubchapterId={currentSubchapterId}
+                    expandedChapters={expandedChapters}
+                    setExpandedChapters={setExpandedChapters}
+                    lastTapRef={lastTapRef}
+                    singleTapTimeoutRef={singleTapTimeoutRef}
+                    isEditor={isEditor}
+                    isCurrentChapter={isCurrentChapter}
+                    isCurrentSubchapter={isCurrentSubchapter}
+                    findPageNumber={findPageNumber}
+                    handleChapterClick={handleChapterClick}
+                    handleSubchapterClick={handleSubchapterClick}
+                    onJumpToPage={onJumpToPage}
+                    onEditChapter={onEditChapter}
+                    onAddSubchapter={onAddSubchapter}
+                    onDeleteChapter={onDeleteChapter}
+                    onEditSubchapter={onEditSubchapter}
+                    onDeleteSubchapter={onDeleteSubchapter}
+                  />;
+                })}
+              </SortableContext>
+            </DndContext>
+          ) : (
+            chapters.map((chapter, chapterIndex) => {
+            const isExpanded = expandedChapters.has(chapter.id);
+            const isCurrent = isCurrentChapter(chapter.id);
+            const pageNum = findPageNumber(chapter.id);
+            const hasSubchapters = chapter.children && chapter.children.length > 0;
+
+            return (
+              <div key={chapter.id} className="mobile-toc-chapter-row">
+                <div
+                  className={`mobile-toc-chapter-item ${isCurrent ? 'mobile-toc-current' : ''} ${isExpanded ? 'mobile-toc-expanded' : ''}`}
+                  onClick={() => handleChapterClick(chapter, chapterIndex)}
+                >
+                  {pageNum && (
+                    <span className="mobile-toc-page-number">p. {pageNum}:</span>
+                  )}
+                  <span className="mobile-toc-chapter-title">{chapter.title}</span>
+                  {isEditor && (
+                    <div className="mobile-toc-editor-controls-inline">
+                      <button
+                        className="mobile-toc-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (onEditChapter) onEditChapter(chapter);
+                        }}
+                        title="Edit"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        className="mobile-toc-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onAddSubchapter(chapter);
+                        }}
+                        title="Add subchapter"
+                      >
+                        +
+                      </button>
+                      <button
+                        className="mobile-toc-btn-icon"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteChapter(chapter.id);
+                        }}
+                        title="Delete"
+                      >
+                        ×
+                      </button>
+                      <span className="mobile-toc-drag-handle-inline" title="Drag to reorder">☰</span>
+                    </div>
+                  )}
+                </div>
+
+                {isExpanded && hasSubchapters && (
+                  <div className="mobile-toc-subchapters">
+                    {chapter.children.map((subchapter) => {
+                      const isCurrentSub = isCurrentSubchapter(subchapter.id);
+                      const subPageNum = findPageNumber(chapter.id, subchapter.id);
+                      
+                      return (
+                        <div
+                          key={subchapter.id}
+                          className={`mobile-toc-subchapter-item ${isCurrentSub ? 'mobile-toc-current' : ''}`}
+                          onClick={() => handleSubchapterClick(subchapter, chapter.id)}
+                        >
+                          {subPageNum && (
+                            <span className="mobile-toc-page-number">p. {subPageNum}:</span>
+                          )}
+                          <span className="mobile-toc-subchapter-title">{subchapter.title}</span>
+                          {isEditor && (
+                            <div className="mobile-toc-editor-controls-inline">
+                              <button
+                                className="mobile-toc-btn-icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (onEditSubchapter) onEditSubchapter({ ...subchapter, parentChapterId: chapter.id });
+                                }}
+                                title="Edit"
+                              >
+                                ✎
+                              </button>
+                              <button
+                                className="mobile-toc-btn-icon"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onDeleteSubchapter(subchapter.id, chapter.id);
+                                }}
+                                title="Delete"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })
+          )}
+          
+          {/* Footer with action buttons - inside scrollable content */}
+          <div className="mobile-toc-footer">
+            <button
+              className="mobile-toc-footer-btn"
+              onClick={() => {
+                if (onOpenSettings) onOpenSettings();
+                handleClose();
+              }}
+            >
+              Nastavitve
+            </button>
+            {isEditor && (
+              <button
+                className="mobile-toc-footer-btn"
+                onClick={() => {
+                  if (onAddChapter) onAddChapter();
+                  handleClose();
+                }}
+              >
+                Dodaj poglavje
+              </button>
+            )}
+            {canToggleEditorMode && (
+              <button
+                className="mobile-toc-footer-btn"
+                onClick={() => {
+                  if (onToggleEditorReader) onToggleEditorReader();
+                  handleClose();
+                }}
+              >
+                {previewingAsReader ? 'Nazaj na urejevalnik' : 'Knjižni vpogled'}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+

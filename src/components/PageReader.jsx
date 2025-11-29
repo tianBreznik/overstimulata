@@ -89,9 +89,10 @@ const ensureWordSliceInitialized = (karaokeSourcesRef, karaokeId, sliceElement, 
     console.log('[[INIT]] Slice initialized successfully with words');
     return true;
   };
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { applyInkEffectToTextMobile } from './Chapter';
 import { ReaderTopBar } from './ReaderTopBar';
+import { MobileTOC } from './MobileTOC';
 import './PageReader.css';
 
 const PROJECT_CREDIT = 'Overstimulata Collective';
@@ -193,13 +194,30 @@ const assignLetterTimingsToChars = (text, wordTimings = []) => {
  * PageReader component - Kindle-like page-based reading experience for mobile
  * Splits content into pages based on actual content height and handles navigation
  */
-export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
+export const PageReader = ({ 
+  chapters, 
+  onPageChange, 
+  initialPosition,
+  onEditChapter,
+  onAddSubchapter,
+  onDeleteChapter,
+  onEditSubchapter,
+  onDeleteSubchapter,
+  onReorderChapters,
+  onOpenSettings,
+  onAddChapter,
+  onToggleEditorReader,
+}) => {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
   const [pages, setPages] = useState([]);
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [displayPage, setDisplayPage] = useState(null); // The page currently displayed
   const [isInitializing, setIsInitializing] = useState(true); // Track if we're still initializing
+  const [isTOCOpen, setIsTOCOpen] = useState(false);
+  const [tocDragProgress, setTocDragProgress] = useState(0); // 0 = fully closed, 1 = fully open
+  const tocDragProgressRef = useRef(0); // Use ref to avoid re-renders during drag
+  const tocDragStartYRef = useRef(null);
   const containerRef = useRef(null);
   const pageContainerRef = useRef(null);
   const touchStartRef = useRef(null);
@@ -1842,6 +1860,7 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
       y: touch.clientY,
     };
     swipeInProgressRef.current = false;
+    tocDragStartYRef.current = null;
   }, []);
 
   // Handle touch move
@@ -1850,6 +1869,49 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
     
     const deltaX = e.touches[0].clientX - touchStartRef.current.x;
     const deltaY = e.touches[0].clientY - touchStartRef.current.y;
+    
+    // Track vertical swipe down for TOC drag
+    if (!isTOCOpen && Math.abs(deltaY) > Math.abs(deltaX) && deltaY > 0) {
+      // Prevent page scrolling immediately when swiping down for TOC
+      e.preventDefault();
+      
+      // Swiping down - track the drag progress
+      if (tocDragStartYRef.current === null) {
+        tocDragStartYRef.current = touchStartRef.current.y;
+      }
+      
+      const dragDistance = e.touches[0].clientY - tocDragStartYRef.current;
+      const viewportHeight = window.innerHeight;
+      // Calculate progress: 0 when drag starts, 1 when dragged down by viewport height
+      const progress = Math.min(Math.max(dragDistance / viewportHeight, 0), 1);
+      
+      // Store in ref to avoid React re-renders during drag
+      tocDragProgressRef.current = progress;
+      
+      // Update TOC directly via DOM to avoid React re-render of page content
+      // This prevents the page from re-rendering and losing ink effects
+      const tocElement = document.querySelector('.mobile-toc-overlay');
+      if (tocElement) {
+        const container = tocElement.querySelector('.mobile-toc-container');
+        if (container && progress > 0) {
+          const translateY = Math.max(-100, -100 + (progress * 100));
+          container.style.transform = `translateY(${translateY}%)`;
+          container.style.transition = 'none';
+          const textColor = 'white'; // Bright white during drag
+          container.style.color = textColor;
+          // Keep overlay fully opaque during drag so text is visible (curtain effect)
+          tocElement.style.opacity = '1';
+          tocElement.style.pointerEvents = 'auto';
+        } else if (container && progress === 0) {
+          // Reset when drag is cancelled
+          container.style.transform = 'translateY(-100%)';
+          container.style.transition = '';
+          container.style.color = '';
+          tocElement.style.opacity = '0';
+          tocElement.style.pointerEvents = 'none';
+        }
+      }
+    }
     
     // Only prevent default if it's clearly a horizontal swipe
     // This preserves gesture context for audio unlock
@@ -1861,7 +1923,7 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
       x: e.touches[0].clientX,
       y: e.touches[0].clientY,
     };
-  }, []);
+  }, [isTOCOpen]);
 
   // Navigate to previous page
   const goToPreviousPage = useCallback(() => {
@@ -1963,6 +2025,99 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
       const minSwipeDistance = 50;
       const maxSwipeTime = 300;
 
+      // Check if it's a vertical swipe down (for TOC)
+      if (
+        Math.abs(deltaY) > Math.abs(deltaX) &&
+        deltaY > 0
+      ) {
+        if (!isTOCOpen) {
+          // Calculate progress from actual drag distance
+          const viewportHeight = window.innerHeight;
+          const dragDistance = tocDragStartYRef.current !== null 
+            ? touchCurrentRef.current.y - tocDragStartYRef.current
+            : deltaY;
+          const progress = Math.min(Math.max(dragDistance / viewportHeight, 0), 1);
+          
+          // Determine if we should open or close based on drag progress
+          const finalProgress = tocDragProgressRef.current;
+          const threshold = 0.25; // 25% threshold (20-30% range)
+          
+          if (finalProgress > threshold || deltaY > minSwipeDistance * 1.5) {
+            // Dragged enough - smoothly animate TOC to fill page, then fade in background
+            const tocElement = document.querySelector('.mobile-toc-overlay');
+            const container = tocElement?.querySelector('.mobile-toc-container');
+            
+            if (container) {
+              // Phase 1: Smoothly animate container to fill the page (curtain effect)
+              container.style.transition = 'transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)';
+              container.style.transform = 'translateY(0%)';
+              
+              // Phase 2: After container animation completes, set state to trigger background fade-in
+              setTimeout(() => {
+                setIsTOCOpen(true);
+                setTocDragProgress(1);
+                tocDragProgressRef.current = 1;
+              }, 400); // Wait for container animation to complete (400ms)
+            } else {
+              // Fallback if DOM not ready
+              setIsTOCOpen(true);
+              setTocDragProgress(1);
+              tocDragProgressRef.current = 1;
+            }
+            
+            // Stop all karaoke playback
+            karaokeControllersRef.current.forEach((controller) => {
+              controller.stop();
+            });
+          } else {
+            // Didn't drag enough - smoothly snap back closed
+            const tocElement = document.querySelector('.mobile-toc-overlay');
+            if (tocElement) {
+              const container = tocElement.querySelector('.mobile-toc-container');
+              if (container) {
+                // Smoothly animate back up
+                container.style.transition = 'transform 0.3s cubic-bezier(0.55, 0.055, 0.675, 0.19)';
+                container.style.transform = 'translateY(-100%)';
+                
+                // Fade out overlay after animation
+                setTimeout(() => {
+                  tocElement.style.opacity = '0';
+                  tocElement.style.pointerEvents = 'none';
+                  container.style.color = '';
+                  setTocDragProgress(0);
+                  tocDragProgressRef.current = 0;
+                }, 300);
+              }
+            }
+          }
+        }
+        tocDragStartYRef.current = null;
+        touchStartRef.current = null;
+        touchCurrentRef.current = null;
+        return;
+      }
+      
+      // Reset TOC drag if it was a different gesture
+      if (tocDragProgressRef.current > 0 && !isTOCOpen) {
+        setTocDragProgress(0);
+        tocDragProgressRef.current = 0;
+        // Reset TOC element via DOM
+        requestAnimationFrame(() => {
+          const tocElement = document.querySelector('.mobile-toc-overlay');
+          if (tocElement) {
+            tocElement.style.opacity = '0';
+            tocElement.style.pointerEvents = 'none';
+            const container = tocElement.querySelector('.mobile-toc-container');
+            if (container) {
+              container.style.transform = 'translateY(-100%)';
+              container.style.transition = '';
+              container.style.color = '';
+            }
+          }
+        });
+        tocDragStartYRef.current = null;
+      }
+
       // Check if it's a horizontal swipe
       if (
         Math.abs(deltaX) > Math.abs(deltaY) &&
@@ -2021,7 +2176,7 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
       touchStartRef.current = null;
       touchCurrentRef.current = null;
     },
-    [goToNextPage, goToPreviousPage, isInteractiveTarget]
+    [goToNextPage, goToPreviousPage, isTOCOpen]
   );
 
   // Get current page data
@@ -2029,6 +2184,37 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
     (p) =>
       p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex
   );
+
+  // Jump to a specific page (for TOC navigation)
+  const jumpToPage = useCallback((targetChapterIndex, targetPageIndex) => {
+    if (isTransitioning || pages.length === 0) return;
+    
+    const targetPage = pages.find(
+      (p) => p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex
+    );
+    
+    if (!targetPage) return;
+    
+    setIsTransitioning(true);
+    setTimeout(() => {
+      setDisplayPage(targetPage);
+      setCurrentChapterIndex(targetChapterIndex);
+      setCurrentPageIndex(targetPageIndex);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setIsTransitioning(false);
+        });
+      });
+    }, 1000);
+    
+    if (onPageChange) {
+      onPageChange({
+        chapterId: targetPage.chapterId,
+        pageIndex: targetPageIndex,
+        subchapterId: targetPage.subchapterId,
+      });
+    }
+  }, [isTransitioning, pages, onPageChange]);
 
   // Initialize displayPage only on first load - never update it during normal operation
   // This prevents interference with transitions
@@ -2232,6 +2418,92 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
     }
   }, [isTransitioning, pageToDisplay]);
   
+  // Watch for TOC closing and continuously restore ink effects if React resets them
+  const prevIsTOCOpenRef = useRef(isTOCOpen);
+  const isTOCClosingRef = useRef(false);
+  const restoreTimeoutRef = useRef(null);
+  
+  useEffect(() => {
+    const justClosed = prevIsTOCOpenRef.current && !isTOCOpen;
+    prevIsTOCOpenRef.current = isTOCOpen;
+    
+    if (justClosed) {
+      // TOC is closing - set flag and keep watching for React's HTML reset
+      isTOCClosingRef.current = true;
+      
+      // Keep watching for longer to catch delayed re-renders
+      if (restoreTimeoutRef.current) {
+        clearTimeout(restoreTimeoutRef.current);
+      }
+      restoreTimeoutRef.current = setTimeout(() => {
+        isTOCClosingRef.current = false;
+      }, 4000); // Watch for 4 seconds to catch any delayed re-renders
+    }
+  }, [isTOCOpen]);
+  
+  // Use MutationObserver to catch when React resets the HTML and restore immediately
+  useEffect(() => {
+    if (isTransitioning) return;
+    
+    const pageContent = pageContentRef.current;
+    if (!pageContent) return;
+    
+    const currentPageKey = pageToDisplay 
+      ? `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`
+      : null;
+    
+    if (!currentPageKey || !preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
+      return;
+    }
+    
+    // Watch for innerHTML changes (React resetting the content)
+    const observer = new MutationObserver(() => {
+      // Always restore if ink effects are missing, not just during closing
+      // This ensures restoration happens even after animation completes
+      const hasInkChars = pageContent.querySelectorAll('.ink-char-mobile').length > 0;
+      if (!hasInkChars) {
+        // React just reset the HTML - restore immediately
+        pageContent.innerHTML = preservedInkHTMLRef.current;
+      }
+    });
+    
+    observer.observe(pageContent, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+    
+    // Also check immediately when TOC opens or closes
+    const checkAndRestore = () => {
+      const hasInkChars = pageContent.querySelectorAll('.ink-char-mobile').length > 0;
+      if (!hasInkChars) {
+        requestAnimationFrame(() => {
+          if (pageContentRef.current) {
+            pageContentRef.current.innerHTML = preservedInkHTMLRef.current;
+          }
+        });
+      }
+    };
+    
+    // Check immediately
+    checkAndRestore();
+    
+    // Also check periodically for a bit after TOC state changes
+    const intervalId = setInterval(() => {
+      checkAndRestore();
+    }, 100);
+    
+    const timeoutId = setTimeout(() => {
+      clearInterval(intervalId);
+    }, 3000); // Check for 3 seconds after state change
+    
+    return () => {
+      observer.disconnect();
+      clearInterval(intervalId);
+      clearTimeout(timeoutId);
+    };
+  }, [isTOCOpen, pageToDisplay, isTransitioning]);
+  
   const pageContentRefCallback = useCallback((node) => {
     pageContentRef.current = node;
     if (node && node.isConnected) {
@@ -2411,6 +2683,62 @@ export const PageReader = ({ chapters, onPageChange, initialPosition }) => {
           pageKey={pageKey}
         />
       )}
+      <MobileTOC
+        chapters={chapters}
+        pages={pages}
+        currentChapterIndex={currentChapterIndex}
+        currentPageIndex={currentPageIndex}
+        currentSubchapterId={currentPage?.subchapterId || null}
+        isOpen={isTOCOpen}
+        dragProgress={tocDragProgress}
+        onClose={() => {
+          // Preserve current HTML with ink effects BEFORE closing
+          const pageContent = pageContentRef.current;
+          if (pageContent) {
+            const currentPageKey = pageToDisplay 
+              ? `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`
+              : null;
+            const hasInkChars = pageContent.querySelectorAll('.ink-char-mobile').length > 0;
+            if (hasInkChars && currentPageKey) {
+              // Preserve the HTML with ink effects before React resets it
+              preservedInkHTMLRef.current = pageContent.innerHTML;
+              preservedPageKeyRef.current = currentPageKey;
+            }
+          }
+          
+          setIsTOCOpen(false);
+          setTocDragProgress(0);
+          tocDragProgressRef.current = 0;
+          
+          // Restore ink effects immediately after React re-renders, during the blur
+          // Use multiple requestAnimationFrame to ensure it happens during blur phase
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                const pageContentAfter = pageContentRef.current;
+                if (pageContentAfter) {
+                  const currentPageKey = pageToDisplay 
+                    ? `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`
+                    : null;
+                  if (currentPageKey && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
+                    pageContentAfter.innerHTML = preservedInkHTMLRef.current;
+                  }
+                }
+              });
+            });
+          });
+        }}
+        onJumpToPage={jumpToPage}
+        onEditChapter={onEditChapter}
+        onAddSubchapter={onAddSubchapter}
+        onDeleteChapter={onDeleteChapter}
+        onEditSubchapter={onEditSubchapter}
+        onDeleteSubchapter={onDeleteSubchapter}
+        onReorderChapters={onReorderChapters}
+        onOpenSettings={onOpenSettings}
+        onAddChapter={onAddChapter}
+        onToggleEditorReader={onToggleEditorReader}
+      />
     </div>
   );
 };

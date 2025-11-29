@@ -129,6 +129,50 @@ VITE_FIREBASE_APP_ID=...
 - [ ] Implement chosen video hosting solution
 - [ ] Custom HTML5 video player for unbranded videos
 
+### Table of Contents (TOC) Hub - Design Phase
+- **Status**: Design phase, not yet implemented
+- **Concept**: Swipe-down gesture opens a TOC overlay that serves as both a navigation hub and editing interface
+- **Trigger**: Swipe down from within the page-frame content area (not from browser chrome)
+- **Behavior**:
+  - Opens TOC layer (overlay/sheet style) showing full chapter/subchapter structure
+  - Indicates current page location (chapter + subchapter + approximate page within subchapter)
+  - Tap on chapter/subchapter entry to jump to that location
+- **Editor Mode Features** (visible only when editor mode is unlocked):
+  - **Chapter-level controls**:
+    - `Edit` button (opens ChapterEditor)
+    - `Add subchapter` button
+    - `Delete` button
+    - **Drag handle** for reordering chapters (same behavior as existing inline drag handle)
+  - **Subchapter-level controls**:
+    - `Edit` button (opens ChapterEditor)
+    - `Delete` button
+    - *(No "Add" button - adding subchapters is done from parent chapter row)*
+- **Reader Mode**: Same TOC layout but **all editing controls hidden** - purely navigational
+- **Integration**:
+  - Uses existing `ChapterEditor` component and versioning logic
+  - Works with bookmark system (jump behavior TBD)
+  - Replaces old inline TOC in editor view (no longer expands content inline)
+- **Design Decisions (Finalized)**:
+  - **Layout**: Full-screen top sheet (covers entire viewport)
+  - **Entry Structure**:
+    - Chapters expand/collapse to show subchapters on click
+    - Click chapter again (when expanded) = jump to chapter's first page
+    - Subchapters don't expand, but have tap-jump function
+    - Chapters and subchapters show page number (e.g., "Page 3") but no page count
+    - No individual page rows (only chapter/subchapter level entries)
+  - **Current Location**: Highlight or underscore current chapter/subchapter. TOC is scrollable but does NOT auto-scroll to current entry.
+  - **Karaoke Behavior**: Stop karaoke entirely when TOC opens (no resume state)
+  - **Swipe Gesture**: Optimal distance/velocity threshold (to be determined during implementation). Close mechanism: X button in top-right.
+  - **Close Animation**: Fade out quickly "like smoke" when X is clicked. Ideally a fluid animation effect, but simple fade-out is acceptable for initial implementation.
+  - **Visual Styling**:
+    - Slide down from top animation
+    - Black background, 70% opacity
+    - White text with ink shadow effect (same as current ink styling)
+    - Same typography (Times New Roman) as rest of page
+  - **Editor Controls**: Expandable rows, always visible in editor mode (Edit/Add/Delete buttons)
+  - **Drag Handles**: Always visible in editor mode, positioned next to chapter/subchapter titles
+- **Location**: New component `src/components/MobileTOC.jsx` (or similar), integrated into `PageReader.jsx`
+
 ### Potential Enhancements
 - [x] Karaoke MP3 feature (audio sync with text highlighting) - **Implemented but needs polish (see Known Issues)**
 - [ ] Custom markdown shortcuts (typing `**bold**` applies formatting)
