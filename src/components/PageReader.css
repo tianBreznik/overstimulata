@@ -122,6 +122,7 @@
   -webkit-hyphens: auto;
   -moz-hyphens: auto;
   hyphenate-limit-chars: 6 3 2; /* min word length, min before hyphen, min after */
+  position: relative; /* Allow absolute positioning of footnotes within page-body */
 }
 
 .content-page.page-with-heading .page-body {
@@ -151,6 +152,9 @@
   min-width: 0;
   max-width: 100%;
   box-sizing: border-box;
+  /* Don't create positioning context - footnotes position relative to page-body */
+  padding-bottom: 0; /* No padding, footnotes will be absolutely positioned */
+  height: 100%; /* Fill parent height */
 }
 
 .page-content * {
@@ -197,6 +201,11 @@
 .page-content h4.chapter-header-title {
   font-style: italic !important;
   font-weight: normal !important;
+}
+
+.page-content-main {
+  width: 100%;
+  padding-bottom: 0; /* Will be set dynamically via inline style */
 }
 
 .page-content p {
@@ -297,7 +306,7 @@
 /* Page number in bottom right corner */
 .page-number {
   position: fixed;
-  bottom: 1rem;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem); /* Same as footnotes padding + original offset */
   right: 1rem;
   font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 0.9rem;
@@ -390,6 +399,15 @@
   display: inline-block;
   animation: karaoke-breathe 2s ease-in-out infinite;
   will-change: opacity;
+  /* Disable hyphenation for karaoke text to prevent word breaking issues */
+  hyphens: none;
+  -webkit-hyphens: none;
+  -moz-hyphens: none;
+}
+
+/* Prevent line breaks after word spans that contain punctuation */
+.karaoke-word:has(.karaoke-punctuation) {
+  white-space: nowrap;
 }
 
 .karaoke-slice[data-playing="true"] {
@@ -418,5 +436,68 @@
   .page-reader {
     display: none;
   }
+}
+
+/* Footnote styles */
+.footnote-ref {
+  font-size: 0.75em;
+  vertical-align: super;
+  line-height: 0;
+  cursor: pointer;
+  color: #1f140a;
+  text-decoration: none;
+  margin-left: 0.1em;
+}
+
+.footnote-ref:hover {
+  text-decoration: underline;
+}
+
+.footnotes-section {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem); /* Account for browser bar on mobile + extra padding to lift footnotes up */
+  margin-bottom: 0;
+  border-top: none; /* Remove border-top, we use .footnotes-divider instead */
+  background: inherit; /* Match page background */
+  z-index: 1; /* Ensure footnotes are above content if needed */
+}
+
+.footnotes-divider {
+  height: 1px;
+  background: linear-gradient(to right, rgba(31, 20, 10, 0.3) 0%, rgba(31, 20, 10, 0.1) 100%);
+  margin-bottom: 0.3rem;
+  margin-top: 0;
+}
+
+.footnotes-list {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #1f140a;
+}
+
+.footnote-item {
+  margin-bottom: 0.3rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.footnote-item:last-child {
+  margin-bottom: 0;
+}
+
+.footnote-number {
+  font-weight: 500;
+  flex-shrink: 0;
+  min-width: 1.5em;
+}
+
+.footnote-content {
+  flex: 1;
 }
 

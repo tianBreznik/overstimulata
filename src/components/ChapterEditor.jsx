@@ -1453,6 +1453,57 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 >
                   🎤
                 </button>
+                <button
+                  onClick={() => {
+                    const editor = textareaRef.current;
+                    if (!editor) return;
+                    editor.focus();
+                    
+                    // Insert footnote syntax ^[ ] at cursor position
+                    const selection = window.getSelection();
+                    if (selection && selection.rangeCount > 0) {
+                      const range = selection.getRangeAt(0);
+                      const footnoteText = '^[ ]';
+                      
+                      // Insert the text
+                      const textNode = document.createTextNode(footnoteText);
+                      range.deleteContents();
+                      range.insertNode(textNode);
+                      
+                      // Move cursor inside the brackets
+                      range.setStart(textNode, 2); // Position after ^[
+                      range.setEnd(textNode, 2);
+                      range.collapse(true);
+                      selection.removeAllRanges();
+                      selection.addRange(range);
+                    } else {
+                      // Fallback: insert at end
+                      document.execCommand('insertText', false, '^[ ]');
+                      // Try to position cursor in brackets (this is approximate)
+                      setTimeout(() => {
+                        const selection = window.getSelection();
+                        if (selection && selection.rangeCount > 0) {
+                          const range = selection.getRangeAt(0);
+                          const textNode = range.startContainer;
+                          if (textNode.nodeType === Node.TEXT_NODE) {
+                            const offset = Math.max(0, range.startOffset - 1);
+                            range.setStart(textNode, offset);
+                            range.setEnd(textNode, offset);
+                            range.collapse(true);
+                            selection.removeAllRanges();
+                            selection.addRange(range);
+                          }
+                        }
+                      }, 0);
+                    }
+                    
+                    refreshToolbarState();
+                  }}
+                  className="toolbar-btn"
+                  title="Insert Footnote"
+                >
+                  <sup>¹</sup>
+                </button>
                 {/* Text color picker (no button) */}
                 <div className="color-group">
                   <input

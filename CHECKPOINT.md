@@ -121,6 +121,15 @@ VITE_FIREBASE_APP_ID=...
   - Keep robust error handling and retry logic around audio playback/startup
 - **Location**: `src/components/PageReader.jsx` (karaoke slice click handlers, `playSlice`, swipe/touch handling)
 
+#### Pagination Gap with Footnotes
+- **Status**: Minor polish issue
+- **Issue**: On page-frames with footnotes, there can be a visible gap between the main content text and the footnotes section
+- **Current Behavior**: The pagination algorithm correctly reserves space for footnotes, but may not always fill 100% of the available content space, leaving a small gap
+- **Needs Work**:
+  - Reduce or eliminate the gap between text and footnotes section on pages with footnotes
+  - Ensure maximum content utilization when footnotes are present
+- **Location**: `src/components/PageReader.jsx` (pagination algorithm, footnote space reservation)
+
 ### Video Hosting (Pending Decision)
 - [ ] Decide on video hosting solution:
   - Option 1: Cloudflare R2 (free tier: 10GB storage)
