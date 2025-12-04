@@ -13,11 +13,20 @@
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
+    "@tiptap/core": "^3.11.1",
+    "@tiptap/extension-subscript": "^3.11.1",
+    "@tiptap/extension-superscript": "^3.11.1",
+    "@tiptap/extension-text-align": "^3.11.1",
+    "@tiptap/react": "^3.11.1",
+    "@tiptap/starter-kit": "^3.11.1",
     "firebase": "^12.3.0",
     "html2canvas": "^1.4.1",
     "hyphen": "^1.10.6",
+    "prosemirror-inputrules": "^1.5.1",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "simplebar": "^6.3.3",
+    "simplebar-react": "^3.3.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.36.0",

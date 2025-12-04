@@ -117,11 +117,23 @@ async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality 
  * @param {Function} options.onProgress - Progress callback (progress: number 0-100)
  * @param {boolean} options.compress - Whether to compress before upload (default: true)
  * @returns {Promise<string>} Download URL
+ *
+ * IMPORTANT:
+ * - For animated formats like GIF, compression would flatten the animation
+ *   (we draw to a canvas and re-encode as JPEG), so we must skip compression.
  */
 export async function uploadImageToStorage(file, { onProgress, compress = true } = {}) {
   try {
-    // Compress image if requested
-    const fileToUpload = compress
+    // Detect animated formats that must NOT be compressed (e.g., GIF)
+    const isAnimatedFormat =
+      file.type === 'image/gif' ||
+      /\.gif$/i.test(file.name);
+
+    // Only compress when requested AND it's safe to do so (non-animated formats)
+    const shouldCompress = compress && !isAnimatedFormat;
+
+    // Compress image if requested and safe
+    const fileToUpload = shouldCompress
       ? await compressImage(file)
       : file;
 

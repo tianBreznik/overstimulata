@@ -1,11 +1,21 @@
 import { useState, useEffect, useRef, useLayoutEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { useEditor, EditorContent } from '@tiptap/react';
+import StarterKit from '@tiptap/starter-kit';
+import TextAlign from '@tiptap/extension-text-align';
+import SimpleBar from 'simplebar-react';
+import 'simplebar-react/dist/simplebar.min.css';
 import { uploadImageToStorage, uploadVideoToStorage } from '../services/storage';
 import { generateWordTimingsWithDeepgram } from '../services/autoTiming';
+import { KaraokeBlock, Dinkus, Highlight, TextColor, Underline, FootnoteRef, Indent, CustomParagraph, Video, CustomImage, InlineImage, Poetry } from '../extensions/tiptapExtensions.js';
+import Subscript from '@tiptap/extension-subscript';
+import Superscript from '@tiptap/extension-superscript';
+import { FootnotePlugin } from '../extensions/footnotePlugin.js';
 import './ChapterEditor.css';
 
 export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDelete }) => {
   const [title, setTitle] = useState(chapter?.title || '');
+  const [epigraph, setEpigraph] = useState(chapter?.epigraph || null);
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
@@ -19,16 +29,29 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     strikethrough: false,
     underline: false,
     highlight: false,
-    textColor: false
+    textColor: false,
+    blockquote: false,
+    subscript: false,
+    superscript: false,
+    dropCap: false,
+    introParagraph: false,
+    whisperParagraph: false,
+    epigraphParagraph: false,
+    alignLeft: false,
+    alignCenter: false,
+    alignRight: false,
+    alignJustify: false,
   });
-  const textareaRef = useRef(null);
   const titleInputRef = useRef(null);
   const imageInputRef = useRef(null);
+  const inlineImageInputRef = useRef(null);
   const videoFileInputRef = useRef(null);
   const autosaveTimerRef = useRef(null);
   const colorInputRef = useRef(null);
+  const highlightInputRef = useRef(null);
   const userChangedColorRef = useRef(false); // Track when user manually changes color
   const dialogOpenRef = useRef(false); // Track if dialog is open to prevent editor interference
+  const lastSelectionRef = useRef({ from: null, to: null }); // Track last selection for polling
   const [uploadingImage, setUploadingImage] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
   const [imageUploadProgress, setImageUploadProgress] = useState(0);
@@ -40,13 +63,85 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [karaokeTimingFile, setKaraokeTimingFile] = useState(null);
   const [karaokeTimingMethod, setKaraokeTimingMethod] = useState('upload'); // 'upload' or 'auto'
   const [generatingTimings, setGeneratingTimings] = useState(false);
-  const [pendingInsertTick, setPendingInsertTick] = useState(0);
+  const [showEpigraphDialog, setShowEpigraphDialog] = useState(false);
+  const [epigraphDraft, setEpigraphDraft] = useState({
+    text: '',
+    author: '',
+    align: 'center',
+  });
 
-  const pendingKaraokeHtmlRef = useRef(null);
+  
+  // Ref to track if we're programmatically setting content (to avoid update loops)
+  const isSettingContentRef = useRef(false);
+  const lastSetContentRef = useRef('');
+  
+  // TipTap editor instance
+  const editor = useEditor({
+    extensions: [
+      StarterKit.configure({
+        // Disable some default extensions we'll customize
+        heading: {
+          levels: [1, 2, 3],
+        },
+        // Disable default paragraph - we'll use CustomParagraph instead
+        paragraph: false,
+      }),
+      CustomParagraph,
+      TextAlign.configure({
+        types: ['heading', 'paragraph'],
+      }),
+      Subscript,
+      Superscript,
+      Indent,
+      KaraokeBlock,
+      Poetry,
+      Video,
+      InlineImage, // Must come BEFORE CustomImage so inline images are parsed correctly
+      CustomImage,
+      Dinkus,
+      Highlight,
+      TextColor,
+      Underline,
+      FootnoteRef,
+      FootnotePlugin, // TipTap footnote extension: converts ^[content] into structured footnoteRef nodes
+    ],
+    content: '',
+    editable: true, // Explicitly enable editing
+    autofocus: false, // Don't auto-focus on mount
+    onUpdate: ({ editor }) => {
+      // Only update content state if we're not programmatically setting content
+      if (!isSettingContentRef.current) {
+        const html = editor.getHTML();
+        // Only update if content actually changed
+        if (html !== lastSetContentRef.current) {
+          setContent(html);
+          lastSetContentRef.current = html;
+        }
+      }
+    },
+    onCreate: () => {},
+    parseOptions: {
+      preserveWhitespace: 'full',
+    },
+    editorProps: {
+      attributes: {
+        class: 'page-area',
+      },
+      // Ensure scrolling works properly
+      handleScrollToSelection: () => {
+        // Let TipTap handle scrolling naturally
+        return true;
+      },
+    },
+  });
 
   const applyKaraokeEditorMarkers = () => {
-    if (!textareaRef.current) return;
-    const nodes = textareaRef.current.querySelectorAll('.karaoke-object');
+    // TipTap handles karaoke blocks via custom node, so this may not be needed
+    // But keeping for compatibility with existing content
+    if (!editor) return;
+    const editorEl = editor.view?.dom;
+    if (!editorEl) return;
+    const nodes = editorEl.querySelectorAll('.karaoke-object');
     nodes.forEach((node) => {
       node.classList.add('karaoke-editor-marker');
       node.setAttribute('contenteditable', 'false');
@@ -54,124 +149,61 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     });
   };
 
-  // Extract color from HTML string (for initial load)
-  // Finds colors in <p> and <span> elements and returns the LAST one found
-  const extractColorFromHTML = (html) => {
-    if (!html) return '#000000';
-    try {
-      let lastColor = '#000000';
-      
-      // Helper to convert color to hex and normalize to 6-digit format
-      const colorToHex = (color) => {
-        const trimmed = color.trim();
-        if (trimmed.startsWith('rgb')) {
-          const rgb = trimmed.match(/\d+/g);
-          if (rgb && rgb.length >= 3) {
-            const hex = '#' + rgb.slice(0, 3).map(x => {
-              const val = parseInt(x);
-              return (val < 16 ? '0' : '') + val.toString(16);
-            }).join('');
-            return normalizeHex(hex);
-          }
-        }
-        if (trimmed.startsWith('#')) {
-          return normalizeHex(trimmed);
-        }
-        return null;
-      };
-      
-      // Normalize hex color to 6-digit format (e.g., #f00 -> #ff0000, #ff0000ff -> #ff0000)
-      const normalizeHex = (hex) => {
-        if (!hex || !hex.startsWith('#')) return null;
-        // Remove # and convert to uppercase
-        let clean = hex.slice(1).toLowerCase();
-        // Handle 3-digit hex (e.g., #f00 -> #ff0000)
-        if (clean.length === 3) {
-          clean = clean.split('').map(c => c + c).join('');
-        }
-        // Take only first 6 characters (ignore alpha channel if present)
-        if (clean.length >= 6) {
-          clean = clean.slice(0, 6);
-        }
-        // Ensure it's exactly 6 characters
-        if (clean.length < 6) {
-          clean = clean.padEnd(6, '0');
-        }
-        return '#' + clean;
-      };
-      
-      // Find all <p> and <span> tags (including self-closing and with attributes)
-      const allTags = html.matchAll(/<(p|span)([^>]*)>/gi);
-      
-      for (const match of allTags) {
-        const attributes = match[2] || '';
-        
-        // Extract color from style attribute - improved regex
-        // Match: style="color: #ff0000" or style='color: rgb(255,0,0)' or style="...color: red..."
-        const styleAttrMatch = attributes.match(/style\s*=\s*["']([^"']*)["']/i);
-        if (styleAttrMatch && styleAttrMatch[1]) {
-          const styleContent = styleAttrMatch[1];
-          // Look for color property in style
-          const colorMatch = styleContent.match(/color\s*:\s*([^;]+)/i);
-          if (colorMatch && colorMatch[1]) {
-            const colorValue = colorMatch[1].trim();
-            const hex = colorToHex(colorValue);
-            if (hex && hex !== '#000000') {
-              lastColor = hex;
-            }
-          }
-        }
-        
-        // Also check for <font color="..."> format
-        const fontColorMatch = attributes.match(/color\s*=\s*["']([^"']+)["']/i);
-        if (fontColorMatch && fontColorMatch[1]) {
-          const colorValue = fontColorMatch[1].trim();
-          const hex = colorToHex(colorValue);
-          if (hex && hex !== '#000000') {
-            lastColor = hex;
-          }
-        }
+  // Normalize a CSS color string (rgb(...), #rgb, #rrggbb, etc.) to a 6-char hex (#rrggbb).
+  const normalizeCssColorToHex = (color, fallback = '#ffffff') => {
+    if (!color) return fallback;
+    const trimmed = color.trim().toLowerCase();
+
+    const normalizeHex = (hex) => {
+      if (!hex || !hex.startsWith('#')) return null;
+      let clean = hex.slice(1).toLowerCase();
+      if (clean.length === 3) {
+        clean = clean.split('').map((c) => c + c).join('');
       }
-      
-      // Normalize the final color to ensure it's in correct format
-      const finalColor = lastColor !== '#000000' ? normalizeHex(lastColor) || '#000000' : '#000000';
-      return finalColor;
-    } catch (error) {
-      console.error('extractColorFromHTML error:', error);
-      return '#000000';
+      if (clean.length >= 6) {
+        clean = clean.slice(0, 6);
+      }
+      if (clean.length < 6) {
+        clean = clean.padEnd(6, '0');
+      }
+      return `#${clean}`;
+    };
+
+    // Already hex
+    if (trimmed.startsWith('#')) {
+      const norm = normalizeHex(trimmed);
+      return norm || fallback;
     }
+
+    // rgb(...) or rgba(...)
+    const rgbMatch = trimmed.match(/rgba?\((\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+    if (rgbMatch) {
+      const [r, g, b] = rgbMatch.slice(1, 4).map((v) => {
+        const n = parseInt(v, 10);
+        const hex = n.toString(16);
+        return hex.length === 1 ? `0${hex}` : hex;
+      });
+      const hex = `#${r}${g}${b}`;
+      const norm = normalizeHex(hex);
+      return norm || fallback;
+    }
+
+    // Fallback: give up and return previous/fallback
+    return fallback;
   };
 
   // Get current text color from selection/computed style
   const getCurrentTextColor = () => {
     try {
-      const editor = textareaRef.current;
       if (!editor) return '#000000';
+      const editorEl = editor.view?.dom;
+      if (!editorEl) return '#000000';
       
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) {
-        // If no selection, try to get color from the last element or cursor position
-        // Place cursor at end and check
-        try {
-          const range = document.createRange();
-          range.selectNodeContents(editor);
-          range.collapse(false);
-          const tempSel = window.getSelection();
-          tempSel.removeAllRanges();
-          tempSel.addRange(range);
-          
-          // Now check the color at cursor position
-          const range2 = tempSel.getRangeAt(0);
-          let element = range2.commonAncestorContainer;
-          
-          if (element.nodeType === Node.TEXT_NODE) {
-            element = element.parentElement;
-          }
-          
-          if (element) {
-            return getColorFromElement(element);
-          }
-        } catch {}
+        // If no selection, try to get color from TipTap editor
+        const attrs = editor.getAttributes('textColor');
+        if (attrs?.color) return attrs.color;
         return '#000000';
       }
       
@@ -198,10 +230,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   // Helper to extract color from an element
   const getColorFromElement = (element) => {
     if (!element) return '#000000';
+    if (!editor) return '#000000';
+    const editorEl = editor.view?.dom;
+    if (!editorEl) return '#000000';
     
     // Walk up the DOM to find the first element with explicit color
     let current = element;
-    while (current && current !== textareaRef.current) {
+    while (current && current !== editorEl) {
       // Check if this element has inline color style first (most specific)
       if (current.style && current.style.color && current.style.color !== '') {
         const color = current.style.color;
@@ -248,221 +283,521 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     return '#000000';
   };
 
+  // Get current font size for toolbar sync.
+  // For now, just reflect the current fontSize state; we can make this smarter later.
+  const getCurrentFontSize = () => fontSize || '16';
+
+  // Get current highlight color from ProseMirror marks around the caret.
+  //
+  // Behaviour for a collapsed caret:
+  // - ONLY look at the position AT the caret.
+  //   This matches your expectation: if the caret is at the start of a
+  //   non‑highlighted word (even if there is a highlighted word before it),
+  //   we report "no highlight" instead of inheriting the previous color.
+  const getCurrentHighlightFromState = () => {
+    if (!editor) return '#ffffff';
+    try {
+      const { state } = editor;
+      const sel = state.selection;
+      if (!sel) return '#ffffff';
+
+      if (sel.from === sel.to) {
+        // Collapsed caret: inspect marks AT the caret only.
+        const posAtCaret = sel.from;
+        if (posAtCaret >= 0 && posAtCaret <= state.doc.content.size) {
+          const $at = state.doc.resolve(posAtCaret);
+          const marksAt = $at.marks();
+          const highlightAt = marksAt.find((m) => m.type.name === 'highlight');
+          if (highlightAt && highlightAt.attrs?.color) {
+            return normalizeCssColorToHex(highlightAt.attrs.color, '#ffffff');
+          }
+        }
+        return '#ffffff';
+      }
+
+      // Range selection: just check the start position.
+      const pos = sel.from;
+      if (pos < 0 || pos > state.doc.content.size) {
+        return '#ffffff';
+      }
+      const $pos = state.doc.resolve(pos);
+      const marks = $pos.marks();
+      const highlightMark = marks.find((m) => m.type.name === 'highlight');
+      if (highlightMark && highlightMark.attrs?.color) {
+        return normalizeCssColorToHex(highlightMark.attrs.color, '#ffffff');
+      }
+      return '#ffffff';
+    } catch {
+      return '#ffffff';
+    }
+  };
+
   const refreshToolbarState = () => {
+    if (!editor) return;
     try {
       const state = {
-        bold: document.queryCommandState('bold'),
-        italic: document.queryCommandState('italic'),
-        strikethrough: document.queryCommandState('strikeThrough'),
-        underline: document.queryCommandState('underline'),
+        bold: editor.isActive('bold'),
+        italic: editor.isActive('italic'),
+        strikethrough: editor.isActive('strike'),
+        underline: editor.isActive('underline'),
+        highlight: editor.isActive('highlight'),
+        blockquote: editor.isActive('blockquote'),
+        subscript: editor.isActive('subscript'),
+        superscript: editor.isActive('superscript'),
+        // Check if current paragraph has drop-cap class
+        dropCap: (() => {
+          try {
+            const { $from } = editor.state.selection;
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'paragraph') {
+                const classAttr = node.attrs.class || '';
+                return classAttr.includes('drop-cap');
+              }
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
+        // Check if current paragraph has intro paragraph class
+        introParagraph: (() => {
+          try {
+            const { $from } = editor.state.selection;
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'paragraph') {
+                const classAttr = node.attrs.class || '';
+                return classAttr.includes('para-intro');
+              }
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
+        // Check if current paragraph has whisper paragraph class
+        whisperParagraph: (() => {
+          try {
+            const { $from } = editor.state.selection;
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'paragraph') {
+                const classAttr = node.attrs.class || '';
+                return classAttr.includes('para-whisper');
+              }
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
+        // Check if current paragraph has epigraph paragraph class
+        epigraphParagraph: (() => {
+          try {
+            const { $from } = editor.state.selection;
+            for (let depth = $from.depth; depth > 0; depth--) {
+              const node = $from.node(depth);
+              if (node.type.name === 'paragraph') {
+                const classAttr = node.attrs.class || '';
+                return classAttr.includes('para-epigraph');
+              }
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
         // alignment states (only one likely true)
-        alignLeft: document.queryCommandState('justifyLeft'),
-        alignCenter: document.queryCommandState('justifyCenter'),
-        alignRight: document.queryCommandState('justifyRight'),
+        alignLeft: editor.isActive({ textAlign: 'left' }),
+        alignCenter: editor.isActive({ textAlign: 'center' }),
+        alignRight: editor.isActive({ textAlign: 'right' }),
+        alignJustify: editor.isActive({ textAlign: 'justify' }),
+        // Check if image is selected and its alignment
+        // For atom nodes like images, check nodeBefore, nodeAfter, and nodeAt positions
+        imageAlignLeft: (() => {
+          try {
+            const { selection } = editor.state;
+            const { $from } = selection;
+            // Check multiple positions for atom nodes
+            let imageNode = $from.nodeBefore || $from.nodeAfter;
+            if (!imageNode || imageNode.type.name !== 'image') {
+              // Also check the node at the current position
+              const nodeAt = $from.parent.child($from.index());
+              if (nodeAt && nodeAt.type.name === 'image') {
+                imageNode = nodeAt;
+              }
+            }
+            if (imageNode && imageNode.type.name === 'image') {
+              return imageNode.attrs.align === 'left';
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
+        imageAlignCenter: (() => {
+          try {
+            const { selection } = editor.state;
+            const { $from } = selection;
+            let imageNode = $from.nodeBefore || $from.nodeAfter;
+            if (!imageNode || imageNode.type.name !== 'image') {
+              const nodeAt = $from.parent.child($from.index());
+              if (nodeAt && nodeAt.type.name === 'image') {
+                imageNode = nodeAt;
+              }
+            }
+            if (imageNode && imageNode.type.name === 'image') {
+              return !imageNode.attrs.align || imageNode.attrs.align === 'center';
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
+        imageAlignRight: (() => {
+          try {
+            const { selection } = editor.state;
+            const { $from } = selection;
+            let imageNode = $from.nodeBefore || $from.nodeAfter;
+            if (!imageNode || imageNode.type.name !== 'image') {
+              const nodeAt = $from.parent.child($from.index());
+              if (nodeAt && nodeAt.type.name === 'image') {
+                imageNode = nodeAt;
+              }
+            }
+            if (imageNode && imageNode.type.name === 'image') {
+              return imageNode.attrs.align === 'right';
+            }
+            return false;
+          } catch {
+            return false;
+          }
+        })(),
       };
       setActiveFormats(prev => ({ ...prev, ...state }));
-      
-      // Only sync color picker with current text color if user didn't just manually change it
-      // This prevents the color picker from being overridden when user picks a new color
+
+      // Only sync text color picker with current text color if user didn't just manually change it
       if (!userChangedColorRef.current) {
         const currentColor = getCurrentTextColor();
         setTextColor(currentColor);
+
+        if (colorInputRef.current) {
+          colorInputRef.current.value = currentColor;
+        }
       }
-      
-      // Sync font size
+
+      // Keep dropdown in sync with our simple fontSize state for now.
+      // (Font-size is a future polish feature; currently we don't modify the document.)
       const currentFontSize = getCurrentFontSize();
-      setFontSize(currentFontSize);
+      if (currentFontSize !== fontSize) {
+        setFontSize(currentFontSize);
+      }
+
+      let currentHighlight = '#ffffff';
+      try {
+        currentHighlight = getCurrentHighlightFromState();
+      } catch (e) {
+        currentHighlight = '#ffffff';
+      }
+
+      setHighlightColor(currentHighlight);
+      if (highlightInputRef.current) {
+        highlightInputRef.current.value = currentHighlight;
+      }
     } catch {}
   };
 
   useEffect(() => {
-    if (chapter) {
-      setTitle(chapter.title);
-      setEntityVersion(chapter.version ?? 0);
-      if (textareaRef.current) {
-        // Get the HTML content from the chapter being edited
-        // Check both contentHtml (from database) and content (mapped property)
-        const chapterContent = chapter.contentHtml || chapter.content || '';
-        textareaRef.current.innerHTML = chapterContent;
-        applyKaraokeEditorMarkers();
-        setContent(chapterContent);
-        
-        // After DOM is ready, detect color from the actual DOM (same way refreshToolbarState does)
-        // This is more reliable than HTML parsing because it uses the same logic as when cursor moves
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setTimeout(() => {
-              if (textareaRef.current) {
-                // Place cursor at end (this creates a selection)
-                const range = document.createRange();
-                const sel = window.getSelection();
-                range.selectNodeContents(textareaRef.current);
-                range.collapse(false);
-                sel.removeAllRanges();
-                sel.addRange(range);
-                
-                // Small delay to ensure selection is applied
-                setTimeout(() => {
-                  // Now get the color from the DOM at the cursor position (same as refreshToolbarState)
-                  const detectedColor = getCurrentTextColor();
-                  
-                  // Update state first
-                  setTextColor(detectedColor);
-                  
-                  // Then update DOM directly after React has a chance to update
-                  setTimeout(() => {
-                    if (colorInputRef.current) {
-                      colorInputRef.current.value = detectedColor;
-                      // Force update with both input and change events
-                      colorInputRef.current.dispatchEvent(new Event('input', { bubbles: true }));
-                      colorInputRef.current.dispatchEvent(new Event('change', { bubbles: true }));
-                    }
-                    
-                    // Refresh toolbar to sync all states (this will also call getCurrentTextColor again)
-                    refreshToolbarState();
-                  }, 0);
-                }, 10);
-              }
-            }, 10);
-          });
+    if (!editor) return;
+    
+    if (chapter && editor) {
+      const chapterContent = chapter.contentHtml || chapter.content || '';
+      const rawEpigraph = chapter.epigraph;
+      if (rawEpigraph && typeof rawEpigraph === 'object') {
+        setEpigraph({
+          text: rawEpigraph.text || '',
+          author: rawEpigraph.author || '',
+          align: rawEpigraph.align || 'center',
         });
+      } else if (typeof rawEpigraph === 'string' && rawEpigraph.trim()) {
+        setEpigraph({
+          text: rawEpigraph,
+          author: '',
+          align: 'center',
+        });
+      } else {
+        setEpigraph(null);
       }
-    } else if (parentChapter) {
-      setTitle('');
-      setEntityVersion(0);
-      if (textareaRef.current) {
-        textareaRef.current.innerHTML = '';
+      
+      // Only set content if it's different from what's currently in the editor
+      const currentContent = editor.getHTML();
+      let processedContent = chapterContent; // Use let so we can reassign if needed
+      
+      if (currentContent !== processedContent) {
+        setTitle(chapter.title);
+        setEntityVersion(chapter.version ?? 0);
+        
+        // Mark that we're programmatically setting content
+        isSettingContentRef.current = true;
+        lastSetContentRef.current = processedContent;
+        
+        // Preprocess HTML: Split spans with both background-color and color into nested structure
+        // This ensures both Highlight and TextColor marks can be applied
+        // Only process spans that are NOT already inside a <mark> tag (to avoid double-processing)
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = processedContent;
+        const spansWithBoth = tempDiv.querySelectorAll('span[style*="background-color"][style*="color"]');
+        
+        if (spansWithBoth.length > 0) {
+          spansWithBoth.forEach((span) => {
+            // Skip if this span is already inside a <mark> tag (already processed)
+            if (span.closest('mark')) {
+              return;
+            }
+            
+            const style = span.getAttribute('style') || '';
+            const bgColorMatch = style.match(/background-color\s*:\s*([^;]+)/i);
+            const colorMatch = style.match(/(?<!background-)color\s*:\s*([^;]+)/i);
+            
+            if (bgColorMatch && colorMatch) {
+              const bgColor = bgColorMatch[1].trim();
+              const textColor = colorMatch[1].trim();
+              
+              // Create nested structure: <mark style="background-color: ..."><span style="color: ...">text</span></mark>
+              const mark = document.createElement('mark');
+              mark.setAttribute('style', `background-color: ${bgColor}`);
+              
+              const innerSpan = document.createElement('span');
+              innerSpan.setAttribute('style', `color: ${textColor}`);
+              
+              // Move all children to inner span
+              while (span.firstChild) {
+                innerSpan.appendChild(span.firstChild);
+              }
+              
+              mark.appendChild(innerSpan);
+              span.parentNode.replaceChild(mark, span);
+            }
+          });
+          
+          processedContent = tempDiv.innerHTML;
+        }
+        
+        editor.commands.setContent(processedContent);
+        setContent(processedContent);
+        
+        // Ensure editor scroll container works after content is loaded
+        // This is especially important when karaoke blocks are present
+        setTimeout(() => {
+          if (editor && editor.view?.dom) {
+            const editorEl = editor.view.dom;
+            // Ensure the editor element maintains scroll capability
+            if (editorEl.parentElement) {
+              const scrollContainer = editorEl.parentElement;
+              // Force scroll container to maintain overflow
+              if (scrollContainer.style.overflow === 'hidden') {
+                scrollContainer.style.overflow = 'auto';
+              }
+            }
+            // Reset scroll position to top to ensure toolbar is visible
+            editorEl.scrollTop = 0;
+          }
+        }, 100);
+        
+        // Reset flag after editor has updated
+        setTimeout(() => {
+          isSettingContentRef.current = false;
+          
+          // After content is set, detect color and sync toolbar
+          requestAnimationFrame(() => {
+            if (editor) {
+              // Get the color from TipTap
+              const attrs = editor.getAttributes('textColor');
+              const detectedColor = attrs?.color || '#000000';
+              
+              // Update state
+              setTextColor(detectedColor);
+              
+              // Update color input if needed
+              if (colorInputRef.current) {
+                colorInputRef.current.value = detectedColor;
+              }
+              
+              // Refresh toolbar to sync all states
+              refreshToolbarState();
+            }
+          });
+        }, 100);
+      } else {
+        // Content is the same, just update title and version if needed
+        setTitle(chapter.title);
+        setEpigraph(chapter.epigraph || '');
+        setEntityVersion(chapter.version ?? 0);
       }
-      // Reset to black for new chapter
-      setTextColor('#000000');
-      setContent('');
+    } else if (parentChapter && editor) {
+      const currentContent = editor.getHTML();
+      if (currentContent !== '') {
+        setTitle('');
+        setEpigraph('');
+        setEntityVersion(0);
+        
+        // Mark that we're programmatically setting content
+        isSettingContentRef.current = true;
+        lastSetContentRef.current = '';
+        editor.commands.setContent('');
+        // Reset to black for new chapter
+        setTextColor('#000000');
+        setContent('');
+        
+        // Reset flag after a brief delay
+        setTimeout(() => {
+          isSettingContentRef.current = false;
+        }, 100);
+      }
     }
-  }, [chapter, parentChapter]);
+  }, [chapter?.id, chapter?.contentHtml, chapter?.content, parentChapter?.id, editor]);
+
+  // Sanitize editor HTML before saving:
+  // - Strip foreign container tags (e.g. <section> from pasted content)
+  // - Keep our semantic structure (p, br, lists, headings, images, videos, karaoke blocks)
+  // - Whitelist only a small set of inline style properties we intentionally use
+  const sanitizeEditorHtml = (html) => {
+    if (!html) return '';
+    if (typeof document === 'undefined') return html;
+
+    const wrapper = document.createElement('div');
+    wrapper.innerHTML = html;
+
+    const ALLOWED_STYLE_PROPS = new Set([
+      'color',
+      'background-color',
+      'font-weight',
+      'font-style',
+      'text-decoration',
+      'font-size',
+      // allow line-height so our own spans with explicit size still look right
+      'line-height',
+    ]);
+
+    const UNWRAP_TAGS = new Set([
+      'SECTION',
+      'ARTICLE',
+      'ASIDE',
+      'MAIN',
+      'HEADER',
+      'FOOTER',
+    ]);
+
+    const traverse = (node) => {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const el = node;
+
+        // Special case: sections pasted from external editors that include
+        // `data-markdown-raw` with the original plain text (including newlines).
+        // For these, we prefer to rebuild clean <p> paragraphs from that raw text
+        // instead of keeping their nested spans and layout styles.
+        if (
+          el.tagName === 'SECTION' &&
+          el.classList.contains('markdown-section') &&
+          el.hasAttribute('data-markdown-raw')
+        ) {
+          const parent = el.parentNode;
+          if (parent) {
+            const raw = el.getAttribute('data-markdown-raw') || '';
+            const paragraphs = raw.split(/\n\s*\n/); // double newline => new paragraph
+
+            paragraphs.forEach((para) => {
+              const trimmed = para.trim();
+              if (!trimmed) return;
+              const p = document.createElement('p');
+              // Collapse internal newlines within a paragraph to single spaces
+              p.textContent = trimmed.replace(/\s*\n\s*/g, ' ');
+              parent.insertBefore(p, el);
+            });
+
+            parent.removeChild(el);
+            return;
+          }
+        }
+
+        // Unwrap container tags we don't want to persist
+        if (UNWRAP_TAGS.has(el.tagName)) {
+          const parent = el.parentNode;
+          if (parent) {
+            while (el.firstChild) {
+              parent.insertBefore(el.firstChild, el);
+            }
+            parent.removeChild(el);
+            // After unwrapping, nothing more to do on this node
+            return;
+          }
+        }
+
+        // Sanitize inline styles: keep only whitelisted properties
+        if (el.hasAttribute('style')) {
+          const style = el.getAttribute('style') || '';
+          const kept = [];
+          style.split(';').forEach((rule) => {
+            const trimmed = rule.trim();
+            if (!trimmed) return;
+            const [prop, ...rest] = trimmed.split(':');
+            if (!prop || rest.length === 0) return;
+            const name = prop.trim().toLowerCase();
+            if (ALLOWED_STYLE_PROPS.has(name)) {
+              kept.push(`${name}: ${rest.join(':').trim()}`);
+            }
+          });
+          if (kept.length > 0) {
+            el.setAttribute('style', kept.join('; '));
+          } else {
+            el.removeAttribute('style');
+          }
+        }
+
+        // We keep data-* attributes, src/href/etc., and classes.
+        // Visual inconsistency mostly comes from inline styles and container tags.
+      }
+
+      let child = node.firstChild;
+      while (child) {
+        const next = child.nextSibling;
+        traverse(child);
+        child = next;
+      }
+    };
+
+    traverse(wrapper);
+    return wrapper.innerHTML;
+  };
 
   useEffect(() => {
+    if (!editor) return;
     const originalBodyOverflow = document.body.style.overflow;
     const originalDocOverflow = document.documentElement.style.overflow;
 
     document.body.style.overflow = 'hidden';
     document.documentElement.style.overflow = 'hidden';
 
-    const el = textareaRef.current;
-    if (!el) return;
-
-    let touchStartY = 0;
-
-    const handleWheel = (event) => {
-      const target = textareaRef.current;
-      if (!target) return;
-
-      const delta = event.deltaY;
-      const { scrollTop, scrollHeight, clientHeight } = target;
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight;
-
-      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      target.scrollTop = Math.min(
-        Math.max(scrollTop + delta, 0),
-        scrollHeight - clientHeight
-      );
-    };
-
-    const handleTouchStart = (event) => {
-      if (event.touches.length !== 1) return;
-      touchStartY = event.touches[0].clientY;
-    };
-
-    const handleTouchMove = (event) => {
-      const target = textareaRef.current;
-      if (!target || event.touches.length !== 1) return;
-      const currentY = event.touches[0].clientY;
-      const delta = touchStartY - currentY;
-
-      const { scrollTop, scrollHeight, clientHeight } = target;
-      const atTop = scrollTop <= 0;
-      const atBottom = scrollTop + clientHeight >= scrollHeight;
-
-      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      target.scrollTop = Math.min(
-        Math.max(scrollTop + delta, 0),
-        scrollHeight - clientHeight
-      );
-      touchStartY = currentY;
-    };
-
-    const handleTouchEnd = () => {
-      touchStartY = 0;
-    };
-
-    el.addEventListener('wheel', handleWheel, { passive: false });
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: false });
-    el.addEventListener('touchend', handleTouchEnd, { passive: true });
+    // TipTap handles its own events - we don't need to add custom touch handlers
+    // that might interfere with typing. The editor's DOM is already set up correctly.
 
     return () => {
-      el.removeEventListener('wheel', handleWheel);
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
       document.body.style.overflow = originalBodyOverflow;
       document.documentElement.style.overflow = originalDocOverflow;
     };
-  }, []);
+  }, [editor]);
 
   useEffect(() => {
-    if (showKaraokeDialog) return;
-    const editor = textareaRef.current;
-    if (!editor) return;
+    if (showKaraokeDialog || !editor) return;
+    // TipTap handles content automatically, so we don't need to restore here
+    // Karaoke insertion will be handled via TipTap commands
+  }, [showKaraokeDialog, editor]);
 
-    const currentHtml = editor.innerHTML;
-    const domIsEmpty = !currentHtml || currentHtml === '<br>' || currentHtml.trim() === '';
-    if (!domIsEmpty) return;
-
-    if (content !== undefined && content !== null) {
-      editor.innerHTML = content || '';
-      applyKaraokeEditorMarkers();
-
-      // Attempt to restore caret at end
-      try {
-        const range = document.createRange();
-        range.selectNodeContents(editor);
-        range.collapse(false);
-        const sel = window.getSelection();
-        sel.removeAllRanges();
-        sel.addRange(range);
-      } catch (err) {
-        console.warn('Failed to restore caret after dialog close:', err);
-      }
-    }
-  }, [showKaraokeDialog, content]);
-
-  // Handle content changes from contentEditable for autosave
+  // Handle content changes - TipTap handles this via onUpdate callback
+  // This function is kept for compatibility but may not be needed
   const handleEditorInput = () => {
-    if (!textareaRef.current) return;
-
-    const placeholders = textareaRef.current.querySelectorAll('[data-karaoke-placeholder]');
-    placeholders.forEach((node) => {
-      const text = node.textContent.replace(/\u00A0/g, '').trim();
-      if (text.length > 0) {
-        node.removeAttribute('data-karaoke-placeholder');
-        node.removeAttribute('data-placeholder-id');
-      } else if (!node.querySelector('br')) {
-        node.innerHTML = '<br />';
-      }
-    });
-
-    const html = textareaRef.current.innerHTML;
-    setContent(html);
+    // TipTap's onUpdate callback already handles this
   };
 
   // Debounced local autosave
@@ -490,15 +825,33 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   // Sync toolbar with selection changes
   useEffect(() => {
-    const handleSelection = () => {
-      // Don't sync if user just manually changed the color picker
-      if (!userChangedColorRef.current) {
-        refreshToolbarState();
+    if (!editor) return;
+
+    let rafId;
+    const pollSelection = () => {
+      try {
+        const { state } = editor;
+        const { from, to } = state.selection || {};
+        const last = lastSelectionRef.current;
+
+        if (from !== last.from || to !== last.to) {
+          lastSelectionRef.current = { from, to };
+          if (!userChangedColorRef.current) {
+            refreshToolbarState();
+          }
+        }
+      } catch (e) {}
+      rafId = window.requestAnimationFrame(pollSelection);
+    };
+
+    rafId = window.requestAnimationFrame(pollSelection);
+
+    return () => {
+      if (rafId) {
+        window.cancelAnimationFrame(rafId);
       }
     };
-    document.addEventListener('selectionchange', handleSelection);
-    return () => document.removeEventListener('selectionchange', handleSelection);
-  }, []);
+  }, [editor]);
 
   // Update dialog ref when dialog state changes
   useEffect(() => {
@@ -515,10 +868,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   }, [showKaraokeDialog]);
 
   useEffect(() => {
-    if (!showKaraokeDialog && pendingKaraokeHtmlRef.current) {
-      scheduleEditorInsertion(pendingKaraokeHtmlRef.current);
-    }
-  }, [showKaraokeDialog, pendingInsertTick]);
+  }, [showKaraokeDialog]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -534,16 +884,42 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         return; // Dialog is open but event not from dialog - ignore completely
       }
       
-      if (!textareaRef.current) return;
+      // Check if editor is focused
+      if (!editor || !editor.isFocused) return;
+      
       const meta = e.metaKey || e.ctrlKey;
       if (!meta) return;
       switch (e.key.toLowerCase()) {
-        case 'b': e.preventDefault(); document.execCommand('bold'); refreshToolbarState(); break;
-        case 'i': e.preventDefault(); document.execCommand('italic'); refreshToolbarState(); break;
-        case 'u': e.preventDefault(); document.execCommand('underline'); refreshToolbarState(); break;
-        case 'l': e.preventDefault(); document.execCommand('justifyLeft'); refreshToolbarState(); break;
-        case 'e': e.preventDefault(); document.execCommand('justifyCenter'); refreshToolbarState(); break;
-        case 'r': e.preventDefault(); document.execCommand('justifyRight'); refreshToolbarState(); break;
+        case 'b': 
+          e.preventDefault(); 
+          editor.chain().focus().toggleBold().run(); 
+          refreshToolbarState(); 
+          break;
+        case 'i': 
+          e.preventDefault(); 
+          editor.chain().focus().toggleItalic().run(); 
+          refreshToolbarState(); 
+          break;
+        case 'u': 
+          e.preventDefault(); 
+          // TODO: implement underline
+          refreshToolbarState(); 
+          break;
+        case 'l': 
+          e.preventDefault(); 
+          editor.chain().focus().setTextAlign('left').run(); 
+          refreshToolbarState(); 
+          break;
+        case 'e': 
+          e.preventDefault(); 
+          editor.chain().focus().setTextAlign('center').run(); 
+          refreshToolbarState(); 
+          break;
+        case 'r': 
+          e.preventDefault(); 
+          editor.chain().focus().setTextAlign('right').run(); 
+          refreshToolbarState(); 
+          break;
         default: break;
       }
     };
@@ -553,9 +929,16 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   const handleSave = async () => {
     setSaving(true);
-    const currentContent = textareaRef.current ? textareaRef.current.innerHTML : '';
+    const currentContent = editor ? editor.getHTML() : '';
+    // Debug: always log HTML to see what's being saved
+    console.log('[Save] Full HTML content:', currentContent);
+    console.log('[Save] Contains drop-cap?', currentContent.includes('drop-cap'));
+    if (currentContent.includes('drop-cap')) {
+      const matches = currentContent.match(/<p[^>]*drop-cap[^>]*>.*?<\/p>/gi);
+      console.log('[Save] Drop cap paragraphs found:', matches);
+    }
     try {
-      await onSave({ title, contentHtml: currentContent, version: entityVersion });
+      await onSave({ title, epigraph, contentHtml: currentContent, version: entityVersion });
     } catch (err) {
       if (err?.code === 'version-conflict') {
         setAutosaveStatus('Chapter updated elsewhere. Reloaded latest content.');
@@ -579,78 +962,372 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   };
 
 
-  const toggleFormatting = (formatType, command, value = null) => {
-    const editor = textareaRef.current;
+  const applyBold = () => {
     if (!editor) return;
+    editor.chain().focus().toggleBold().run();
+    refreshToolbarState();
+  };
+  const applyItalic = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleItalic().run();
+    refreshToolbarState();
+  };
+  const applyStrikethrough = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleStrike().run();
+    refreshToolbarState();
+  };
+  const applyUnderline = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleUnderline().run();
+    refreshToolbarState();
+  };
+  const applyHighlight = () => {
+    if (!editor) return;
+    // Use TipTap highlight mark instead of execCommand
+    editor
+      .chain()
+      .focus()
+      .toggleMark('highlight', { color: highlightColor })
+      .run();
+    refreshToolbarState();
+  };
+  const applyTextColor = () => {
+    if (!editor) return;
+    // Use TipTap TextColor mark command
+    editor.chain().focus().setTextColor(textColor).run();
+    refreshToolbarState();
+  };
+  const applyFontSize = (size) => {
+    // Font-size is currently a planned polish feature.
+    // For now we simply track the dropdown state without changing the document,
+    // to avoid impacting pagination or layout.
+    setFontSize(size);
+  };
+
+  const applyWhisperParagraph = () => {
+    if (!editor) return;
+    const { state } = editor;
+    const { $from } = state.selection;
     
-    editor.focus();
+    // Find the paragraph node and its position (same approach as Indent/DropCap)
+    let paragraphNode = null;
+    let paragraphPos = null;
     
-    document.execCommand(command, false, value);
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth);
+      if (node.type.name === 'paragraph') {
+        paragraphNode = $from.node(depth);
+        paragraphPos = $from.before(depth);
+        break;
+      }
+    }
     
-    editor.focus();
+    if (paragraphNode === null || paragraphPos === null) {
+      console.log('[WhisperParagraph] No paragraph found');
+      return;
+    }
+    
+    const currentClass = paragraphNode.attrs.class || 'para-body';
+    const hasWhisper = currentClass.includes('para-whisper');
+    
+    // Remove existing paragraph-variant classes we control (intro/whisper/epigraph)
+    const cleaned = currentClass
+      .split(/\s+/)
+      .filter((cls) => cls && !['para-intro', 'para-whisper', 'para-epigraph'].includes(cls))
+      .join(' ')
+      .trim();
+    
+    let newClass;
+    if (hasWhisper) {
+      // Turn whisper back into regular body paragraph, preserving other classes (e.g. drop-cap)
+      newClass = cleaned || 'para-body';
+    } else {
+      // Add whisper variant on top of existing classes
+      newClass = (cleaned + ' para-whisper').trim();
+      // Ensure we still have a base body class
+      if (!newClass.includes('para-body')) {
+        newClass = `para-body ${newClass}`.trim();
+      }
+    }
+    
+    const tr = state.tr.setNodeMarkup(paragraphPos, null, {
+      ...paragraphNode.attrs,
+      class: newClass,
+    });
+    editor.view.dispatch(tr);
     refreshToolbarState();
   };
 
-  const applyBold = () => toggleFormatting('bold', 'bold');
-  const applyItalic = () => toggleFormatting('italic', 'italic');
-  const applyStrikethrough = () => toggleFormatting('strikethrough', 'strikeThrough');
-  const applyUnderline = () => toggleFormatting('underline', 'underline');
-  const applyHighlight = () => {
-    const editor = textareaRef.current;
+  const setAlignment = (value) => {
     if (!editor) return;
-    editor.focus();
-    try { document.execCommand('styleWithCSS', false, true); } catch {}
-    document.execCommand('hiliteColor', false, highlightColor);
+    editor.chain().focus().setTextAlign(value).run();
     refreshToolbarState();
   };
-  const applyTextColor = () => toggleFormatting('textColor', 'foreColor', textColor);
-  const applyFontSize = (size) => {
-    const editor = textareaRef.current;
+
+  const alignLeft = () => setAlignment('left');
+  const alignCenter = () => setAlignment('center');
+  const alignRight = () => setAlignment('right');
+  const alignJustify = () => setAlignment('justify');
+  
+  const applyBlockquote = () => {
     if (!editor) return;
-    editor.focus();
+    editor.chain().focus().toggleBlockquote().run();
+    refreshToolbarState();
+  };
+  
+  const applySubscript = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleSubscript().run();
+    refreshToolbarState();
+  };
+  
+  const applySuperscript = () => {
+    if (!editor) return;
+    editor.chain().focus().toggleSuperscript().run();
+    refreshToolbarState();
+  };
+  
+  const applyIndent = () => {
+    if (!editor) return;
+    editor.chain().focus().indent().run();
+    refreshToolbarState();
+  };
+  
+  const applyOutdent = () => {
+    if (!editor) return;
+    editor.chain().focus().outdent().run();
+    refreshToolbarState();
+  };
+  
+  // Image alignment functions
+  const setImageAlign = (align) => {
+    if (!editor) return;
+    editor.chain().focus().setImageAlign(align).run();
+    // Small delay to ensure state updates before refreshing toolbar
+    setTimeout(() => {
+      refreshToolbarState();
+    }, 50);
+  };
+
+  const applyImageAlignLeft = () => setImageAlign('left');
+  const applyImageAlignCenter = () => setImageAlign('center');
+  const applyImageAlignRight = () => setImageAlign('right');
+  
+  // Insert inline image (flows with text, like emoji/icon)
+  const handleInlineImageSelected = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file || !editor) return;
     
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
-    
-    const range = selection.getRangeAt(0);
-    
+    setUploadingImage(true);
     try {
-      // If there's a selection, wrap it in a span with font-size
-      if (!range.collapsed) {
-        const span = document.createElement('span');
-        span.style.fontSize = `${size}px`;
-        try {
-          range.surroundContents(span);
-        } catch {
-          // If surroundContents fails, extract content and replace
-          const contents = range.extractContents();
-          span.appendChild(contents);
-          range.insertNode(span);
-        }
-      } else {
-        // For collapsed selection (cursor position), insert a span
-        const span = document.createElement('span');
-        span.style.fontSize = `${size}px`;
-        span.innerHTML = '\u200B'; // Zero-width space
-        range.insertNode(span);
-        // Move cursor after the span
-        range.setStartAfter(span);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
+      const downloadURL = await uploadImageToStorage(file);
+      // Insert as inline image node
+      editor.chain().focus().insertContent({
+        type: 'inlineImage',
+        attrs: { src: downloadURL, alt: '' },
+      }).run();
+    } catch (error) {
+      console.error('Error uploading inline image:', error);
+    } finally {
+      setUploadingImage(false);
+      // Reset input
+      if (inlineImageInputRef.current) {
+        inlineImageInputRef.current.value = '';
       }
-    } catch (err) {
-      // Fallback: use insertHTML
-      const selectedText = selection.toString();
-      const html = `<span style="font-size: ${size}px;">${selectedText || '\u200B'}</span>`;
-      document.execCommand('insertHTML', false, html);
+    }
+  };
+
+  const applyDropCap = () => {
+    if (!editor) return;
+    const { state } = editor;
+    const { $from } = state.selection;
+    
+    // Find the paragraph node and its position (same approach as Indent extension)
+    let paragraphNode = null;
+    let paragraphPos = null;
+    
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth);
+      if (node.type.name === 'paragraph') {
+        paragraphNode = node;
+        paragraphPos = $from.before(depth);
+        break;
+      }
     }
     
+    if (!paragraphNode || paragraphPos === null) {
+      console.log('[DropCap] No paragraph found');
+      return;
+    }
+    
+    const currentClass = paragraphNode.attrs.class || 'para-body';
+    const hasDropCap = currentClass.includes('drop-cap');
+    
+    let newClass;
+    if (hasDropCap) {
+      // Remove drop cap
+      newClass = currentClass.replace(/\s*drop-cap\s*/g, ' ').trim() || 'para-body';
+    } else {
+      // Add drop cap
+      newClass = (currentClass + ' drop-cap').trim();
+    }
+    
+    console.log('[DropCap] Current class:', currentClass, 'New class:', newClass);
+    
+    // Use the same approach as Indent extension - custom command with setNodeMarkup
+    editor.chain().focus().command(({ tr, state, dispatch }) => {
+      if (!dispatch) return false;
+      
+      const nodeAtPos = state.doc.nodeAt(paragraphPos);
+      if (!nodeAtPos || nodeAtPos.type.name !== 'paragraph') {
+        return false;
+      }
+      
+      // Update the class attribute using setNodeMarkup (same as Indent does)
+      tr.setNodeMarkup(paragraphPos, null, { ...nodeAtPos.attrs, class: newClass });
+      dispatch(tr);
+      return true;
+    }).run();
+    
+    // Debug: verify the class was actually applied
+    setTimeout(() => {
+      if (editor) {
+        const html = editor.getHTML();
+        console.log('[DropCap] HTML after applying:', html);
+        console.log('[DropCap] Contains drop-cap in HTML?', html.includes('drop-cap'));
+        if (html.includes('drop-cap')) {
+          const matches = html.match(/<p[^>]*drop-cap[^>]*>.*?<\/p>/gi);
+          console.log('[DropCap] Drop cap paragraphs in editor HTML:', matches);
+        } else {
+          // Check what the actual paragraph HTML looks like
+          const paraMatches = html.match(/<p[^>]*>.*?<\/p>/gi);
+          console.log('[DropCap] All paragraphs in HTML (first 3):', paraMatches?.slice(0, 3));
+        }
+      }
+    }, 200);
+    
     refreshToolbarState();
   };
-  const alignLeft = () => toggleFormatting('alignLeft', 'justifyLeft');
-  const alignCenter = () => toggleFormatting('alignCenter', 'justifyCenter');
-  const alignRight = () => toggleFormatting('alignRight', 'justifyRight');
+
+  const applyPoetry = () => {
+    if (!editor) return;
+    editor.chain().focus().togglePoetry().run();
+    refreshToolbarState();
+  };
+
+  const applyEpigraphParagraph = () => {
+    if (!editor) return;
+    const { state } = editor;
+    const { $from } = state.selection;
+    
+    // Find the paragraph node and its position
+    let paragraphNode = null;
+    let paragraphPos = null;
+    
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth);
+      if (node.type.name === 'paragraph') {
+        paragraphNode = node;
+        paragraphPos = $from.before(depth);
+        break;
+      }
+    }
+    
+    if (!paragraphNode || paragraphPos === null) {
+      console.log('[EpigraphParagraph] No paragraph found');
+      return;
+    }
+    
+    const currentClass = paragraphNode.attrs.class || 'para-body';
+    const hasEpigraph = currentClass.includes('para-epigraph');
+    
+    // Remove existing paragraph-variant classes we control (intro/whisper/epigraph)
+    const cleaned = currentClass
+      .split(/\s+/)
+      .filter((cls) => cls && !['para-intro', 'para-whisper', 'para-epigraph'].includes(cls))
+      .join(' ')
+      .trim();
+    
+    let newClass;
+    if (hasEpigraph) {
+      // Turn epigraph back into regular body paragraph
+      newClass = cleaned || 'para-body';
+    } else {
+      // Add epigraph variant
+      newClass = (cleaned + ' para-epigraph').trim();
+      if (!newClass.includes('para-body')) {
+        newClass = ('para-body ' + newClass).trim();
+      }
+    }
+    
+    editor.chain().focus().command(({ tr, dispatch }) => {
+      if (paragraphPos !== null) {
+        tr.setNodeMarkup(paragraphPos, null, { ...paragraphNode.attrs, class: newClass });
+        if (dispatch) dispatch(tr);
+        return true;
+      }
+      return false;
+    }).run();
+    
+    refreshToolbarState();
+  };
+
+
+  const applyIntroParagraph = () => {
+    if (!editor) return;
+    const { state } = editor;
+    const { $from } = state.selection;
+    
+    // Find the paragraph node and its position (same approach as Indent/DropCap)
+    let paragraphNode = null;
+    let paragraphPos = null;
+    
+    for (let depth = $from.depth; depth > 0; depth--) {
+      const node = $from.node(depth);
+      if (node.type.name === 'paragraph') {
+        paragraphNode = node;
+        paragraphPos = $from.before(depth);
+        break;
+      }
+    }
+    
+    if (!paragraphNode || paragraphPos === null) {
+      console.log('[IntroParagraph] No paragraph found');
+      return;
+    }
+    
+    const currentClass = paragraphNode.attrs.class || 'para-body';
+    const hasIntro = currentClass.includes('para-intro');
+    
+    // Remove any existing paragraph-variant classes we control (intro/whisper/epigraph)
+    const cleaned = currentClass
+      .split(/\s+/)
+      .filter((cls) => cls && !['para-intro', 'para-whisper', 'para-epigraph'].includes(cls))
+      .join(' ')
+      .trim();
+    
+    let newClass;
+    if (hasIntro) {
+      // Turn intro back into regular body paragraph, preserving other classes (e.g. drop-cap)
+      newClass = cleaned || 'para-body';
+    } else {
+      // Add intro variant on top of any existing classes (e.g. drop-cap)
+      newClass = (cleaned + ' para-intro').trim();
+      // Ensure we still have a base body class if nothing else remains
+      if (!/para-body/.test(newClass)) {
+        newClass = ('para-body ' + newClass).trim();
+      }
+    }
+    
+    const { tr } = state;
+    tr.setNodeMarkup(paragraphPos, null, {
+      ...paragraphNode.attrs,
+      class: newClass,
+    });
+    editor.view.dispatch(tr);
+    refreshToolbarState();
+  };
 
   const handleTextColorChange = (e) => {
     const value = e.target.value;
@@ -667,49 +1344,44 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       colorInputRef.current.value = value;
     }
     
-    const editor = textareaRef.current;
     if (editor) {
-      // Apply color to current selection/caret position BEFORE focusing
-      // This way the color is applied to the caret position
-      document.execCommand('foreColor', false, value);
-      
-      editor.focus();
-      
+      // Apply color to current selection/caret position via TipTap
+      editor.chain().focus().setTextColor(value).run();
+
       // Keep the flag true for longer to prevent any selection changes from overriding
       // Only reset after user starts typing or a significant delay
       setTimeout(() => {
         userChangedColorRef.current = false;
-      }, 500); // Longer delay to prevent immediate override
-      
-      // Don't call refreshToolbarState here - it will override the color
-      // Let it sync naturally when user types or moves cursor
+      }, 500);
+
+      // Let toolbar sync naturally on next refreshToolbarState
     }
   };
 
   const handleHighlightColorChange = (e) => {
     const value = e.target.value;
     setHighlightColor(value);
-    // Immediately apply new highlight color to selection/caret
-    const editor = textareaRef.current;
-    if (editor) {
-      editor.focus();
-      try { document.execCommand('styleWithCSS', false, true); } catch {}
-      document.execCommand('hiliteColor', false, value);
-      refreshToolbarState();
-    }
+    // Immediately apply new highlight color to selection/caret via TipTap
+    if (!editor) return;
+    editor
+      .chain()
+      .focus()
+      .setMark('highlight', { color: value })
+      .run();
+    refreshToolbarState();
   };
 
   const handleApplyHighlightClick = (e) => {
-    const editor = textareaRef.current;
     if (!editor) return;
     e.preventDefault();
-    editor.focus();
-    try { document.execCommand('styleWithCSS', false, true); } catch {}
+    const chain = editor.chain().focus();
     if (e.altKey) {
-      document.execCommand('hiliteColor', false, 'transparent');
+      // Alt-click clears highlight
+      chain.unsetMark('highlight');
     } else {
-      document.execCommand('hiliteColor', false, highlightColor);
+      chain.toggleMark('highlight', { color: highlightColor });
     }
+    chain.run();
     refreshToolbarState();
   };
 
@@ -735,38 +1407,18 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         }
       });
     
-    const editor = textareaRef.current;
-    if (!editor) return;
-    editor.focus();
-      const videoHtml = `<video src="${downloadURL}" controls style="max-width:100%;height:auto;display:block;margin:8px 0;"></video>`;
-    try {
-      const selection = window.getSelection();
-      if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
-        const range = selection.getRangeAt(0);
-        range.deleteContents();
-        const temp = document.createElement('div');
-          temp.innerHTML = videoHtml;
-        const frag = document.createDocumentFragment();
-        let node, lastNode;
-        while ((node = temp.firstChild)) {
-          lastNode = frag.appendChild(node);
-        }
-        range.insertNode(frag);
-        if (lastNode) {
-          const after = document.createTextNode('\u00A0');
-          lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
-          const newRange = document.createRange();
-          newRange.setStartAfter(after);
-          newRange.collapse(true);
-          selection.removeAllRanges();
-          selection.addRange(newRange);
-        }
-      } else {
-          editor.insertAdjacentHTML('beforeend', videoHtml);
-      }
-    } catch {
-        document.execCommand('insertHTML', false, videoHtml);
-      }
+      if (!editor) return;
+      
+      // Use TipTap's insertContent to insert Video node
+      editor.chain().focus().insertContent({
+        type: 'video',
+        attrs: {
+          src: downloadURL,
+          controls: true,
+          style: 'max-width:100%;height:auto;display:block;margin:8px 0;',
+        },
+      }).run();
+      
       refreshToolbarState();
     } catch (err) {
       console.error('Video upload failed', err);
@@ -911,247 +1563,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     }
   };
 
-  const insertHtmlIntoEditor = (payload) => {
-    const editor = textareaRef.current;
-    if (!editor) {
-      return false;
-    }
-
-    const normalizedPayload = typeof payload === 'string'
-      ? { html: payload, focusSelector: null }
-      : (payload || {});
-
-    const { html, focusSelector } = normalizedPayload;
-    if (!html) return false;
-
-    // instrumentation removed after debugging
-
-    editor.focus();
-
-    let anchorNode = null;
-    let caretNode = null;
-    let inserted = false;
-    let emptyBlock = null;
-
-    const ensureSelectionWithinEditor = (selection) => {
-      if (
-        selection.rangeCount === 0 ||
-        !editor.contains(selection.anchorNode) ||
-        !editor.contains(selection.focusNode)
-      ) {
-        const fallbackRange = document.createRange();
-        fallbackRange.selectNodeContents(editor);
-        fallbackRange.collapse(false);
-        selection.removeAllRanges();
-        selection.addRange(fallbackRange);
-      }
-    };
-
-    const resolveClosestBlock = (node) => {
-      if (!node) return null;
-      let current = node.nodeType === Node.TEXT_NODE ? node.parentElement : node;
-      while (current && current !== editor) {
-        if (current.nodeType === Node.ELEMENT_NODE) {
-          if (current.tagName === 'BR') return current;
-          const display = window.getComputedStyle(current).display;
-          if (display === 'block' || display === 'list-item' || current.tagName === 'P' || current.tagName === 'DIV') {
-            return current;
-          }
-        }
-        current = current.parentElement;
-      }
-      return null;
-    };
-
-    const isEmptyBlock = (node) => {
-      if (!node || node === editor) return false;
-      if (node.tagName === 'BR') return true;
-      const text = node.textContent.replace(/\u00A0/g, '').trim();
-      if (text.length > 0) return false;
-      if (node.querySelector && node.querySelector('.karaoke-object')) return false;
-      return true;
-    };
-
-    const ensureTrailingCaretNode = (referenceNode, replacedBlock) => {
-      if (!referenceNode || !referenceNode.parentNode) return null;
-      const parent = referenceNode.parentNode;
-
-      let next = referenceNode.nextSibling;
-      while (next && next.nodeType === Node.TEXT_NODE && next.textContent.trim() === '') {
-        const removeTarget = next;
-        next = next.nextSibling;
-        parent.removeChild(removeTarget);
-      }
-
-      if (
-        next &&
-        next.nodeType === Node.ELEMENT_NODE &&
-        next.getAttribute('data-karaoke-block') !== 'true'
-      ) {
-        const text = next.textContent.replace(/\u00A0/g, '').trim();
-        if (text.length === 0) {
-          if (!next.querySelector('br')) {
-            next.innerHTML = '<br />';
-          }
-          return next;
-        }
-      }
-
-      const tagName = (replacedBlock && replacedBlock.tagName && replacedBlock.tagName !== 'BR')
-        ? replacedBlock.tagName.toLowerCase()
-        : 'div';
-
-      const caretBlock = document.createElement(tagName === 'br' ? 'div' : tagName);
-      caretBlock.innerHTML = '<br />';
-      parent.insertBefore(caretBlock, referenceNode.nextSibling);
-      return caretBlock;
-    };
-
-    try {
-      let selection = window.getSelection();
-      if (!selection) {
-        return false;
-      }
-
-      ensureSelectionWithinEditor(selection);
-
-      if (selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-
-        if (!editor.contains(range.commonAncestorContainer)) {
-          ensureSelectionWithinEditor(selection);
-        }
-
-        const activeRange = selection.getRangeAt(0);
-        if (!activeRange.collapsed) {
-          activeRange.deleteContents();
-        }
-
-        emptyBlock = resolveClosestBlock(activeRange.startContainer);
-        if (!isEmptyBlock(emptyBlock)) {
-          emptyBlock = null;
-        }
-
-        const temp = document.createElement('div');
-        temp.innerHTML = html;
-        const frag = document.createDocumentFragment();
-        let node;
-        let lastNode = null;
-        while ((node = temp.firstChild)) {
-          lastNode = frag.appendChild(node);
-        }
-
-        if (emptyBlock && emptyBlock !== editor) {
-          emptyBlock.replaceWith(frag);
-          anchorNode = lastNode;
-        } else {
-          activeRange.insertNode(frag);
-          anchorNode = lastNode;
-        }
-
-        inserted = true;
-      } else {
-        editor.insertAdjacentHTML('beforeend', html);
-        anchorNode = editor.lastElementChild;
-        inserted = true;
-      }
-    } catch (err) {
-      console.error('Falling back to execCommand insertion due to error:', err);
-      document.execCommand('insertHTML', false, html);
-      anchorNode = focusSelector ? editor.querySelector(focusSelector) : editor.lastElementChild;
-      inserted = true;
-    }
-
-    if (!inserted) {
-      return false;
-    }
-
-    applyKaraokeEditorMarkers();
-
-    if (anchorNode) {
-      const removeEmptyBefore = (node) => {
-        if (!node || !node.parentNode) return;
-        let prev = node.previousSibling;
-
-        const isNodeEmpty = (candidate) => {
-          if (!candidate) return false;
-          if (candidate.nodeType === Node.TEXT_NODE) {
-            return candidate.textContent.replace(/\u00A0/g, '').trim().length === 0;
-          }
-          if (candidate.nodeType === Node.ELEMENT_NODE) {
-            if (candidate.getAttribute && candidate.getAttribute('data-karaoke-block') === 'true') {
-              return false;
-            }
-            const text = candidate.textContent.replace(/\u00A0/g, '').trim();
-            if (text.length > 0) return false;
-            if (candidate.querySelector && candidate.querySelector('.karaoke-object')) return false;
-            return true;
-          }
-          return false;
-        };
-
-        while (prev && isNodeEmpty(prev)) {
-          const toRemove = prev;
-          prev = prev.previousSibling;
-          toRemove.parentNode.removeChild(toRemove);
-        }
-      };
-
-      removeEmptyBefore(anchorNode);
-    }
-
-    if (!anchorNode && focusSelector) {
-      anchorNode = editor.querySelector(focusSelector);
-    }
-
-    if (anchorNode) {
-      caretNode = ensureTrailingCaretNode(anchorNode, emptyBlock);
-    }
-
-    const restoreCaret = () => {
-      const selection = window.getSelection();
-      if (!selection) return;
-
-      if (caretNode && editor.contains(caretNode)) {
-        const range = document.createRange();
-        range.selectNodeContents(caretNode);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-        return;
-      }
-
-      if (anchorNode && editor.contains(anchorNode)) {
-        const range = document.createRange();
-        range.setStartAfter(anchorNode);
-        range.collapse(true);
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-    };
-
-    restoreCaret();
-    handleEditorInput();
-    refreshToolbarState();
-
-    // instrumentation removed after debugging
-
-    return true;
-  };
-
-  const scheduleEditorInsertion = (html, attempt = 0) => {
-    const MAX_ATTEMPTS = 10;
-    if (insertHtmlIntoEditor(html)) {
-      pendingKaraokeHtmlRef.current = null;
-      return;
-    }
-
-    if (attempt < MAX_ATTEMPTS) {
-      requestAnimationFrame(() => scheduleEditorInsertion(html, attempt + 1));
-    } else {
-      console.error('Failed to insert karaoke object: editor not available.');
-    }
-  };
 
   const handleInsertKaraoke = async () => {
     if (!karaokeText.trim()) {
@@ -1227,31 +1638,23 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       return;
     }
     
+    if (!editor) return;
+    
     // Create karaoke object
-    const karaokeData = {
-      type: 'karaoke',
-      text: karaokeText.trim(),
-      audioUrl: audioUrl,
-      wordTimings: wordTimings
-    };
-    
-    // Insert as a data attribute in a special element
     const karaokeId = `karaoke-${Date.now()}`;
-    const karaokePayload = encodeURIComponent(JSON.stringify(karaokeData));
-    const container = document.createElement('div');
-    container.className = 'karaoke-object karaoke-editor-marker';
-    container.dataset.karaoke = karaokePayload;
-    container.dataset.karaokeId = karaokeId;
-    container.setAttribute('contenteditable', 'false');
-    container.setAttribute('data-karaoke-block', 'true');
-    container.textContent = karaokeText.trim();
-    const karaokeHtml = container.outerHTML;
     
-    // Close dialog and reset form; insertion happens after editor re-mounts
-    pendingKaraokeHtmlRef.current = {
-      html: karaokeHtml,
-      focusSelector: `[data-karaoke-id="${karaokeId}"]`,
-    };
+    // Use TipTap's insertContent to insert KaraokeBlock node
+    editor.chain().focus().insertContent({
+      type: 'karaokeBlock',
+      attrs: {
+        id: karaokeId,
+        audioUrl: audioUrl,
+        timingsJson: JSON.stringify(wordTimings),
+        text: karaokeText.trim(),
+      },
+    }).run();
+    
+    // Close dialog and reset form
     setShowKaraokeDialog(false);
     setKaraokeText('');
     setKaraokeAudioFile(null);
@@ -1273,42 +1676,17 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         },
         compress: true
       });
-      const editor = textareaRef.current;
+      
       if (!editor) return;
-      editor.focus();
-      const imgHtml = `<img src="${downloadURL}" alt="" style="max-width:100%;height:auto;display:block;margin:8px 0;" />`;
-      try {
-        // Prefer modern Selection/Range insertion
-        const selection = window.getSelection();
-        if (selection && selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
-          const range = selection.getRangeAt(0);
-          range.deleteContents();
-          const temp = document.createElement('div');
-          temp.innerHTML = imgHtml;
-          const frag = document.createDocumentFragment();
-          let node, lastNode;
-          while ((node = temp.firstChild)) {
-            lastNode = frag.appendChild(node);
-          }
-          range.insertNode(frag);
-          // Move caret after inserted image
-          if (lastNode) {
-            const after = document.createTextNode('\u00A0');
-            lastNode.parentNode.insertBefore(after, lastNode.nextSibling);
-            const newRange = document.createRange();
-            newRange.setStartAfter(after);
-            newRange.collapse(true);
-            selection.removeAllRanges();
-            selection.addRange(newRange);
-          }
-        } else {
-          // Fallback: append at end of editor
-          editor.insertAdjacentHTML('beforeend', imgHtml);
-        }
-      } catch {
-        // Legacy fallback
-        document.execCommand('insertHTML', false, imgHtml);
-      }
+      
+      // Use TipTap's CustomImage node with default center alignment
+      // This works for both regular images and GIFs
+      editor.chain().focus().setImage({
+        src: downloadURL,
+        alt: '',
+        align: 'center', // Default to center, user can change alignment after insertion
+      }).run();
+      
       refreshToolbarState();
     } catch (err) {
       console.error('Image upload failed', err);
@@ -1323,18 +1701,20 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   useEffect(() => {
     // Only auto-focus content editor on initial mount, and only if title input is not being focused
+    if (!editor) return;
     const timer = setTimeout(() => {
       const activeElement = document.activeElement;
+      const editorEl = editor.view?.dom;
       // Don't auto-focus if title input is focused or if content editor is already focused
-      if (textareaRef.current && 
+      if (editorEl && 
           activeElement !== titleInputRef.current && 
-          activeElement !== textareaRef.current &&
+          activeElement !== editorEl &&
           !titleInputRef.current?.matches(':focus')) {
-        textareaRef.current.focus({ preventScroll: true });
+        editor.commands.focus();
       }
     }, 300); // Longer delay to allow user to click title first
     return () => clearTimeout(timer);
-  }, []);
+  }, [editor]);
 
   return (
     <div className="editor-overlay side-panel">
@@ -1422,6 +1802,16 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 </button>
                 <input ref={imageInputRef} type="file" accept="image/*" onChange={handleImageSelected} style={{ display: 'none' }} disabled={uploadingImage} />
                 <button
+                  onClick={() => inlineImageInputRef.current?.click()}
+                  className={`toolbar-btn ${uploadingImage ? 'uploading' : ''}`}
+                  title={uploadingImage ? "Uploading..." : "Insert Inline Image (Flows with Text)"}
+                  disabled={uploadingImage}
+                >
+                  <span className="toolbar-btn-icon">📎</span>
+                  {uploadingImage && <div className="toolbar-btn-progress" />}
+                </button>
+                <input ref={inlineImageInputRef} type="file" accept="image/*" onChange={handleInlineImageSelected} style={{ display: 'none' }} disabled={uploadingImage} />
+                <button
                   onClick={handleVideoButtonClick}
                   className={`toolbar-btn ${uploadingVideo ? 'uploading' : ''}`}
                   title={uploadingVideo ? "Uploading video..." : "Insert Video"}
@@ -1437,9 +1827,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button
                   onClick={() => {
                     // Disable editor and blur it before opening dialog
-                    if (textareaRef.current) {
-                      textareaRef.current.blur();
-                      textareaRef.current.contentEditable = 'false';
+                    if (editor) {
+                      editor.commands.blur();
                     }
                     setShowKaraokeDialog(true);
                     setKaraokeText('');
@@ -1448,55 +1837,20 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     setKaraokeTimingFile(null);
                     setKaraokeTimingMethod('upload');
                   }}
-                  className="toolbar-btn"
+                  className="toolbar-btn karaoke-btn"
                   title="Insert Karaoke"
                 >
                   🎤
                 </button>
                 <button
                   onClick={() => {
-                    const editor = textareaRef.current;
                     if (!editor) return;
-                    editor.focus();
-                    
-                    // Insert footnote syntax ^[ ] at cursor position
-                    const selection = window.getSelection();
-                    if (selection && selection.rangeCount > 0) {
-                      const range = selection.getRangeAt(0);
-                      const footnoteText = '^[ ]';
-                      
-                      // Insert the text
-                      const textNode = document.createTextNode(footnoteText);
-                      range.deleteContents();
-                      range.insertNode(textNode);
-                      
-                      // Move cursor inside the brackets
-                      range.setStart(textNode, 2); // Position after ^[
-                      range.setEnd(textNode, 2);
-                      range.collapse(true);
-                      selection.removeAllRanges();
-                      selection.addRange(range);
-                    } else {
-                      // Fallback: insert at end
-                      document.execCommand('insertText', false, '^[ ]');
-                      // Try to position cursor in brackets (this is approximate)
-                      setTimeout(() => {
-                        const selection = window.getSelection();
-                        if (selection && selection.rangeCount > 0) {
-                          const range = selection.getRangeAt(0);
-                          const textNode = range.startContainer;
-                          if (textNode.nodeType === Node.TEXT_NODE) {
-                            const offset = Math.max(0, range.startOffset - 1);
-                            range.setStart(textNode, offset);
-                            range.setEnd(textNode, offset);
-                            range.collapse(true);
-                            selection.removeAllRanges();
-                            selection.addRange(range);
-                          }
-                        }
-                      }, 0);
-                    }
-                    
+                    editor.commands.focus();
+                    // Insert markdown-style footnote starter ^[ ] at cursor position.
+                    // The TipTap FootnotePlugin watches for ^[content] and converts it
+                    // into a structured footnoteRef node with auto-numbering, and the
+                    // reader still understands both the node HTML and raw ^[...] syntax.
+                    editor.commands.insertContent('^[ ]');
                     refreshToolbarState();
                   }}
                   className="toolbar-btn"
@@ -1518,6 +1872,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 {/* Highlight H-swatch next to text color */}
                 <div className="highlight-picker-container" title="Highlight (click to apply, Alt-click to clear)">
                   <input
+                    ref={highlightInputRef}
                     type="color"
                     value={highlightColor}
                     onChange={handleHighlightColorChange}
@@ -1528,28 +1883,152 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <span className="toolbar-sep" />
                 <button 
                   onClick={alignLeft}
-                  className="toolbar-btn"
+                  className={`toolbar-btn ${activeFormats.alignLeft ? 'active' : ''}`}
                   title="Align Left"
                 >
                   ⬑
                 </button>
                 <button 
                   onClick={alignCenter}
-                  className="toolbar-btn"
+                  className={`toolbar-btn ${activeFormats.alignCenter ? 'active' : ''}`}
                   title="Align Center"
                 >
                   ≡
                 </button>
                 <button 
                   onClick={alignRight}
-                  className="toolbar-btn"
+                  className={`toolbar-btn ${activeFormats.alignRight ? 'active' : ''}`}
                   title="Align Right"
                 >
                   ⬏
                 </button>
+                <button 
+                  onClick={alignJustify}
+                  className={`toolbar-btn ${activeFormats.alignJustify ? 'active' : ''}`}
+                  title="Align Justify"
+                >
+                  ☰
+                </button>
+                {/* Image alignment buttons - only show when image is selected */}
+                {(activeFormats.imageAlignLeft || activeFormats.imageAlignCenter || activeFormats.imageAlignRight) && (
+                  <>
+                    <div className="toolbar-separator" />
+                    <button
+                      onClick={applyImageAlignLeft}
+                      className={`toolbar-btn ${activeFormats.imageAlignLeft ? 'active' : ''}`}
+                      title="Image: Align Left (Text Wraps Right)"
+                    >
+                      ⬅️
+                    </button>
+                    <button
+                      onClick={applyImageAlignCenter}
+                      className={`toolbar-btn ${activeFormats.imageAlignCenter ? 'active' : ''}`}
+                      title="Image: Center (No Wrap)"
+                    >
+                      ⬆️
+                    </button>
+                    <button
+                      onClick={applyImageAlignRight}
+                      className={`toolbar-btn ${activeFormats.imageAlignRight ? 'active' : ''}`}
+                      title="Image: Align Right (Text Wraps Left)"
+                    >
+                      ➡️
+                    </button>
+                  </>
+                )}
+                <span className="toolbar-sep" />
+                <button 
+                  onClick={applyBlockquote}
+                  className={`toolbar-btn ${activeFormats.blockquote ? 'active' : ''}`}
+                  title="Blockquote"
+                >
+                  "
+                </button>
+                <button 
+                  onClick={applySubscript}
+                  className={`toolbar-btn ${activeFormats.subscript ? 'active' : ''}`}
+                  title="Subscript"
+                >
+                  <span style={{ fontSize: '0.9em' }}>x₂</span>
+                </button>
+                <button 
+                  onClick={applySuperscript}
+                  className={`toolbar-btn ${activeFormats.superscript ? 'active' : ''}`}
+                  title="Superscript"
+                >
+                  <span style={{ fontSize: '0.9em' }}>x²</span>
+                </button>
+                <button 
+                  onClick={applyIndent}
+                  className="toolbar-btn"
+                  title="Indent"
+                >
+                  →
+                </button>
+                <button 
+                  onClick={applyOutdent}
+                  className="toolbar-btn"
+                  title="Outdent"
+                >
+                  ←
+                </button>
+                <button
+                  onClick={applyIntroParagraph}
+                  className={`toolbar-btn ${activeFormats.introParagraph ? 'active' : ''}`}
+                  title="Intro paragraph style"
+                >
+                  <span style={{ fontStyle: 'italic', fontSize: '1.1em' }}>¶</span>
+                </button>
+                <button
+                  onClick={applyWhisperParagraph}
+                  className={`toolbar-btn ${activeFormats.whisperParagraph ? 'active' : ''}`}
+                  title="Whisper / aside paragraph style"
+                >
+                  <span style={{ fontSize: '0.95em', color: '#777' }}>¶</span>
+                </button>
+                <button
+                  onClick={applyEpigraphParagraph}
+                  className={`toolbar-btn ${activeFormats.epigraphParagraph ? 'active' : ''}`}
+                  title="Epigraph (quote before chapter)"
+                >
+                  <span style={{ fontStyle: 'italic', fontSize: '0.9em' }}>"</span>
+                </button>
+                <button
+                  onClick={applyPoetry}
+                  className={`toolbar-btn ${editor?.isActive('poetry') ? 'active' : ''}`}
+                  title="Poetry formatting"
+                >
+                  📜
+                </button>
+                <button 
+                  onClick={applyDropCap}
+                  className={`toolbar-btn ${activeFormats.dropCap ? 'active' : ''}`}
+                  title="Drop Cap"
+                >
+                  <span style={{ fontSize: '1.5em', lineHeight: '0.8' }}>A</span>
+                </button>
                 
               </div>
               <div className="toolbar-actions">
+                <button
+                  className="toolbar-btn epigraph-btn"
+                  type="button"
+                  onClick={() => {
+                    console.log('[Epigraph] Opening epigraph dialog');
+                    const current = epigraph && typeof epigraph === 'object'
+                      ? epigraph
+                      : { text: '', author: '', align: 'center' };
+                    setEpigraphDraft({
+                      text: current.text || '',
+                      author: current.author || '',
+                      align: current.align || 'center',
+                    });
+                    setShowEpigraphDialog(true);
+                  }}
+                  title="Epigraf poglavja"
+                >
+                  <span className="icon">✶</span>
+                </button>
                 <button 
                   className="toolbar-save-btn"
                   onClick={handleSave}
@@ -1566,16 +2045,18 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 ))}
               </div>
             </div>
-            {!showKaraokeDialog && (
-            <div 
-              className="content-editor page-area"
-                contentEditable="true"
-              ref={textareaRef}
-              suppressContentEditableWarning={true}
-                onInput={handleEditorInput}
-                onClick={refreshToolbarState}
-                onFocus={refreshToolbarState}
-            />
+            {!showKaraokeDialog && editor && (
+              <SimpleBar className="content-editor-wrapper" style={{ flex: 1, minHeight: 0 }}>
+                <EditorContent 
+                  editor={editor}
+                  onFocus={() => {
+                    // Ensure editor is focused when clicked
+                    if (editor && !editor.isFocused) {
+                      editor.commands.focus();
+                    }
+                  }}
+                />
+              </SimpleBar>
             )}
           </div>
 
@@ -1705,6 +2186,120 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
             </div>
           </div>
         </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Epigraph mini editor dialog */}
+      {showEpigraphDialog && createPortal(
+        <div 
+          className="karaoke-dialog-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowEpigraphDialog(false);
+            }
+          }}
+        >
+          <div 
+            className="karaoke-dialog epigraph-dialog-wrapper"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="close-btn close-top"
+              onClick={() => setShowEpigraphDialog(false)}
+            >
+              ✕
+            </button>
+            <div className="karaoke-dialog-content epigraph-dialog">
+              <h2 className="epigraph-dialog-title">Epigraf poglavja</h2>
+              <div className="form-group">
+                <label htmlFor="epigraph-text">Besedilo epigrafa</label>
+                <textarea
+                  id="epigraph-text"
+                  value={epigraphDraft.text}
+                  onChange={(e) =>
+                    setEpigraphDraft((prev) => ({ ...prev, text: e.target.value }))
+                  }
+                  rows={4}
+                />
+              </div>
+              <div className="form-group">
+                <label htmlFor="epigraph-author">Avtor (opcijsko)</label>
+                <input
+                  id="epigraph-author"
+                  type="text"
+                  value={epigraphDraft.author}
+                  onChange={(e) =>
+                    setEpigraphDraft((prev) => ({ ...prev, author: e.target.value }))
+                  }
+                />
+              </div>
+              <div className="form-group">
+                <label>Poravnava</label>
+                <div className="epigraph-align-buttons">
+                  <button
+                    type="button"
+                    className={`toolbar-btn ${epigraphDraft.align === 'left' ? 'active' : ''}`}
+                    onClick={() =>
+                      setEpigraphDraft((prev) => ({ ...prev, align: 'left' }))
+                    }
+                    title="Align Left"
+                  >
+                    ⬑
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-btn ${epigraphDraft.align === 'center' ? 'active' : ''}`}
+                    onClick={() =>
+                      setEpigraphDraft((prev) => ({ ...prev, align: 'center' }))
+                    }
+                    title="Align Center"
+                  >
+                    ≡
+                  </button>
+                  <button
+                    type="button"
+                    className={`toolbar-btn ${epigraphDraft.align === 'right' ? 'active' : ''}`}
+                    onClick={() =>
+                      setEpigraphDraft((prev) => ({ ...prev, align: 'right' }))
+                    }
+                    title="Align Right"
+                  >
+                    ⬏
+                  </button>
+                </div>
+              </div>
+              <div className="epigraph-actions">
+                <button
+                  type="button"
+                  className="epigraph-delete-btn"
+                  onClick={() => {
+                    setEpigraph(null);
+                    setShowEpigraphDialog(false);
+                  }}
+                >
+                  Odstrani epigraf
+                </button>
+                <button
+                  type="button"
+                  className="epigraph-save-btn"
+                  onClick={() => {
+                    const text = epigraphDraft.text.trim();
+                    const author = epigraphDraft.author.trim();
+                    const align = epigraphDraft.align || 'center';
+                    if (!text) {
+                      setEpigraph(null);
+                    } else {
+                      setEpigraph({ text, author, align });
+                    }
+                    setShowEpigraphDialog(false);
+                  }}
+                >
+                  Shrani epigraf
+                </button>
+              </div>
+            </div>
+          </div>
         </div>,
         document.body
       )}

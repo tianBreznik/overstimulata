@@ -208,11 +208,141 @@
   padding-bottom: 0; /* Will be set dynamically via inline style */
 }
 
+/* Default chapter body style (canonical reading style)
+   - Approx 18px text
+   - Tight line-height (~1.2)
+   - Compact vertical rhythm between paragraphs
+*/
 .page-content p {
-  margin-bottom: 0.85rem;
-  text-align: left; /* Left-align paragraphs like in the image */
+  font-size: 1.125rem;         /* ~18px at 16px root */
+  line-height: 1.2;
+  margin: 0.45rem 0;           /* slightly tighter than before for a more compact, typeset feel */
+  text-align: left;            /* Left-align paragraphs like in the reference image */
   word-spacing: normal;
   font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Explicit font for paragraphs */
+}
+
+.page-content p.para-intro {
+  /* Subtle intro/lead paragraph style: slightly more air and light emphasis */
+  margin-top: 0.9rem;
+  margin-bottom: 0.9rem;
+  font-style: italic;
+}
+
+.page-content p.para-whisper {
+  /* Whisper/aside: a bit smaller, indented and softened */
+  font-size: 0.9em;
+  line-height: 1.4;
+  font-style: italic;
+  color: #777;
+  opacity: 0.95;
+  margin-top: 0.3em;
+  margin-bottom: 0.3em;
+}
+
+.page-content p.para-epigraph {
+  /* Epigraph paragraph style (legacy, for paragraphs in content) */
+  text-align: center;
+  font-style: italic;
+  font-size: 3.95em;
+  line-height: 1.5;
+  color: #555;
+  margin-top: 1.5em;
+  margin-bottom: 1.5em;
+  padding: 0 1em;
+}
+
+/* Epigraph page styling */
+.epigraph-page .page-body {
+  display: flex;
+  /* Push epigraph block toward the bottom of the frame */
+  align-items: flex-end;
+  justify-content: flex-start;
+  text-align: center;
+  padding-bottom: 11.5rem; /* lift it slightly above the very bottom edge */
+  padding-left: 8rem
+}
+
+.epigraph-content {
+  width: 100%;
+  display: flex;
+  /* Anchor block on the left side */
+  align-items: flex-end;
+  justify-content: flex-start;
+  padding: 0 1.5rem;
+  box-sizing: border-box;
+}
+
+.epigraph-text {
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 1.2rem;
+  line-height: 1.2;
+  font-style: italic;
+  color: #1f140a;
+  max-width: 100%;
+  white-space: pre-wrap;
+  text-align: left;
+}
+
+.epigraph-text > div {
+  white-space: pre-wrap;
+}
+
+.epigraph-author {
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  font-style: normal;
+  text-align: right;
+}
+
+.epigraph-align-left {
+  text-align: left;
+}
+
+.epigraph-align-center {
+  text-align: center;
+}
+
+.epigraph-align-right {
+  text-align: right;
+}
+
+/* Video page styling */
+.video-page .page-body {
+  padding: 0;
+  overflow: hidden;
+}
+
+.video-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fullscreen-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.page-content div.poetry {
+  /* Poetry: centered, preserves line breaks, treated as atomic for pagination */
+  text-align: center;
+  font-style: italic;
+  margin: 1.5em 0;
+  padding: 0 1em;
+}
+
+.page-content div.poetry p {
+  margin: 0.3em 0;
+  line-height: 1.6;
 }
 
 .page-content p:last-child {
@@ -222,11 +352,124 @@
 .page-content ul,
 .page-content ol {
   padding-left: 1.4rem;
-  margin-bottom: 0.85rem;
+  margin: 0.45rem 0;           /* Match compact paragraph rhythm */
 }
 
 .page-content li {
-  margin-bottom: 0.4rem;
+  font-size: 1.125rem;
+  line-height: 1.2;
+  margin-bottom: 0.35rem;
+}
+
+/* Blockquote styling - book-like with left border and italic text */
+.page-content blockquote {
+  font-size: 1.125rem;
+  line-height: 1.4;
+  margin: 0.75rem 0;
+  padding-left: 1.5rem;
+  border-left: 3px solid #8b8b8b;
+  font-style: italic;
+  color: #3a3a3a;
+  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+}
+
+/* Drop cap styling - first letter larger */
+.page-content p.drop-cap {
+  /* Ensure the paragraph itself is block-level for ::first-letter to work */
+  display: block;
+}
+
+.page-content p.drop-cap::first-letter {
+  float: left;
+  font-size: 3rem !important;
+  line-height: 0.82 !important;
+  padding-right: 0.22rem;
+  padding-top: 0.08rem;
+  font-weight: 400 !important;
+  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  /* Override any inline styles on the first letter */
+  color: inherit !important;
+  text-transform: none !important;
+}
+
+/* Image alignment and text wrapping */
+.page-content img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Center aligned images (default) - block, no wrap */
+.page-content img[data-align="center"] {
+  display: block;
+  margin: 0.5em auto;
+  float: none !important;
+}
+
+/* Images without data-align should also be centered */
+.page-content img:not([data-align]) {
+  display: block;
+  margin: 0.5em auto;
+  float: none !important;
+}
+
+/* Left aligned images - float left, text wraps right */
+.page-content img[data-align="left"] {
+  float: left !important;
+  margin-right: 1em !important;
+  margin-bottom: 0.5em !important;
+  margin-top: 0.5em !important;
+  display: block !important;
+}
+
+/* Right aligned images - float right, text wraps left */
+.page-content img[data-align="right"] {
+  float: right !important;
+  margin-left: 1em !important;
+  margin-bottom: 0.5em !important;
+  margin-top: 0.5em !important;
+  display: block !important;
+}
+
+/* Inline images - flow with text like an emoji or icon */
+.page-content img[data-align="inline"] {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.25em;
+  /* Remove any block-level spacing that might break line flow */
+  margin-top: 0;
+  margin-bottom: 0;
+  /* Note: Best for small images (icons, emojis). Large images will break line flow naturally. */
+}
+
+/* Inline image node - true inline images that flow with text */
+.page-content img[data-inline="true"] {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  /* Match surrounding text size: 1em relative to current font-size */
+  max-height: 1em !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 0.25em !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  /* Ensure it doesn't break line flow */
+  float: none !important;
+  clear: none !important;
+}
+
+/* Clear floats after images to prevent layout issues */
+.page-content::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Indented paragraphs */
+.page-content p[data-indent],
+.page-content h1[data-indent],
+.page-content h2[data-indent],
+.page-content h3[data-indent] {
+  /* Indent is applied via inline style from TipTap */
 }
 
 /* Chapter and subchapter title styling - match original Chapter.css styling */

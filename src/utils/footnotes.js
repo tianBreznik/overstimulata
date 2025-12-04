@@ -14,13 +14,13 @@
 export const parseFootnotes = (content) => {
   if (!content) return { content: '', footnotes: [] };
   
-  const footnoteRegex = /\^\[([^\]]+)\]/g;
   const footnotes = [];
   let match;
   let footnoteIndex = 0;
-  
-  // Find all footnotes and collect them
-  while ((match = footnoteRegex.exec(content)) !== null) {
+
+  // 1) Legacy markdown-style syntax: ^[content]
+  const legacyRegex = /\^\[([^\]]+)\]/g;
+  while ((match = legacyRegex.exec(content)) !== null) {
     const fullMatch = match[0]; // ^[content]
     const footnoteContent = match[1]; // content
     const startIndex = match.index;
@@ -29,15 +29,48 @@ export const parseFootnotes = (content) => {
       id: `fn-${startIndex}`, // Unique ID based on position
       content: footnoteContent.trim(),
       index: startIndex,
-      fullMatch: fullMatch,
+      fullMatch,
     });
     
     footnoteIndex++;
   }
+
+  // 2) TipTap-generated HTML: <sup class="footnote-ref" data-id="" data-number="" data-content="...">n</sup>
+  const supRegex = /<sup([^>]*)>([\s\S]*?)<\/sup>/gi;
+  while ((match = supRegex.exec(content)) !== null) {
+    const attrs = match[1] || '';
+    const innerText = match[2] || '';
+
+    // Must have class containing "footnote-ref"
+    const classMatch = attrs.match(/class=["']([^"']*)["']/i);
+    if (!classMatch || !classMatch[1].split(/\s+/).includes('footnote-ref')) {
+      continue;
+    }
+
+    const idMatch = attrs.match(/data-(?:id|footnote-id)=["']([^"']+)["']/i);
+    const contentAttrMatch = attrs.match(/data-content=["']([^"']*)["']/i);
+    const numberAttrMatch = attrs.match(/data-(?:number|footnote-number)=["']([^"']+)["']/i);
+
+    const id = idMatch ? idMatch[1] : `fn-html-${footnoteIndex}`;
+    const textContent = contentAttrMatch ? contentAttrMatch[1] : '';
+    const number = numberAttrMatch ? parseInt(numberAttrMatch[1], 10) : null;
+
+    if (!textContent) continue;
+
+    footnotes.push({
+      id,
+      content: textContent.trim(),
+      index: match.index,
+      fullMatch: match[0],
+      number,
+    });
+
+    footnoteIndex++;
+  }
   
   return {
-    content: content, // Keep original for now, will be replaced during rendering
-    footnotes: footnotes,
+    content,
+    footnotes,
   };
 };
 
@@ -54,8 +87,9 @@ export const getAllFootnotes = (chapters) => {
   
   chapters.forEach((chapter) => {
     // Parse chapter content
-    if (chapter.content) {
-      const parsed = parseFootnotes(chapter.content);
+    const chapterSource = chapter.contentHtml || chapter.content;
+    if (chapterSource) {
+      const parsed = parseFootnotes(chapterSource);
       parsed.footnotes.forEach((fn) => {
         allFootnotes.push({
           ...fn,
@@ -69,8 +103,9 @@ export const getAllFootnotes = (chapters) => {
     // Parse subchapter content
     if (chapter.children) {
       chapter.children.forEach((subchapter) => {
-        if (subchapter.content) {
-          const parsed = parseFootnotes(subchapter.content);
+        const subSource = subchapter.contentHtml || subchapter.content;
+        if (subSource) {
+          const parsed = parseFootnotes(subSource);
           parsed.footnotes.forEach((fn) => {
             allFootnotes.push({
               ...fn,

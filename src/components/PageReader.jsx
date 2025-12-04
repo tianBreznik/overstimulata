@@ -340,16 +340,53 @@ export const PageReader = ({
             // Force reflow to apply CSS changes
             body.offsetHeight;
           },
-          getAvailableHeight: () => {
+          getAvailableHeight: (footnotesHeight = 0) => {
             // Return actual available height from CSS-applied styles
+            // IMPORTANT: Reserve bottom margin even when there are no footnotes (like a real book)
+            const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
             const height = body.clientHeight;
-            console.log('[getAvailableHeight] Returning:', height, 'body.clientHeight:', body.clientHeight, 'body.offsetHeight:', body.offsetHeight, 'body.scrollHeight:', body.scrollHeight);
-            return height;
+            // When footnotes exist, they replace the bottom margin (footnotes are larger)
+            // When no footnotes, use the bottom margin for consistent spacing
+            const reservedSpace = footnotesHeight > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
+            const availableHeight = Math.max(0, height - reservedSpace);
+            console.log('[getAvailableHeight] Returning:', availableHeight, '(full height:', height, '- reserved space:', reservedSpace, footnotesHeight > 0 ? '(footnotes)' : '(bottom margin)', ')');
+            return availableHeight;
           },
         };
       };
 
       const measure = createMeasureContainer();
+
+      // Helper to apply base paragraph CSS to measurement containers
+      // This ensures TipTap HTML (with inline text-align styles) is measured
+      // with the same base font/line-height/margin as .page-content p
+      const applyParagraphStylesToContainer = (container) => {
+        const paragraphs = container.querySelectorAll('p');
+        paragraphs.forEach(p => {
+          // Only apply if not already set (preserve inline styles from TipTap)
+          if (!p.style.fontSize) p.style.fontSize = '1.125rem';
+          if (!p.style.lineHeight) p.style.lineHeight = '1.2';
+          if (!p.style.margin) p.style.margin = '0.45rem 0';
+          if (!p.style.fontFamily) p.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
+        });
+        
+        // Apply poetry block styles to match actual rendering
+        const poetryBlocks = container.querySelectorAll('div.poetry');
+        poetryBlocks.forEach(poetry => {
+          // Apply poetry-specific styles that affect height measurement
+          if (!poetry.style.margin) poetry.style.margin = '1.5em 0';
+          if (!poetry.style.padding) poetry.style.padding = '0 1em';
+          if (!poetry.style.textAlign) poetry.style.textAlign = 'center';
+          if (!poetry.style.fontStyle) poetry.style.fontStyle = 'italic';
+          
+          // Apply styles to paragraphs inside poetry blocks
+          const poetryParagraphs = poetry.querySelectorAll('p');
+          poetryParagraphs.forEach(p => {
+            if (!p.style.margin) p.style.margin = '0.3em 0';
+            if (!p.style.lineHeight) p.style.lineHeight = '1.6';
+          });
+        });
+      };
 
       // Process chapters sequentially
       for (let chapterIdx = 0; chapterIdx < chapters.length; chapterIdx++) {
@@ -364,6 +401,7 @@ export const PageReader = ({
             type: 'chapter',
             title: chapter.title,
             content: chapter.contentHtml || chapter.content,
+            epigraph: chapter.epigraph ?? null,
             chapterId: chapter.id,
             subchapterId: null,
           });
@@ -377,6 +415,7 @@ export const PageReader = ({
                 type: 'subchapter',
                 title: subchapter.title,
                 content: subchapter.contentHtml || subchapter.content,
+                epigraph: subchapter.epigraph ?? null,
                 chapterId: chapter.id,
                 subchapterId: subchapter.id,
                 includeChapterTitle: !hasChapterContent && isFirstSubchapter, // Include chapter title if chapter has no content
@@ -402,17 +441,40 @@ export const PageReader = ({
         };
 
         // Helper to extract footnotes from HTML content
+        // Supports both legacy ^[content] syntax and TipTap-rendered
+        // <sup class="footnote-ref" data-content="..."> nodes.
         const extractFootnotesFromContent = (htmlContent) => {
-          const footnoteRegex = /\^\[([^\]]+)\]/g;
           const foundFootnotes = new Set();
+          if (!htmlContent) return foundFootnotes;
+
+          // 1) Legacy syntax ^[content]
+          const legacyRegex = /\^\[([^\]]+)\]/g;
           let match;
-          while ((match = footnoteRegex.exec(htmlContent)) !== null) {
+          while ((match = legacyRegex.exec(htmlContent)) !== null) {
             const footnoteContent = match[1].trim();
             const globalNumber = footnoteContentToNumber.get(footnoteContent);
             if (globalNumber) {
               foundFootnotes.add(globalNumber);
             }
           }
+
+          // 2) TipTap HTML <sup class="footnote-ref" data-content="...">
+          const supRegex = /<sup([^>]*)>([\s\S]*?)<\/sup>/gi;
+          while ((match = supRegex.exec(htmlContent)) !== null) {
+            const attrs = match[1] || '';
+            const classMatch = attrs.match(/class=["']([^"']*)["']/i);
+            if (!classMatch || !classMatch[1].split(/\s+/).includes('footnote-ref')) {
+              continue;
+            }
+            const contentAttrMatch = attrs.match(/data-content=["']([^"']*)["']/i);
+            if (!contentAttrMatch || !contentAttrMatch[1]) continue;
+            const trimmed = contentAttrMatch[1].trim();
+            const globalNumber = footnoteContentToNumber.get(trimmed);
+            if (globalNumber) {
+              foundFootnotes.add(globalNumber);
+            }
+          }
+
           return foundFootnotes;
         };
 
@@ -468,8 +530,13 @@ export const PageReader = ({
         // Helper to check if content + footnotes fit together
         const checkContentWithFootnotesFits = (contentElements, footnoteNumbers, availableHeight) => {
           // First, try to add all content
+          // Apply base paragraph styles to match actual rendering (without .page-content container rules)
           const tempContainer = document.createElement('div');
           tempContainer.style.width = measure.body.clientWidth + 'px';
+          // Apply the same font/line-height/margin rules that .page-content p uses
+          tempContainer.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
+          tempContainer.style.fontSize = '1.18rem';
+          tempContainer.style.lineHeight = '1.62';
           measure.body.appendChild(tempContainer);
           
           contentElements.forEach(el => {
@@ -477,6 +544,9 @@ export const PageReader = ({
             temp.innerHTML = el;
             tempContainer.appendChild(temp.firstElementChild || temp);
           });
+          
+          // Apply base paragraph styles to match actual rendering
+          applyParagraphStylesToContainer(tempContainer);
           
           // Check if content alone fits
           const contentHeight = tempContainer.offsetHeight;
@@ -502,19 +572,22 @@ export const PageReader = ({
           };
         };
 
-        // Check if element is atomic (cannot be split): images, videos, headings, karaoke
+        // Check if element is atomic (cannot be split): images, videos, headings, poetry
+        // NOTE: Karaoke blocks CAN be split (they have their own splitting logic via handleKaraokeElement)
         const isAtomicElement = (element) => {
           const tagName = element.tagName?.toLowerCase();
           // Atomic elements: images, videos, headings
           if (['img', 'video', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6'].includes(tagName)) {
             return true;
           }
-          // Karaoke blocks
-          if (element.classList.contains('karaoke') || element.hasAttribute('data-karaoke')) {
+          // NOTE: Karaoke blocks are NOT atomic - they can be split across pages
+          // They are handled separately by handleKaraokeElement before this check
+          // Poetry blocks - must stay together as a unit
+          if (element.classList.contains('poetry') || element.tagName?.toLowerCase() === 'div' && element.classList.contains('poetry')) {
             return true;
           }
           // Elements containing atomic children
-          if (element.querySelector('img, video, [data-karaoke], .karaoke')) {
+          if (element.querySelector('img, video, [data-karaoke], .karaoke, .poetry')) {
             return true;
           }
           return false;
@@ -552,18 +625,18 @@ export const PageReader = ({
             tempContainer.appendChild(temp.firstElementChild || temp);
           });
           
+          // Apply base paragraph styles to match actual rendering
+          applyParagraphStylesToContainer(tempContainer);
+          
           // Measure current page height with footnotes
           const footnotesHeight = measureFootnotesHeight(currentPageFootnotes, tempContainer);
           const currentHeight = tempContainer.offsetHeight;
-          const baseAvailableHeight = measure.getAvailableHeight();
+          // Pass footnotes height so getAvailableHeight can use it instead of bottom margin when footnotes exist
+          const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight);
           
-          // CRITICAL: In the actual rendered page, content has padding-bottom equal to footnotesHeight
-          // to prevent overlap with absolutely positioned footnotes. This padding creates a gap
-          // if content + padding < availableHeight. 
-          // 
-          // The gap = baseAvailableHeight - (currentHeight + footnotesHeight)
-          // This is the space between content and footnotes that we can fill
-          const remainingSpace = baseAvailableHeight - currentHeight - footnotesHeight;
+          // CRITICAL: getAvailableHeight already accounts for footnotes (or bottom margin)
+          // So remainingSpace = baseAvailableHeight - currentHeight
+          const remainingSpace = baseAvailableHeight - currentHeight;
           
           console.log('[tryFillRemainingSpace] Measurement:', {
             currentHeight,
@@ -631,8 +704,9 @@ export const PageReader = ({
             nextElementFootnotes.forEach(num => testFootnotes.add(num));
             const footnotesHeightBefore = measureFootnotesHeight(testFootnotes, tempContainer2);
             // CRITICAL: Reserve footnote space first, then calculate remaining content space
-            const baseAvailableHeight = measure.getAvailableHeight();
-            const remainingSpaceBefore = baseAvailableHeight - currentHeightBefore - footnotesHeightBefore;
+            // getAvailableHeight uses footnotes height when provided, or bottom margin when not
+            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeightBefore);
+            const remainingSpaceBefore = baseAvailableHeight - currentHeightBefore;
             
             measure.body.removeChild(tempContainer2);
             
@@ -663,9 +737,9 @@ export const PageReader = ({
               const testFootnotesWithNext = new Set([...currentPageFootnotes, ...nextElementFootnotes]);
               
               // Check if content fits in space after reserving footnotes
-              const baseAvailableHeightForAtomic = measure.getAvailableHeight();
               const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, measure.body);
-              const contentAvailableHeightForAtomic = Math.max(0, baseAvailableHeightForAtomic - testFootnotesHeightForAtomic);
+              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic);
+              const contentAvailableHeightForAtomic = baseAvailableHeightForAtomic;
               
               const tempCheckContainerAtomic = document.createElement('div');
               tempCheckContainerAtomic.style.width = measure.body.clientWidth + 'px';
@@ -676,6 +750,9 @@ export const PageReader = ({
                 temp.innerHTML = el;
                 tempCheckContainerAtomic.appendChild(temp.firstElementChild || temp);
               });
+              
+              // Apply base paragraph styles to match actual rendering
+              applyParagraphStylesToContainer(tempCheckContainerAtomic);
               
               const contentHeightAtomic = tempCheckContainerAtomic.offsetHeight;
               measure.body.removeChild(tempCheckContainerAtomic);
@@ -709,9 +786,9 @@ export const PageReader = ({
               
               // Try entire element first
               // Check if content fits in space after reserving footnotes
-              const baseAvailableHeightForAtomic = measure.getAvailableHeight();
               const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, measure.body);
-              const contentAvailableHeightForAtomic = Math.max(0, baseAvailableHeightForAtomic - testFootnotesHeightForAtomic);
+              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic);
+              const contentAvailableHeightForAtomic = baseAvailableHeightForAtomic;
               
               const tempCheckContainerAtomic = document.createElement('div');
               tempCheckContainerAtomic.style.width = measure.body.clientWidth + 'px';
@@ -722,6 +799,9 @@ export const PageReader = ({
                 temp.innerHTML = el;
                 tempCheckContainerAtomic.appendChild(temp.firstElementChild || temp);
               });
+              
+              // Apply base paragraph styles to match actual rendering
+              applyParagraphStylesToContainer(tempCheckContainerAtomic);
               
               const contentHeightAtomic = tempCheckContainerAtomic.offsetHeight;
               measure.body.removeChild(tempCheckContainerAtomic);
@@ -747,13 +827,11 @@ export const PageReader = ({
               
               // Entire element doesn't fit, try to split it
               // CRITICAL: remainingContentHeight should be the space available for content
-              // availableHeight is the full body height
-              // currentHeightBefore is the current content height
-              // footnotesHeightBefore is the space needed for footnotes (absolutely positioned)
-              // So: remainingContentHeight = baseAvailableHeight - currentHeightBefore - footnotesHeightBefore
-              // This gives us the space between content and footnotes that we can fill
-              const baseAvailableHeightForSplit = measure.getAvailableHeight();
-              const remainingContentHeight = Math.max(0, baseAvailableHeightForSplit - currentHeightBefore - footnotesHeightBefore);
+              // getAvailableHeight already accounts for footnotes (or bottom margin)
+              // So: remainingContentHeight = baseAvailableHeight - currentHeightBefore
+              // This gives us the space between content and footnotes (or bottom margin) that we can fill
+              const baseAvailableHeightForSplit = measure.getAvailableHeight(footnotesHeightBefore);
+              const remainingContentHeight = Math.max(0, baseAvailableHeightForSplit - currentHeightBefore);
               
               console.log('[tryFillRemainingSpace] Entire element does NOT fit. Trying to split.', {
                 baseAvailableHeight: baseAvailableHeightForSplit,
@@ -797,9 +875,9 @@ export const PageReader = ({
                   const firstPartFootnotes = extractFootnotesFromContent(splitResult.first);
                   const testFootnotesWithFirst = new Set([...currentPageFootnotes, ...firstPartFootnotes]);
                   // Check if first part fits in space after reserving footnotes
-                  const baseAvailableHeightForFirstPart = measure.getAvailableHeight();
                   const firstPartFootnotesHeight = measureFootnotesHeight(testFootnotesWithFirst, measure.body);
-                  const firstPartContentAvailableHeight = Math.max(0, baseAvailableHeightForFirstPart - firstPartFootnotesHeight);
+                  const baseAvailableHeightForFirstPart = measure.getAvailableHeight(firstPartFootnotesHeight);
+                  const firstPartContentAvailableHeight = baseAvailableHeightForFirstPart;
                   
                   const tempCheckContainerFirstPart = document.createElement('div');
                   tempCheckContainerFirstPart.style.width = measure.body.clientWidth + 'px';
@@ -899,7 +977,7 @@ export const PageReader = ({
             : 0;
           
           // Standard bottom margin when there are no footnotes (for consistent page spacing)
-          const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~3rem in pixels (consistent spacing)
+          const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
           
           // Larger bottom margin for karaoke pages (karaoke elements need more space)
           const BOTTOM_MARGIN_KARAOKE = 64; // ~4rem in pixels (more space for karaoke)
@@ -1411,11 +1489,13 @@ export const PageReader = ({
           let cursor = 0;
           while (cursor < fullText.length) {
             // Reserve space for footnotes OR bottom margin when calculating available height for karaoke
-            const baseAvailableHeight = measure.getAvailableHeight();
+            // Karaoke uses a larger bottom margin (64px instead of 48px)
             const footnotesHeight = measureFootnotesHeight(currentPageFootnotes);
             const BOTTOM_MARGIN_KARAOKE = 64; // ~4rem in pixels (more space for karaoke)
+            // For karaoke, use the larger bottom margin when no footnotes
             const reservedSpace = currentPageFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_KARAOKE;
-            const availableHeight = Math.max(0, baseAvailableHeight - reservedSpace);
+            const fullHeight = measure.body.clientHeight;
+            const availableHeight = Math.max(0, fullHeight - reservedSpace);
             const remainingText = fullText.slice(cursor);
 
             const tempElement = document.createElement('div');
@@ -1468,6 +1548,37 @@ export const PageReader = ({
         for (let blockIdx = 0; blockIdx < contentBlocks.length; blockIdx++) {
           const block = contentBlocks[blockIdx];
           
+          // Create epigraph page if epigraph exists
+          let epigraphText = '';
+          let epigraphAuthor = '';
+          let epigraphAlign = 'center';
+          if (block.epigraph && typeof block.epigraph === 'object') {
+            epigraphText = (block.epigraph.text || '').trim();
+            epigraphAuthor = (block.epigraph.author || '').trim();
+            epigraphAlign = block.epigraph.align || 'center';
+          } else if (typeof block.epigraph === 'string') {
+            epigraphText = block.epigraph.trim();
+          }
+          
+          if (epigraphText) {
+            newPages.push({
+              chapterIndex: chapterIdx,
+              chapterId: chapter.id,
+              chapterTitle: chapter.title,
+              subchapterId: block.subchapterId,
+              subchapterTitle: block.type === 'subchapter' ? block.title : null,
+              pageIndex: chapterPageIndex,
+              hasHeading: false,
+              isEpigraph: true,
+              epigraphText,
+              epigraphAuthor,
+              epigraphAlign,
+              content: '',
+              footnotes: [],
+            });
+            chapterPageIndex += 1;
+          }
+          
           const tempContainer = document.createElement('div');
           tempContainer.style.position = 'absolute';
           tempContainer.style.visibility = 'hidden';
@@ -1485,6 +1596,23 @@ export const PageReader = ({
           contentDiv.style.color = '#0a0a0a';
           
           let htmlContent = block.content;
+          
+          // Extract videos from content before processing
+          const videoElements = [];
+          const videoRegex = /<video[^>]*>[\s\S]*?<\/video>/gi;
+          let videoMatch;
+          while ((videoMatch = videoRegex.exec(htmlContent)) !== null) {
+            const videoHtml = videoMatch[0];
+            const videoSrcMatch = videoHtml.match(/src=["']([^"']+)["']/i);
+            if (videoSrcMatch) {
+              videoElements.push({
+                src: videoSrcMatch[1],
+                html: videoHtml,
+              });
+            }
+            // Remove video from content (we'll render it separately)
+            htmlContent = htmlContent.replace(videoMatch[0], '');
+          }
           
           // Replace long dashes with short hyphens
           // Replace em dash (—) and en dash (–) with regular hyphen (-)
@@ -1538,10 +1666,13 @@ export const PageReader = ({
           for (let elementIndex = 0; elementIndex < elements.length; elementIndex++) {
             const element = elements[elementIndex];
             const isHeadingElement = /^H[1-6]$/i.test(element.tagName || '');
+            const isSubchapterTitle = /^H[4-6]$/i.test(element.tagName || '');
             
             // Update heading state if needed (affects available height)
+            // IMPORTANT: Only apply page-with-heading when there's a subchapter title (h4-h6)
+            // Chapter titles (h3) alone don't need the extra padding-top
             // IMPORTANT: Do this BEFORE calculating available height so measurements are accurate
-            if (isHeadingElement && !pageHasHeading) {
+            if (isSubchapterTitle && !pageHasHeading) {
               pageHasHeading = true;
               measure.setHeading(true);
               // Force a reflow to ensure CSS changes take effect before measurement
@@ -1561,29 +1692,22 @@ export const PageReader = ({
 
             // STEP 1: Calculate available content height
             // This is the fundamental consideration: footnotes reserve space FIRST
-            // Get available height AFTER heading state is set (if it changed)
-            const baseAvailableHeight = measure.getAvailableHeight();
-            
             // Calculate footnotes that would be on this page (current + this element's footnotes)
             const testFootnotes = new Set(currentPageFootnotes);
             const elementFootnotes = extractFootnotesFromContent(element.outerHTML);
             elementFootnotes.forEach(num => testFootnotes.add(num));
             
-            // Measure footnote height
+            // Measure footnote height first, then get available height
+            // Get available height AFTER heading state is set (if it changed)
             const tempFootnotesContainer = document.createElement('div');
             tempFootnotesContainer.style.width = measure.body.clientWidth + 'px';
             measure.body.appendChild(tempFootnotesContainer);
             const footnotesHeight = measureFootnotesHeight(testFootnotes, tempFootnotesContainer);
             measure.body.removeChild(tempFootnotesContainer);
             
-            // Standard bottom margin when there are no footnotes (for consistent page spacing)
-            const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~3rem in pixels (consistent spacing)
-            
-            // Content available height = base height - (footnote height OR bottom margin)
-            // When footnotes exist: contentAvailableHeight = baseAvailableHeight - footnotesHeight
-            // When no footnotes: contentAvailableHeight = baseAvailableHeight - BOTTOM_MARGIN_NO_FOOTNOTES
-            const reservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
-            const contentAvailableHeight = Math.max(0, baseAvailableHeight - reservedSpace);
+            // Get available height - it will use footnotes height if provided, or bottom margin if not
+            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight);
+            const contentAvailableHeight = baseAvailableHeight;
 
             // STEP 2: Check if element fits by measuring TOTAL content (current page + element)
             // This ensures we account for footnotes correctly
@@ -1598,6 +1722,9 @@ export const PageReader = ({
               tempTotalContainer.appendChild(temp.firstElementChild || temp);
             });
             
+            // Apply base paragraph styles to match actual rendering
+            applyParagraphStylesToContainer(tempTotalContainer);
+            
             const totalContentHeight = tempTotalContainer.offsetHeight;
             measure.body.removeChild(tempTotalContainer);
             
@@ -1609,6 +1736,7 @@ export const PageReader = ({
             const elementFits = totalContentHeight <= contentAvailableHeight - safetyMargin;
             
             // Calculate remaining space for splitting (if needed)
+            // IMPORTANT: Apply paragraph styles to get accurate measurement
             const tempCurrentPageContainer = document.createElement('div');
             tempCurrentPageContainer.style.width = measure.body.clientWidth + 'px';
             measure.body.appendChild(tempCurrentPageContainer);
@@ -1619,12 +1747,39 @@ export const PageReader = ({
               tempCurrentPageContainer.appendChild(temp.firstElementChild || temp);
             });
             
+            // Apply base paragraph styles to match actual rendering
+            applyParagraphStylesToContainer(tempCurrentPageContainer);
+            
             const currentPageContentHeight = tempCurrentPageContainer.offsetHeight;
             measure.body.removeChild(tempCurrentPageContainer);
             
             const remainingContentHeight = Math.max(0, contentAvailableHeight - currentPageContentHeight);
             
+            // Debug: log the calculation to see why remainingContentHeight might be wrong
+            if (currentPageElements.length > 0) {
+              console.log('[Pagination] Remaining height calculation:', {
+                contentAvailableHeight,
+                currentPageContentHeight,
+                remainingContentHeight,
+                currentPageElementsCount: currentPageElements.length,
+                lastElementPreview: currentPageElements[currentPageElements.length - 1]?.substring(0, 100)
+              });
+            }
+            
             // STEP 4: Handle element based on whether it fits and if it can be split
+            // Log every element to see which ones are being processed
+            const elementText = element.textContent?.substring(0, 100) || '';
+            console.log('[Pagination] Processing element:', {
+              tagName: element.tagName,
+              className: element.className,
+              textPreview: elementText + (element.textContent?.length > 100 ? '...' : ''),
+              textLength: element.textContent?.length,
+              elementFits,
+              remainingContentHeight,
+              isAtomic: isAtomicElement(element),
+              currentPageElementsCount: currentPageElements.length
+            });
+            
             if (isAtomicElement(element)) {
               // Atomic elements (images, videos, headings, karaoke): cannot be split
               if (elementFits) {
@@ -1651,9 +1806,12 @@ export const PageReader = ({
                 measure.body.appendChild(finalTestContainer);
                 
                 // Simulate the actual rendering with padding-bottom
+                // Calculate reserved space: footnotes height if footnotes exist, otherwise bottom margin
+                const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
+                const finalReservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
                 const finalContentWrapper = document.createElement('div');
                 finalContentWrapper.className = 'page-content-main';
-                finalContentWrapper.style.paddingBottom = reservedSpace + 'px';
+                finalContentWrapper.style.paddingBottom = finalReservedSpace + 'px';
                 
                 finalTestElements.forEach(el => {
                   const temp = document.createElement('div');
@@ -1661,86 +1819,328 @@ export const PageReader = ({
                   finalContentWrapper.appendChild(temp.firstElementChild || temp);
                 });
                 
+                // Apply base paragraph styles to match actual rendering
+                applyParagraphStylesToContainer(finalContentWrapper);
+                
                 finalTestContainer.appendChild(finalContentWrapper);
                 const finalTotalHeight = finalTestContainer.offsetHeight;
                 measure.body.removeChild(finalTestContainer);
                 
-                // If total height (content + padding) exceeds baseAvailableHeight, don't add
-                if (finalTotalHeight > baseAvailableHeight) {
-                  // Content doesn't actually fit with padding - start new page
-                  if (currentPageElements.length > 0) {
-                    pushPage(block);
+                // If total height (content + padding) exceeds baseAvailableHeight, try to split instead of pushing
+                // BUT: If overflow is very small (< 20px) AND this is likely the last element (small remaining space),
+                // just include it anyway (better UX than splitting)
+                // ALSO: If remainingContentHeight is very small (< 30px) and element is long enough, try to split
+                // This prevents paragraphs from being pushed to next page when there's a tiny bit of space left
+                const overflowAmount = finalTotalHeight - baseAvailableHeight;
+                const shouldTrySplitDueToSmallSpace = remainingContentHeight < 30 && 
+                                                      remainingContentHeight > 0 &&
+                                                      element.textContent && 
+                                                      element.textContent.length > 100;
+                
+                // Only allow small overflow tolerance if:
+                // 1. This is the last element in the array (no more elements to process), OR
+                // 2. Remaining space is very small (< 50px) AND overflow is small (< 20px)
+                // This prevents multiple elements from overflowing while allowing the last element to fit
+                const isLastElement = elementIndex === elements.length - 1;
+                const isLikelyLastElement = remainingContentHeight < 50 && overflowAmount < 20;
+                const allowSmallOverflow = (isLastElement || isLikelyLastElement) && overflowAmount < 20 && overflowAmount > 0;
+                
+                // Only attempt split if overflow is significant (>= 20px) or there's very little space left
+                // BUT: Allow small overflow (< 20px) only for the last element or when remaining space is very small
+                // ALSO: Skip split if remaining space is very small (< 50px) and element is long - push whole element instead
+                const elementTextLength = element.textContent?.length || 0;
+                const shouldSkipSplitDueToSmallSpace = remainingContentHeight < 50 && 
+                                                        remainingContentHeight > 0 &&
+                                                        elementTextLength > 100; // Element is long enough that split would likely be awkward
+                
+                if ((overflowAmount >= 20 || shouldTrySplitDueToSmallSpace) && finalTotalHeight > baseAvailableHeight && !allowSmallOverflow && !shouldSkipSplitDueToSmallSpace) {
+                  console.log('[Pagination] Attempting split:', {
+                    reason: overflowAmount >= 20 ? 'overflows with padding' : 'small remaining space',
+                    finalTotalHeight,
+                    baseAvailableHeight,
+                    overflowAmount,
+                    remainingContentHeight,
+                    elementText: element.textContent?.substring(0, 100)
+                  });
+                  
+                  // Content doesn't actually fit with padding OR there's very little space left - try to split it
+                  // Use remainingContentHeight for splitting (space left on current page)
+                  let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight);
+                  if (!splitResult.first && !splitResult.second) {
+                    splitResult = splitTextAtWordBoundary(element, remainingContentHeight);
                   }
-                  startNewPage(false);
-                  elementFootnotes.forEach(num => currentPageFootnotes.add(num));
-                  currentPageElements.push(element.outerHTML);
+                  
+                  const { first, second } = splitResult;
+                  
+                  if (first && remainingContentHeight > 0) {
+                    // Check if first part is too short (just a few words) - if so, push whole element to next page
+                    const firstPartText2 = first.replace(/<[^>]*>/g, '').trim(); // Strip HTML tags to get text
+                    const firstPartWordCount2 = firstPartText2.split(/\s+/).filter(w => w.length > 0).length;
+                    const isFirstPartTooShort2 = firstPartWordCount2 < 8; // Less than 8 words is too short
+                    
+                    console.log('[Pagination] Split result check (elementFits=false):', {
+                      firstPartText: firstPartText2.substring(0, 100),
+                      firstPartWordCount: firstPartWordCount2,
+                      isFirstPartTooShort: isFirstPartTooShort2,
+                      remainingContentHeight
+                    });
+                    
+                    // If first part is too short, push whole element to next page immediately
+                    if (isFirstPartTooShort2) {
+                      console.log('[Pagination] First part too short, pushing whole element to next page (elementFits=false)');
+                      // Push whole element to next page - avoid split that would leave very short first part
+                      if (currentPageElements.length > 0) {
+                        pushPage(block);
+                      }
+                      startNewPage(false);
+                      elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(element.outerHTML);
+                      continue; // Skip to next element in the loop
+                    }
+                    // Check if first part is too short (just a few words) - if so, push whole element to next page
+                    const firstPartText = first.replace(/<[^>]*>/g, '').trim(); // Strip HTML tags to get text
+                    const firstPartWordCount = firstPartText.split(/\s+/).filter(w => w.length > 0).length;
+                    const isFirstPartTooShort = firstPartWordCount < 8; // Less than 8 words is too short
+                    
+                    console.log('[Pagination] Split result check:', {
+                      firstPartText: firstPartText.substring(0, 100),
+                      firstPartWordCount,
+                      isFirstPartTooShort,
+                      remainingContentHeight
+                    });
+                    
+                    // If first part is too short, push whole element to next page immediately (before measuring)
+                    if (isFirstPartTooShort) {
+                      console.log('[Pagination] First part too short, pushing whole element to next page');
+                      // Push whole element to next page - avoid split that would leave very short first part
+                      if (currentPageElements.length > 0) {
+                        pushPage(block);
+                      }
+                      startNewPage(false);
+                      elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(element.outerHTML);
+                      // Skip the rest of the split logic and continue to next element in the loop
+                      continue;
+                    }
+                    
+                    // Measure how much space the first part would actually use
+                    const firstPartTestContainer = document.createElement('div');
+                    firstPartTestContainer.style.width = measure.body.clientWidth + 'px';
+                    measure.body.appendChild(firstPartTestContainer);
+                    
+                    const firstPartTestElements = [...currentPageElements, first];
+                    const firstPartContentWrapper = document.createElement('div');
+                    firstPartContentWrapper.className = 'page-content-main';
+                    firstPartContentWrapper.style.paddingBottom = finalReservedSpace + 'px';
+                    
+                    firstPartTestElements.forEach(el => {
+                      const temp = document.createElement('div');
+                      temp.innerHTML = el;
+                      firstPartContentWrapper.appendChild(temp.firstElementChild || temp);
+                    });
+                    
+                    applyParagraphStylesToContainer(firstPartContentWrapper);
+                    firstPartTestContainer.appendChild(firstPartContentWrapper);
+                    const firstPartHeight = firstPartTestContainer.offsetHeight;
+                    measure.body.removeChild(firstPartTestContainer);
+                    
+                    const firstPartRemainingSpace = baseAvailableHeight - firstPartHeight;
+                    
+                    // Case 1: First part leaves significant unused space (> 50px) and overflow was small (< 20px)
+                    // -> Don't split, include whole element with small overflow
+                    if (firstPartRemainingSpace > 50 && overflowAmount < 20) {
+                      // Don't split - include whole element with small overflow
+                      elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(element.outerHTML);
+                    }
+                    // Case 2: First part leaves very little to no space (< 30px) and overflow was small (< 20px)
+                    // -> Push whole element to next page instead of splitting (avoids unnecessary tiny first part)
+                    else if (firstPartRemainingSpace < 30 && overflowAmount < 20) {
+                      // Push whole element to next page - avoid split that would leave tiny first part
+                      if (currentPageElements.length > 0) {
+                        pushPage(block);
+                      }
+                      startNewPage(false);
+                      elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(element.outerHTML);
+                    }
+                    // Case 4: First part uses space well - proceed with split
+                    else {
+                      // First part uses space well - proceed with split
+                      const firstFootnotes = extractFootnotesFromContent(first);
+                      firstFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(first);
+                      
+                      // Push current page and start new page with second part
+                      pushPage(block);
+                      startNewPage(false);
+                      if (second) {
+                        const secondFootnotes = extractFootnotesFromContent(second);
+                        secondFootnotes.forEach(num => currentPageFootnotes.add(num));
+                        currentPageElements.push(second);
+                      }
+                    }
+                  } else {
+                    // Can't split or no space left - push entire element to next page
+                    if (currentPageElements.length > 0) {
+                      pushPage(block);
+                    }
+                    startNewPage(false);
+                    elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                    currentPageElements.push(element.outerHTML);
+                  }
                 } else {
                   // Content fits - add to current page
                   elementFootnotes.forEach(num => currentPageFootnotes.add(num));
                   currentPageElements.push(element.outerHTML);
                 }
               } else {
-                // Element doesn't fit - split it using REMAINING space, not total available space
-                // Try sentence-level splitting first, then word boundary
-                let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight);
-                if (!splitResult.first && !splitResult.second) {
-                  splitResult = splitTextAtWordBoundary(element, remainingContentHeight);
+                // Element doesn't fit - check if we should even attempt to split
+                // If remaining space is very small and element is long, pushing whole element might be better
+                console.log('[Pagination] Element does not fit - checking if we can split:', {
+                  remainingContentHeight,
+                  elementText: element.textContent?.substring(0, 100),
+                  elementFits,
+                  currentPageElementsCount: currentPageElements.length
+                });
+                
+                // Check if we should skip splitting and push whole element instead
+                // Conditions: very small remaining space (< 50px) AND element is long enough that split would be awkward
+                const elementTextLength = element.textContent?.length || 0;
+                const shouldSkipSplit = remainingContentHeight < 50 && 
+                                        remainingContentHeight > 0 &&
+                                        elementTextLength > 100; // Element is long enough that split would likely be awkward
+                
+                if (shouldSkipSplit) {
+                  console.log('[Pagination] Skipping split - remaining space too small, pushing whole element to next page');
+                  // Push whole element to next page instead of attempting split
+                  if (currentPageElements.length > 0) {
+                    pushPage(block);
+                  }
+                  startNewPage(false);
+                  elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                  currentPageElements.push(element.outerHTML);
+                  continue; // Skip to next element
                 }
                 
-                const { first, second } = splitResult;
-                
-                if (first) {
-                  // Verify first part actually fits with updated footnotes
-                  const firstFootnotes = extractFootnotesFromContent(first);
-                  const testFootnotesWithFirst = new Set([...currentPageFootnotes, ...firstFootnotes]);
-                  
-                  // Recalculate footnote height with first part's footnotes
-                  const tempFootnotesContainerFirst = document.createElement('div');
-                  tempFootnotesContainerFirst.style.width = measure.body.clientWidth + 'px';
-                  measure.body.appendChild(tempFootnotesContainerFirst);
-                  const footnotesHeightWithFirst = measureFootnotesHeight(testFootnotesWithFirst, tempFootnotesContainerFirst);
-                  measure.body.removeChild(tempFootnotesContainerFirst);
-                  
-                  const contentAvailableHeightWithFirst = Math.max(0, baseAvailableHeight - footnotesHeightWithFirst);
-                  
-                  // Measure current page + first part
-                  const tempFirstPartContainer = document.createElement('div');
-                  tempFirstPartContainer.style.width = measure.body.clientWidth + 'px';
-                  measure.body.appendChild(tempFirstPartContainer);
-                  
-                  currentPageElements.forEach(el => {
-                    const temp = document.createElement('div');
-                    temp.innerHTML = el;
-                    tempFirstPartContainer.appendChild(temp.firstElementChild || temp);
+                if (remainingContentHeight > 0) {
+                  // Debug: log element structure to understand why splitting might fail
+                  console.log('[Pagination] Attempting to split element:', {
+                    tagName: element.tagName,
+                    className: element.className,
+                    textLength: element.textContent?.length,
+                    htmlPreview: element.outerHTML.substring(0, 200),
+                    remainingContentHeight,
+                    isParagraph: element.tagName === 'P',
+                    hasBrTags: element.querySelectorAll('br').length,
+                    childCount: element.childNodes.length
                   });
                   
-                  const tempFirst = document.createElement('div');
-                  tempFirst.innerHTML = first;
-                  tempFirstPartContainer.appendChild(tempFirst.firstElementChild || tempFirst);
+                  // Try sentence-level splitting first, then word boundary
+                  let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight);
+                  console.log('[Pagination] Sentence split result:', {
+                    hasFirst: !!splitResult.first,
+                    hasSecond: !!splitResult.second,
+                    firstPreview: splitResult.first?.substring(0, 100),
+                    secondPreview: splitResult.second?.substring(0, 100)
+                  });
                   
-                  const totalHeightWithFirst = tempFirstPartContainer.offsetHeight;
-                  measure.body.removeChild(tempFirstPartContainer);
+                  if (!splitResult.first && !splitResult.second) {
+                    console.log('[Pagination] Sentence split failed, trying word boundary');
+                    splitResult = splitTextAtWordBoundary(element, remainingContentHeight);
+                    console.log('[Pagination] Word boundary split result:', {
+                      hasFirst: !!splitResult.first,
+                      hasSecond: !!splitResult.second,
+                      firstPreview: splitResult.first?.substring(0, 100),
+                      secondPreview: splitResult.second?.substring(0, 100)
+                    });
+                  }
                   
-                  const firstPartFits = totalHeightWithFirst <= contentAvailableHeightWithFirst;
+                  const { first, second } = splitResult;
                   
-                  if (firstPartFits) {
-                    // First part fits - add it to current page
-                    firstFootnotes.forEach(num => currentPageFootnotes.add(num));
-                    currentPageElements.push(first);
+                  // Log the actual text content to see where the split happened
+                  if (first || second) {
+                    const tempDiv1 = document.createElement('div');
+                    if (first) tempDiv1.innerHTML = first;
+                    const firstText = tempDiv1.textContent || '';
                     
-                    // Finalize current page
-                    if (currentPageElements.length > 0) {
-                      pushPage(block);
-                    }
+                    const tempDiv2 = document.createElement('div');
+                    if (second) tempDiv2.innerHTML = second;
+                    const secondText = tempDiv2.textContent || '';
                     
-                    // Start new page with second part
-                    startNewPage(false);
+                    console.log('[Pagination] Split text content:', {
+                      firstText: firstText.substring(0, 200) + (firstText.length > 200 ? '...' : ''),
+                      secondText: secondText.substring(0, 200) + (secondText.length > 200 ? '...' : ''),
+                      firstTextLength: firstText.length,
+                      secondTextLength: secondText.length,
+                      splitPoint: firstText.length,
+                      originalTextLength: element.textContent?.length
+                    });
+                  }
+                  
+                  if (first) {
+                    // Verify first part actually fits with updated footnotes
+                    const firstFootnotes = extractFootnotesFromContent(first);
+                    const testFootnotesWithFirst = new Set([...currentPageFootnotes, ...firstFootnotes]);
                     
-                    if (second) {
-                      const secondFootnotes = extractFootnotesFromContent(second);
-                      secondFootnotes.forEach(num => currentPageFootnotes.add(num));
-                      currentPageElements.push(second);
-                    }
+                    // Recalculate available height with first part's footnotes
+                    const tempFootnotesContainerFirst = document.createElement('div');
+                    tempFootnotesContainerFirst.style.width = measure.body.clientWidth + 'px';
+                    measure.body.appendChild(tempFootnotesContainerFirst);
+                    const footnotesHeightWithFirst = measureFootnotesHeight(testFootnotesWithFirst, tempFootnotesContainerFirst);
+                    measure.body.removeChild(tempFootnotesContainerFirst);
+                    
+                    // baseAvailableHeight already accounts for footnotes, but we need to recalculate with new footnotes
+                    const baseAvailableHeightWithFirst = measure.getAvailableHeight(footnotesHeightWithFirst);
+                    const contentAvailableHeightWithFirst = baseAvailableHeightWithFirst;
+                    
+                    // Measure JUST the first part (not the entire page)
+                    // We already know there's remainingContentHeight available, so check if first part fits in that
+                    const tempFirstPartOnly = document.createElement('div');
+                    tempFirstPartOnly.style.width = measure.body.clientWidth + 'px';
+                    measure.body.appendChild(tempFirstPartOnly);
+                    
+                    const tempFirst = document.createElement('div');
+                    tempFirst.innerHTML = first;
+                    tempFirstPartOnly.appendChild(tempFirst.firstElementChild || tempFirst);
+                    
+                    // Apply base paragraph styles to match actual rendering
+                    applyParagraphStylesToContainer(tempFirstPartOnly);
+                    
+                    const firstPartHeight = tempFirstPartOnly.offsetHeight;
+                    measure.body.removeChild(tempFirstPartOnly);
+                    
+                    // Check if first part fits in the remaining space
+                    const firstPartFits = firstPartHeight <= remainingContentHeight;
+                    
+                    console.log('[Pagination] First part fit check:', {
+                      firstPartHeight,
+                      remainingContentHeight,
+                      firstPartFits,
+                      difference: remainingContentHeight - firstPartHeight,
+                      currentPageElementsCount: currentPageElements.length,
+                      firstPartHTML: first.substring(0, 150),
+                      note: 'first is the HTML string of the first portion of the split paragraph'
+                    });
+                    
+                    if (firstPartFits) {
+                      // First part fits - add it to current page
+                      firstFootnotes.forEach(num => currentPageFootnotes.add(num));
+                      currentPageElements.push(first);
+                      
+                      // Finalize current page
+                      if (currentPageElements.length > 0) {
+                        pushPage(block);
+                      }
+                      
+                      // Start new page with second part
+                      startNewPage(false);
+                      
+                      if (second) {
+                        const secondFootnotes = extractFootnotesFromContent(second);
+                        secondFootnotes.forEach(num => currentPageFootnotes.add(num));
+                        currentPageElements.push(second);
+                      }
                   } else {
                     // First part doesn't actually fit - start new page with entire element
                     if (currentPageElements.length > 0) {
@@ -1750,8 +2150,17 @@ export const PageReader = ({
                     elementFootnotes.forEach(num => currentPageFootnotes.add(num));
                     currentPageElements.push(element.outerHTML);
                   }
+                  } else {
+                    // No split possible (first is empty) - start new page with entire element
+                    if (currentPageElements.length > 0) {
+                      pushPage(block);
+                    }
+                    startNewPage(false);
+                    elementFootnotes.forEach(num => currentPageFootnotes.add(num));
+                    currentPageElements.push(element.outerHTML);
+                  }
                 } else {
-                  // Can't fit even part of element - start new page with entire element
+                  // Can't fit even part of element (no remaining space) - start new page with entire element
                   if (currentPageElements.length > 0) {
                     pushPage(block);
                   }
@@ -1766,6 +2175,26 @@ export const PageReader = ({
           // Finalize last page if there's any content
           if (currentPageElements.length > 0) {
             pushPage(block);
+          }
+
+          // Create video pages after block content (blank pages with fullscreen autoplay videos)
+          if (videoElements.length > 0) {
+            videoElements.forEach((video) => {
+              newPages.push({
+                chapterIndex: chapterIdx,
+                chapterId: chapter.id,
+                chapterTitle: chapter.title,
+                subchapterId: block.subchapterId,
+                subchapterTitle: block.type === 'subchapter' ? block.title : null,
+                pageIndex: chapterPageIndex,
+                hasHeading: false,
+                isVideo: true,
+                videoSrc: video.src,
+                content: '',
+                footnotes: [],
+              });
+              chapterPageIndex += 1;
+            });
           }
 
           document.body.removeChild(tempContainer);
@@ -3612,14 +4041,44 @@ export const PageReader = ({
         ref={pageContainerRef}
         className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
       >
-        <article className="page-sheet content-page">
+        <article className={`page-sheet content-page ${pageToDisplay.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay.isVideo ? 'video-page' : ''}`}>
           <section className="page-body content-body">
-            <div 
-              key={pageKey}
-              ref={pageContentRefCallback} 
-              className="page-content" 
-              dangerouslySetInnerHTML={{ __html: pageToDisplay.content }} 
-            />
+            {pageToDisplay.isEpigraph ? (
+              <div 
+                key={pageKey}
+                ref={pageContentRefCallback} 
+                className="page-content epigraph-content"
+              >
+                <div className={`epigraph-text epigraph-align-${pageToDisplay.epigraphAlign || 'center'}`}>
+                  <div>{pageToDisplay.epigraphText}</div>
+                  {pageToDisplay.epigraphAuthor && (
+                    <div className="epigraph-author">– {pageToDisplay.epigraphAuthor}</div>
+                  )}
+                </div>
+              </div>
+            ) : pageToDisplay.isVideo ? (
+              <div 
+                key={pageKey}
+                ref={pageContentRefCallback} 
+                className="page-content video-content"
+              >
+                <video
+                  src={pageToDisplay.videoSrc}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="fullscreen-video"
+                />
+              </div>
+            ) : (
+              <div 
+                key={pageKey}
+                ref={pageContentRefCallback} 
+                className="page-content" 
+                dangerouslySetInnerHTML={{ __html: pageToDisplay.content }} 
+              />
+            )}
           </section>
         </article>
       </div>

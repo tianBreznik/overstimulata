@@ -76,6 +76,18 @@
   border-radius: 0; /* no rounded corners */
   box-shadow: -6px 0 10px rgba(0,0,0,0.025); /* lighter outer separation */
   position: relative; /* anchor floating actions to entire popup */
+  display: flex;
+  flex-direction: column;
+  min-height: 0; /* Allow flex children to shrink */
+  overflow: hidden; /* Prevent content from overflowing */
+}
+
+/* Ensure editor-content fills remaining space after close button */
+.side-panel-modal > .editor-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .editor-header { display:none; }
@@ -135,6 +147,7 @@
 
 .editor-content {
   flex: 1;
+  min-height: 0; /* Allow flex children to shrink */
   overflow: hidden;
   padding: 0; /* full-bleed */
   display: flex;
@@ -147,7 +160,41 @@
 
 .form-group label { display:none; }
 
-.title-row { margin: 0; padding: 8px 10px; background: #fdfdfd; position: relative; }
+.epigraph-row {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.epigraph-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: #0c0c0c;
+  resize: vertical;
+  min-height: 3em;
+}
+
+.epigraph-input:focus {
+  outline: none;
+}
+
+.epigraph-input::placeholder {
+  color: #8c8c8c;
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+.title-row { 
+  margin: 0; 
+  padding: 8px 10px; 
+  background: #fdfdfd; 
+  position: relative; 
+  flex-shrink: 0; /* Don't allow title row to shrink */
+}
 .title-input {
   width: 100%;
   padding: 10px 12px;
@@ -161,13 +208,7 @@
   font-family: Helvetica, Arial, sans-serif;
   background: #fdfdfd; /* match toolbar background */
   color: #000;
-  outline: none;
-  cursor: text;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
-
 .title-input:focus {
   outline: none;
   background: #fafafa; /* keep same background */
@@ -190,6 +231,21 @@
   box-shadow: 0 0 0 2px rgba(0,122,255,0.15);
 }
 
+/* Epigraph button in toolbar actions */
+.toolbar-actions .epigraph-btn {
+  margin-right: 0.5rem;
+}
+
+.toolbar-actions .epigraph-btn span.icon {
+  font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+  .toolbar-buttons .karaoke-btn {
+    display: none;
+  }
+}
+
 .page-frame {
   border-top: none;
   flex: 1;
@@ -197,6 +253,18 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Scroll container wrapper for TipTap editor */
+/* SimpleBar will handle the scrolling */
+.content-editor-wrapper {
+  width: 100%;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  /* SimpleBar needs explicit height to work - use flex: 1 instead of height: 100% */
+  display: flex;
+  flex-direction: column;
 }
 
 .content-editor {
@@ -215,18 +283,308 @@
   color: #111;
   box-sizing: border-box;
   outline: none;
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
+  overflow: visible; /* Don't scroll here - parent wrapper scrolls */
   box-shadow: none; /* no internal shadow */
 }
 
-.content-editor::-webkit-scrollbar {
-  width: 18px;
+/* Ensure TipTap's ProseMirror editor can grow naturally */
+.content-editor-wrapper .ProseMirror {
+  outline: none;
+  overflow: visible;
+  /* Let it grow naturally - parent wrapper will scroll */
+  min-height: 100%;
+  position: relative;
+  padding: 16px 18px;
+  background: #ffffff;
+  font-family: Helvetica, Arial, sans-serif;
+  font-size: 1.06rem;
+  line-height: 1.8;
+  letter-spacing: 0.005em;
+  color: #111;
 }
 
-.content-editor::-webkit-scrollbar-track {
+/* Image resize container and handle */
+.content-editor-wrapper .ProseMirror .image-resize-container {
+  position: relative;
+  display: inline-block;
+  width: auto;
+  height: auto;
+  /* Container should wrap the image, not stretch to full width */
+  max-width: none;
+}
+
+.content-editor-wrapper .ProseMirror .image-resize-handle {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 20px;
+  height: 20px;
+  background: #4285f4;
+  border: 2px solid white;
+  border-radius: 50%;
+  cursor: nwse-resize;
+  z-index: 10;
+  display: none;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.content-editor-wrapper .ProseMirror .image-resize-handle > div {
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 1;
+  pointer-events: none;
+  user-select: none;
+}
+
+.content-editor-wrapper .ProseMirror .image-resize-container:hover .image-resize-handle,
+.content-editor-wrapper .ProseMirror .image-resize-container.selected .image-resize-handle {
+  display: flex !important;
+}
+
+/* Make handle larger and always visible on mobile for easier touch interaction */
+@media (max-width: 768px) {
+  .content-editor-wrapper .ProseMirror .image-resize-handle {
+    width: 32px;
+    height: 32px;
+    /* Make it more visible on mobile */
+    background: #4285f4;
+    border: 3px solid white;
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+  }
+  
+  .content-editor-wrapper .ProseMirror .image-resize-handle div {
+    font-size: 16px !important;
+  }
+  
+  /* Show handle when image container is tapped/selected on mobile */
+  .content-editor-wrapper .ProseMirror .image-resize-container.selected .image-resize-handle {
+    display: flex !important;
+  }
+}
+
+/* Image alignment and text wrapping in editor */
+.content-editor-wrapper .ProseMirror img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Exception: inline images should NOT be block */
+.content-editor-wrapper .ProseMirror img[data-inline="true"],
+.content-editor-wrapper .ProseMirror .inline-image-container img {
+  display: inline-block !important;
+}
+
+/* Center aligned images (default) - block, no wrap */
+.content-editor-wrapper .ProseMirror img[data-align="center"],
+.content-editor-wrapper .ProseMirror img:not([data-align]) {
+  display: block;
+  margin: 0.5em auto;
+}
+
+/* Left aligned images - float left, text wraps right */
+.content-editor-wrapper .ProseMirror img[data-align="left"] {
+  float: left;
+  margin-right: 1em;
+  margin-bottom: 0.5em;
+  margin-top: 0.5em;
+}
+
+/* Right aligned images - float right, text wraps left */
+.content-editor-wrapper .ProseMirror img[data-align="right"] {
+  float: right;
+  margin-left: 1em;
+  margin-bottom: 0.5em;
+  margin-top: 0.5em;
+}
+
+/* Inline images - flow with text */
+.content-editor-wrapper .ProseMirror img[data-align="inline"] {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.25em;
+  /* Remove any block-level spacing that might break line flow */
+  margin-top: 0;
+  margin-bottom: 0;
+  /* Note: Best for small images (icons, emojis). Large images will break line flow naturally. */
+}
+
+/* Inline image node - true inline images that flow with text */
+.content-editor-wrapper .ProseMirror img[data-inline="true"],
+.content-editor-wrapper .ProseMirror .inline-image-container img,
+.content-editor-wrapper .ProseMirror span.inline-image-container img {
+  display: inline-block !important;
+  vertical-align: middle !important;
+  /* Match surrounding text size: 1em relative to current font-size */
+  max-height: 1em !important;
+  max-width: 200px !important;
+  width: auto !important;
+  height: auto !important;
+  margin: 0 0.25em !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+  /* Ensure it doesn't break line flow */
+  float: none !important;
+  clear: none !important;
+  /* Remove any width/height attributes via CSS */
+  object-fit: contain !important;
+}
+
+/* Also target the container */
+.content-editor-wrapper .ProseMirror .inline-image-container {
+  display: inline !important;
+  max-width: 200px !important;
+}
+
+/* Intro paragraph preview */
+.content-editor-wrapper .ProseMirror p.para-intro {
+  margin-top: 0.9rem;
+  margin-bottom: 0.9rem;
+  font-style: italic;
+}
+
+/* Whisper / aside paragraph style */
+.content-editor-wrapper .ProseMirror p.para-whisper {
+  font-style: italic;
+  color: #777;
+  opacity: 0.95;
+}
+
+/* Epigraph paragraph style */
+.content-editor-wrapper .ProseMirror p.para-epigraph {
+  text-align: center;
+  font-style: italic;
+  font-size: 0.95em;
+  color: #555;
+  margin-top: 1.2em;
+  margin-bottom: 1.2em;
+  padding: 0 1em;
+}
+
+/* Poetry block */
+.content-editor-wrapper .ProseMirror div.poetry {
+  text-align: center;
+  font-style: italic;
+  margin: 1.2em 0;
+  padding: 0 1em;
+}
+
+.content-editor-wrapper .ProseMirror div.poetry p {
+  margin: 0.25em 0;
+  line-height: 1.6;
+}
+
+
+/* Clear floats after images to prevent layout issues */
+.content-editor-wrapper .ProseMirror::after {
+  content: "";
+  display: table;
+  clear: both;
+}
+
+/* Ensure karaoke blocks don't break ProseMirror scrolling */
+.content-editor-wrapper .ProseMirror .karaoke-editor-marker {
+  position: relative;
+  display: block;
+  padding: 0.65rem 0.75rem;
+  margin: 0.75rem 0;
+  border: 1px dashed rgba(90, 90, 90, 0.28);
+  background: rgba(240, 240, 240, 0.35);
+  border-radius: 10px;
+  box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.05);
+  max-width: 100%;
+  overflow: visible;
+  word-wrap: break-word;
+  pointer-events: auto;
+  user-select: none;
+}
+
+.content-editor-wrapper .ProseMirror .karaoke-editor-marker::before {
+  content: '';
+}
+
+
+/* Scrollbar styles for the scroll container */
+/* Using SimpleBar for cross-platform custom scrollbar (including iOS Safari) */
+.content-editor-wrapper {
+  position: relative;
+}
+
+/* Hide native scrollbar when SimpleBar is active */
+.content-editor-wrapper .simplebar-content-wrapper {
+  overflow: auto;
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* IE/Edge */
+  height: 100%;
+  flex: 1;
+  min-height: 0;
+}
+
+.content-editor-wrapper .simplebar-content-wrapper::-webkit-scrollbar {
+  display: none; /* Chrome/Safari */
+}
+
+/* SimpleBar scrollbar track - match desktop styling */
+.content-editor-wrapper .simplebar-track {
+  width: 18px !important;
+  right: 0 !important;
+  background: transparent !important;
+}
+
+.content-editor-wrapper .simplebar-track.simplebar-vertical {
+  width: 18px !important;
+}
+
+.content-editor-wrapper .simplebar-track.simplebar-vertical .simplebar-scrollbar {
+  width: 18px !important;
+  right: 0 !important;
+}
+
+/* SimpleBar scrollbar track background - match desktop */
+.content-editor-wrapper .simplebar-track.simplebar-vertical {
+  background: #ffffff !important;
+  border-left: 1px solid rgba(255,255,255,0.9) !important;
+  border-top: 1px solid rgba(255,255,255,0.9) !important;
+  border-right: 1px solid rgba(0,0,0,0.55) !important;
+  border-bottom: 1px solid rgba(0,0,0,0.55) !important;
+  box-shadow:
+    inset 2px 2px 3px rgba(255,255,255,0.85),
+    inset -2px -2px 3px rgba(0,0,0,0.25) !important;
+}
+
+/* SimpleBar scrollbar thumb - match desktop styling */
+.content-editor-wrapper .simplebar-scrollbar {
+  background: linear-gradient(180deg, #eaeaea 0%, #dcdcdc 50%, #e2e2e2 100%) !important;
+  border-left: 1px solid rgba(255,255,255,0.9) !important;
+  border-top: 1px solid rgba(255,255,255,0.9) !important;
+  border-right: 1px solid rgba(0,0,0,0.45) !important;
+  border-bottom: 1px solid rgba(0,0,0,0.45) !important;
+  box-shadow:
+    inset 2px 2px 3px rgba(255,255,255,0.85),
+    inset -2px -2px 4px rgba(0,0,0,0.18) !important;
+  border-radius: 0 !important;
+  right: 0 !important;
+  opacity: 1 !important; /* Always visible, not just on hover */
+}
+
+.content-editor-wrapper .simplebar-scrollbar::before {
+  display: none; /* Remove SimpleBar's default opacity overlay */
+}
+
+/* Desktop webkit scrollbar fallback (when SimpleBar is not active) */
+.content-editor-wrapper::-webkit-scrollbar {
+  width: 18px;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.content-editor-wrapper::-webkit-scrollbar-track {
   background: #ffffff;
   border-left: 1px solid rgba(255,255,255,0.9);
   border-top: 1px solid rgba(255,255,255,0.9);
@@ -237,7 +595,7 @@
     inset -2px -2px 3px rgba(0,0,0,0.25);
 }
 
-.content-editor::-webkit-scrollbar-thumb {
+.content-editor-wrapper::-webkit-scrollbar-thumb {
   background: linear-gradient(180deg, #eaeaea 0%, #dcdcdc 50%, #e2e2e2 100%);
   border-left: 1px solid rgba(255,255,255,0.9);
   border-top: 1px solid rgba(255,255,255,0.9);
@@ -249,12 +607,12 @@
   border-radius: 0;
 }
 
-.content-editor {
+.content-editor-wrapper {
   scrollbar-width: thin;
   scrollbar-color: #0c0c0c #ffffff;
 }
 
-.content-editor::-webkit-scrollbar-button {
+.content-editor-wrapper::-webkit-scrollbar-button {
   height: 20px;
   width: 18px;
   background: linear-gradient(180deg, #f0f0f0 0%, #dcdcdc 100%);
@@ -265,13 +623,13 @@
     inset -2px -2px 3px rgba(0,0,0,0.25);
 }
 
-.content-editor::-webkit-scrollbar-button:start:increment,
-.content-editor::-webkit-scrollbar-button:end:decrement {
+.content-editor-wrapper::-webkit-scrollbar-button:start:increment,
+.content-editor-wrapper::-webkit-scrollbar-button:end:decrement {
   display: none;
 }
 
-.content-editor::-webkit-scrollbar-button:single-button:vertical:decrement::before,
-.content-editor::-webkit-scrollbar-button:single-button:vertical:increment::before {
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:decrement::before,
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:increment::before {
   content: '';
   position: absolute;
   left: 50%;
@@ -280,35 +638,49 @@
   border-style: solid;
 }
 
-.content-editor::-webkit-scrollbar-button:single-button:vertical:decrement::before {
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:decrement::before {
   border-width: 7px 6px 0 6px;
   border-color: #0c0c0c transparent transparent transparent;
 }
 
-.content-editor::-webkit-scrollbar-button:single-button:vertical:increment::before {
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:increment::before {
   border-width: 0 6px 7px 6px;
   border-color: transparent transparent #0c0c0c transparent;
 }
 
-.content-editor::-webkit-scrollbar-button:single-button:vertical:decrement {
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:decrement {
   border-left: 1px solid rgba(255,255,255,0.9);
   border-top: 1px solid rgba(255,255,255,0.9);
   border-right: 1px solid rgba(0,0,0,0.55);
   border-bottom: 1px solid rgba(0,0,0,0.40);
 }
 
-.content-editor::-webkit-scrollbar-button:single-button:vertical:increment {
+.content-editor-wrapper::-webkit-scrollbar-button:single-button:vertical:increment {
   border-left: 1px solid rgba(255,255,255,0.9);
   border-top: 1px solid rgba(255,255,255,0.75);
   border-right: 1px solid rgba(0,0,0,0.55);
   border-bottom: 1px solid rgba(0,0,0,0.55);
 }
 
-.content-editor:focus { border: none; outline: none; }
+.content-editor-wrapper .ProseMirror:focus { border: none; outline: none; }
 
-.content-editor img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
+.content-editor-wrapper .ProseMirror img { max-width: 100%; height: auto; display: block; margin: 8px 0; }
 
-.content-editor iframe { max-width: 100%; height: auto; display: block; margin: 8px 0; aspect-ratio: 16 / 9; }
+/* Exception: inline images should NOT be block */
+.content-editor-wrapper .ProseMirror img[data-inline="true"],
+.content-editor-wrapper .ProseMirror .inline-image-container img {
+  display: inline-block !important;
+  margin: 0 0.25em !important;
+}
+
+/* Intro paragraph preview in editor */
+.content-editor-wrapper .ProseMirror p.para-intro {
+  margin-top: 0.9rem;
+  margin-bottom: 0.9rem;
+  font-style: italic;
+}
+
+.content-editor-wrapper .ProseMirror iframe { max-width: 100%; height: auto; display: block; margin: 8px 0; aspect-ratio: 16 / 9; }
 
 /* Video dialog */
 .video-dialog-overlay {
@@ -408,6 +780,13 @@
   z-index: 2000;
 }
 
+@media (max-width: 768px) {
+  .karaoke-dialog-overlay {
+    left: 0 !important; /* Full screen on mobile */
+    z-index: 9999999 !important; /* Above editor overlay (999999) */
+  }
+}
+
 .karaoke-dialog {
   background: #f5f5f5; /* Light gray background */
   border: 1px solid #999; /* Darker gray border */
@@ -422,6 +801,15 @@
   overflow-y: auto;
 }
 
+/* Epigraph dialog specific styling */
+.karaoke-dialog.epigraph-dialog-wrapper {
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
 .karaoke-dialog-content {
   flex: 1;
   padding: 20px;
@@ -429,6 +817,12 @@
   flex-direction: column;
   gap: 16px;
   background: white; /* Content area is white */
+}
+
+/* Epigraph dialog content should be transparent */
+.karaoke-dialog-content.epigraph-dialog {
+  background: transparent;
+  padding: 16px;
 }
 
 .karaoke-dialog h3 {
@@ -559,6 +953,60 @@
   background: #f0f0f0;
 }
 
+/* Epigraph dialog tweaks */
+.epigraph-dialog {
+  gap: 10px;
+  background: transparent;
+}
+
+.epigraph-dialog-title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+.epigraph-align-buttons {
+  display: flex;
+  gap: 4px;
+}
+
+/* Text fields should have white background */
+.epigraph-dialog .form-group textarea,
+.epigraph-dialog .form-group input[type="text"] {
+  background: #ffffff;
+}
+
+.epigraph-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.epigraph-save-btn,
+.epigraph-delete-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  min-width: 88px;
+  border: 1px solid #e3e5ea;
+}
+
+.epigraph-save-btn {
+  background: linear-gradient(180deg, #fdfdfd 0%, #f3f4f6 100%);
+  color: #111;
+}
+
+.epigraph-delete-btn {
+  background: linear-gradient(180deg, #ffecec 0%, #f9d4d4 100%);
+  color: #7a1111;
+  border-color: #f1b0b0;
+}
+
 .content-editor:empty:before {
   content: "napiši nekaj";
   color: #999;
@@ -575,6 +1023,15 @@
   background: rgba(240, 240, 240, 0.35);
   border-radius: 10px;
   box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.05);
+  /* Ensure karaoke block doesn't break scrolling */
+  max-width: 100%;
+  overflow: visible;
+  word-wrap: break-word;
+  /* Prevent karaoke block from interfering with editor scroll */
+  pointer-events: auto;
+  user-select: none;
+  /* Ensure it's in normal document flow */
+  position: static;
 }
 
 .content-editor .karaoke-editor-marker::before {
@@ -594,6 +1051,7 @@
   align-items: center;
   justify-content: space-between;
   box-shadow: 0 1px 0 rgba(0,0,0,0.02); /* minimal handoff */
+  flex-shrink: 0; /* Don't allow toolbar to shrink */
 }
 
 .toolbar-buttons {
@@ -605,7 +1063,7 @@
 .toolbar-actions {
   display: flex;
   align-items: center;
-  margin-left: 12px;
+  margin-left: 4px; /* Match button gap so star feels part of the toolbar row */
 }
 
 .toolbar-save-btn {
@@ -795,7 +1253,10 @@
 }
 
 /* Ruler */
-.ruler { display:none; }
+.ruler { 
+  display:none; 
+  flex-shrink: 0; /* Don't allow ruler to shrink */
+}
 .ruler-track { display:none; }
 .ruler-num { display:none; }
 .ruler-num::before { display:none; }
@@ -902,16 +1363,37 @@
   }
   
   .editor-content {
-    height: calc(100vh - 120px) !important; /* Account for toolbar and title */
-    max-height: calc(100vh - 120px) !important;
+    height: 99vh !important; /* Use viewport height percentage for better scaling */
+    max-height: 99vh !important;
     overflow: hidden !important;
+    display: flex !important;
+    flex-direction: column !important;
   }
   
-  .content-editor {
-    overflow-y: auto !important;
-    overflow-x: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
-    height: 100% !important;
+  .page-frame {
+    flex: 1 !important;
+    min-height: 0 !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  .content-editor-wrapper {
+    flex: 1 !important;
+    min-height: 0 !important;
+    /* Ensure karaoke blocks don't break scrolling */
+    position: relative !important;
+    /* SimpleBar handles scrolling on mobile too */
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  
+  /* SimpleBar styles apply on mobile too - no need for separate mobile scrollbar CSS */
+  
+  /* Ensure karaoke blocks in editor don't interfere with scrolling */
+  .content-editor-wrapper .ProseMirror .karaoke-editor-marker {
+    position: relative !important;
+    max-width: 100% !important;
+    overflow: visible !important;
   }
   
   .editor-toolbar {
@@ -957,7 +1439,7 @@
     font-size: 1.4rem !important;
   }
   
-  .content-editor {
+  .content-editor-wrapper .ProseMirror {
     padding: 1rem !important;
     font-size: 16px !important;
     line-height: 1.6 !important;

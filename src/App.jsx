@@ -58,11 +58,13 @@ function App() {
             ...c,
             id: c.id,
             content: c.contentHtml ?? '',
+            epigraph: c.epigraph ?? '',
             version: c.version ?? 0,
             children: subs.map((s) => ({
               ...s,
               id: s.id,
               content: s.contentHtml ?? '',
+              epigraph: s.epigraph ?? '',
               version: s.version ?? 0,
               parentChapterId: c.id,
             })),
@@ -120,6 +122,7 @@ function App() {
         setEditingChapter({
           ...fresh,
           content: fresh.contentHtml ?? '',
+          epigraph: fresh.epigraph ?? '',
           version: fresh.version ?? 0,
           parentChapterId: parentId,
         });
@@ -130,6 +133,7 @@ function App() {
         setEditingChapter({
           ...fresh,
           content: fresh.contentHtml ?? '',
+          epigraph: fresh.epigraph ?? '',
           version: fresh.version ?? 0,
           children: matching?.children ?? [],
         });
@@ -344,6 +348,7 @@ function App() {
                       return {
                         ...chapter,
                         title: updated.title ?? chapter.title,
+                        epigraph: updated.epigraph ?? chapter.epigraph,
                         content: html,
                         contentHtml: updated.contentHtml ?? chapter.contentHtml,
                         version: updated.version ?? chapter.version,
@@ -367,6 +372,7 @@ function App() {
                             return {
                               ...child,
                               title: updated.title ?? child.title,
+                              epigraph: updated.epigraph ?? child.epigraph,
                               content: html,
                               contentHtml: updated.contentHtml ?? child.contentHtml,
                               version: updated.version ?? child.version,

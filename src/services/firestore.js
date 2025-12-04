@@ -42,7 +42,7 @@ export async function getSubchapters(bookId, chapterId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function addChapter(bookId, { title, slug, contentHtml, order }) {
+export async function addChapter(bookId, { title, slug, contentHtml, epigraph, order }) {
   // If no order specified, get the next available order number
   if (!order) {
     const existingChapters = await getChapters(bookId);
@@ -54,6 +54,7 @@ export async function addChapter(bookId, { title, slug, contentHtml, order }) {
     title,
     slug: slug ?? title?.toLowerCase().replace(/\s+/g, '-'),
     contentHtml: contentHtml ?? '',
+    epigraph: epigraph ?? '',
     order,
     isPublished: true,
     createdAt: serverTimestamp(),
@@ -101,7 +102,7 @@ export async function deleteChapter(bookId, chapterId) {
   return deleteDoc(chapterDoc(bookId, chapterId));
 }
 
-export async function addSubchapter(bookId, chapterId, { title, slug, contentHtml, contentDelta, order, audioUrl, wordTimings }) {
+export async function addSubchapter(bookId, chapterId, { title, slug, contentHtml, contentDelta, epigraph, order, audioUrl, wordTimings }) {
   // If no order specified, get the next available order number
   if (!order) {
     const existingSubchapters = await getSubchapters(bookId, chapterId);
@@ -114,6 +115,7 @@ export async function addSubchapter(bookId, chapterId, { title, slug, contentHtm
     slug: slug ?? title?.toLowerCase().replace(/\s+/g, '-'),
     contentHtml: contentHtml ?? '',
     contentDelta: contentDelta ?? null,
+    epigraph: epigraph ?? '',
     audioUrl: audioUrl ?? null,
     wordTimings: wordTimings ?? null,
     order,
