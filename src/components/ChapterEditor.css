@@ -480,6 +480,20 @@
   line-height: 1.6;
 }
 
+.content-editor-wrapper .ProseMirror div.dinkus,
+.content-editor-wrapper .ProseMirror p.dinkus {
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.content-editor-wrapper .ProseMirror .dinkus-image {
+  max-width: 40px;
+  width: auto;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
 
 /* Clear floats after images to prevent layout issues */
 .content-editor-wrapper .ProseMirror::after {

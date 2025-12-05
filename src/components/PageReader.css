@@ -257,6 +257,21 @@
   padding: 0 1em;
 }
 
+/* Dinkus styling */
+.page-content div.dinkus,
+.page-content p.dinkus {
+  text-align: center;
+  margin: 0.5rem 0;
+}
+
+.page-content .dinkus-image {
+  max-width: 40px;
+  width: auto;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
 /* Epigraph page styling */
 .epigraph-page .page-body {
   display: flex;
@@ -265,7 +280,7 @@
   justify-content: flex-start;
   text-align: center;
   padding-bottom: 11.5rem; /* lift it slightly above the very bottom edge */
-  padding-left: 8rem
+  padding-left: 8rem;
 }
 
 .epigraph-content {
@@ -310,6 +325,88 @@
 
 .epigraph-align-right {
   text-align: right;
+}
+
+/* Cover page styling */
+.cover-page .page-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+  box-sizing: border-box;
+  position: relative;
+}
+
+.cover-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  padding: 2rem;
+  box-sizing: border-box;
+  /* Override any page-content constraints */
+  max-width: 100% !important;
+  min-width: 100% !important;
+}
+
+.cover-title {
+  position: absolute;
+  top: 12%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  width: 98%;
+  max-width: none;
+  z-index: 2;
+  text-align: center;
+}
+
+.cover-title-image {
+  width: 100%;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.cover-author {
+  position: absolute;
+  bottom: 20%;
+  left: 8%;
+  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-size: 1rem;
+  color: #1f140a;
+  text-align: left;
+  margin: 0;
+  z-index: 2;
+  text-shadow:
+    0 0 0.5px rgba(0,0,0,0.45),
+    0 0.1px 0.6px rgba(0,0,0,0.35),
+    0 0.2px 0.9px rgba(0,0,0,0.3),
+   -0.1px 0 0.6px rgba(0,0,0,0.35),
+   -0.2px 0 0.9px rgba(0,0,0,0.3),
+    0.1px 0.1px 0.75px rgba(0,0,0,0.3),
+    0.075px 0.075px 0.6px currentColor,
+   -0.075px 0.075px 0.6px currentColor,
+    0.075px -0.075px 0.6px currentColor;
+  -webkit-text-stroke: 0.125px rgba(0,0,0,0.25);
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures;
+}
+
+.cover-illustration {
+  position: absolute;
+  bottom: 20%;
+  right: 15%;
+  width: 35%;
+  max-width: 180px;
+  z-index: 1;
+}
+
+.cover-feathers-image {
+  width: 100%;
+  height: auto;
+  display: block;
 }
 
 /* Video page styling - break out of container to cover full screen */
@@ -582,6 +679,7 @@
 .page-content h2[data-indent],
 .page-content h3[data-indent] {
   /* Indent is applied via inline style from TipTap */
+  display: block;
 }
 
 /* Chapter and subchapter title styling - match original Chapter.css styling */

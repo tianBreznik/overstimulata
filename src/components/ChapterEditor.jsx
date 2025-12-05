@@ -1023,22 +1023,38 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   };
 
 
-  const applyBold = () => {
+  const applyBold = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editor) return;
     editor.chain().focus().toggleBold().run();
     refreshToolbarState();
   };
-  const applyItalic = () => {
+  const applyItalic = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editor) return;
     editor.chain().focus().toggleItalic().run();
     refreshToolbarState();
   };
-  const applyStrikethrough = () => {
+  const applyStrikethrough = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editor) return;
     editor.chain().focus().toggleStrike().run();
     refreshToolbarState();
   };
-  const applyUnderline = () => {
+  const applyUnderline = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!editor) return;
     editor.chain().focus().toggleUnderline().run();
     refreshToolbarState();
@@ -1274,6 +1290,12 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const applyPoetry = () => {
     if (!editor) return;
     editor.chain().focus().togglePoetry().run();
+    refreshToolbarState();
+  };
+
+  const applyDinkus = () => {
+    if (!editor) return;
+    editor.chain().focus().insertContent({ type: 'dinkus' }).run();
     refreshToolbarState();
   };
 
@@ -1980,6 +2002,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
             <div className="editor-toolbar attached">
               <div className="toolbar-buttons">
                 <button 
+                  type="button"
                   onClick={applyBold}
                   className={`toolbar-btn ${activeFormats.bold ? 'active' : ''}`}
                   title="Bold"
@@ -1987,6 +2010,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <strong>B</strong>
                 </button>
                 <button 
+                  type="button"
                   onClick={applyItalic}
                   className={`toolbar-btn ${activeFormats.italic ? 'active' : ''}`}
                   title="Italic"
@@ -1994,6 +2018,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <em>I</em>
                 </button>
                 <button 
+                  type="button"
                   onClick={applyStrikethrough}
                   className={`toolbar-btn ${activeFormats.strikethrough ? 'active' : ''}`}
                   title="Strikethrough"
@@ -2001,6 +2026,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <span style={{textDecoration: 'line-through'}}>S</span>
                 </button>
                 <button 
+                  type="button"
                   onClick={applyUnderline}
                   className={`toolbar-btn ${activeFormats.underline ? 'active' : ''}`}
                   title="Underline"
@@ -2257,6 +2283,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   title="Poetry formatting"
                 >
                   📜
+                </button>
+                <button
+                  onClick={applyDinkus}
+                  className="toolbar-btn"
+                  title="Dinkus (section separator)"
+                >
+                  <span style={{ fontSize: '0.9em', letterSpacing: '0.1em' }}>* * *</span>
                 </button>
                 <button 
                   onClick={applyDropCap}

@@ -289,6 +289,22 @@ export const PageReader = ({
       const newPages = [];
       const newKaraokeSources = {};
 
+      // Add cover page as the first page (before all chapters)
+      const coverPage = {
+        chapterIndex: -1, // Special index for cover
+        chapterId: null,
+        chapterTitle: null,
+        subchapterId: null,
+        subchapterTitle: null,
+        pageIndex: 0,
+        hasHeading: false,
+        isCover: true,
+        content: '',
+        footnotes: [],
+      };
+      newPages.push(coverPage);
+      console.log('[PageReader] Cover page added:', coverPage);
+
       // Get all footnotes globally for numbering
       const allFootnotes = getAllFootnotes(chapters);
       // Create a map of footnote content to global number for quick lookup
@@ -2251,15 +2267,19 @@ export const PageReader = ({
 
       measure.destroy();
 
-      // Update totalPages for each chapter
+      // Update totalPages for each chapter (exclude cover page from grouping)
       const pagesByChapter = {};
       newPages.forEach(page => {
+        // Skip cover page in chapter grouping
+        if (page.isCover) return;
         const key = `${page.chapterIndex}`;
         if (!pagesByChapter[key]) pagesByChapter[key] = [];
         pagesByChapter[key].push(page);
       });
       
       newPages.forEach(page => {
+        // Cover page doesn't need totalPages calculation
+        if (page.isCover) return;
         const key = `${page.chapterIndex}`;
         page.totalPages = pagesByChapter[key]?.length || 1;
       });
@@ -2268,24 +2288,35 @@ export const PageReader = ({
       setKaraokeSources(newKaraokeSources);
       
       // Restore initial position immediately when pages are calculated
+      // Cover page is always at index 0, so start there if no bookmark
       if (newPages.length > 0) {
+        // Find the cover page (should be first)
+        const coverPage = newPages.find(p => p.isCover);
+        
         if (initialPosition) {
           const { chapterId, pageIndex } = initialPosition;
-          const page = newPages.find(
-            (p) => p.chapterId === chapterId && p.pageIndex === (pageIndex || 0)
-          );
-          if (page) {
-            setCurrentChapterIndex(page.chapterIndex);
-            setCurrentPageIndex(page.pageIndex);
-          } else {
-            // Fallback to first page if saved position not found
-            setCurrentChapterIndex(0);
-            setCurrentPageIndex(0);
+          // Only restore position if it's NOT the cover page
+          if (chapterId !== null) {
+            const page = newPages.find(
+              (p) => !p.isCover && p.chapterId === chapterId && p.pageIndex === (pageIndex || 0)
+            );
+            if (page) {
+              setCurrentChapterIndex(page.chapterIndex);
+              setCurrentPageIndex(page.pageIndex);
+            } else if (coverPage) {
+              // Fallback to cover page if saved position not found
+              setCurrentChapterIndex(coverPage.chapterIndex);
+              setCurrentPageIndex(coverPage.pageIndex);
+            }
+          } else if (coverPage) {
+            // No chapterId means start at cover
+            setCurrentChapterIndex(coverPage.chapterIndex);
+            setCurrentPageIndex(coverPage.pageIndex);
           }
-        } else {
-          // No saved position, start at first page
-          setCurrentChapterIndex(0);
-          setCurrentPageIndex(0);
+        } else if (coverPage) {
+          // No saved position, start at cover page (first page)
+          setCurrentChapterIndex(coverPage.chapterIndex);
+          setCurrentPageIndex(coverPage.pageIndex);
         }
         // Mark initialization as complete
         setIsInitializing(false);
@@ -3108,36 +3139,66 @@ export const PageReader = ({
   const goToNextPage = useCallback(() => {
     if (isTransitioning || pages.length === 0) return;
 
+    // Find current page - if we're on cover, find cover; otherwise exclude cover
     const currentPage = pages.find(
-      (p) =>
-        p.chapterIndex === currentChapterIndex &&
-        p.pageIndex === currentPageIndex
+      (p) => {
+        if (currentChapterIndex === -1) {
+          // Looking for cover page
+          return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        } else {
+          // Looking for regular page - exclude cover
+          return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        }
+      }
     );
 
     if (!currentPage) {
-      // Fallback to first page if current not found
+      // Fallback to cover page if current not found (cover is always first)
       if (pages.length > 0) {
-        setIsTransitioning(true);
-        setCurrentChapterIndex(0);
-        setCurrentPageIndex(0);
-        requestAnimationFrame(() => {
+        const coverPage = pages.find(p => p.isCover);
+        if (coverPage) {
+          setIsTransitioning(true);
+          setCurrentChapterIndex(coverPage.chapterIndex);
+          setCurrentPageIndex(coverPage.pageIndex);
           requestAnimationFrame(() => {
-            setIsTransitioning(false);
+            requestAnimationFrame(() => {
+              setIsTransitioning(false);
+            });
           });
-        });
-        if (onPageChange && pages[0]) {
-          onPageChange({
-            chapterId: pages[0].chapterId,
-            pageIndex: 0,
-          });
+          if (onPageChange) {
+            onPageChange({
+              chapterId: null,
+              pageIndex: 0,
+            });
+          }
+        } else {
+          // No cover page, fallback to first non-cover page
+          const firstNonCoverPage = pages.find(p => !p.isCover);
+          if (firstNonCoverPage) {
+            setIsTransitioning(true);
+            setCurrentChapterIndex(firstNonCoverPage.chapterIndex);
+            setCurrentPageIndex(firstNonCoverPage.pageIndex);
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setIsTransitioning(false);
+              });
+            });
+            if (onPageChange) {
+              onPageChange({
+                chapterId: firstNonCoverPage.chapterId,
+                pageIndex: firstNonCoverPage.pageIndex,
+              });
+            }
+          }
         }
       }
       return;
     }
 
-    // Check if there's a next page in current chapter
+    // Check if there's a next page in current chapter (exclude cover page)
     const nextPageInChapter = pages.find(
       (p) =>
+        !p.isCover &&
         p.chapterIndex === currentChapterIndex &&
         p.pageIndex === currentPageIndex + 1
     );
@@ -3168,12 +3229,12 @@ export const PageReader = ({
         });
       }
     } else {
-      // Move to next chapter, first page
+      // Move to next chapter, first page (exclude cover page)
       if (!chapters || currentChapterIndex + 1 >= chapters.length) return;
       const nextChapter = chapters[currentChapterIndex + 1];
       if (nextChapter) {
         const firstPageOfNextChapter = pages.find(
-          (p) => p.chapterIndex === currentChapterIndex + 1 && p.pageIndex === 0
+          (p) => !p.isCover && p.chapterIndex === currentChapterIndex + 1 && p.pageIndex === 0
         );
         if (firstPageOfNextChapter) {
           setIsTransitioning(true);
@@ -3306,19 +3367,27 @@ export const PageReader = ({
   const goToPreviousPage = useCallback(() => {
     if (isTransitioning || pages.length === 0) return;
 
+    // Find current page - if we're on cover, find cover; otherwise exclude cover
     const currentPage = pages.find(
-      (p) =>
-        p.chapterIndex === currentChapterIndex &&
-        p.pageIndex === currentPageIndex
+      (p) => {
+        if (currentChapterIndex === -1) {
+          // Looking for cover page
+          return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        } else {
+          // Looking for regular page - exclude cover
+          return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        }
+      }
     );
 
     if (!currentPage) return;
 
     // Check if there's a previous page in current chapter
     if (currentPageIndex > 0) {
-      // Previous page in same chapter
+      // Previous page in same chapter (exclude cover)
       const prevPage = pages.find(
         (p) =>
+          !p.isCover &&
           p.chapterIndex === currentChapterIndex &&
           p.pageIndex === currentPageIndex - 1
       );
@@ -3347,12 +3416,12 @@ export const PageReader = ({
         }
       }
     } else {
-      // Move to previous chapter, last page
+      // Move to previous chapter, last page (exclude cover)
       if (currentChapterIndex > 0 && chapters && chapters.length > 0) {
         const prevChapter = chapters[currentChapterIndex - 1];
         if (prevChapter) {
           const lastPageOfPrevChapter = pages
-            .filter((p) => p.chapterIndex === currentChapterIndex - 1)
+            .filter((p) => !p.isCover && p.chapterIndex === currentChapterIndex - 1)
             .sort((a, b) => b.pageIndex - a.pageIndex)[0];
 
           if (lastPageOfPrevChapter) {
@@ -3556,18 +3625,34 @@ export const PageReader = ({
     [goToNextPage, goToPreviousPage, isTOCOpen]
   );
 
-  // Get current page data
+  // Get current page data - if we're on cover, find cover; otherwise exclude cover
   const currentPage = pages.find(
-    (p) =>
-      p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex
+    (p) => {
+      if (currentChapterIndex === -1) {
+        // Looking for cover page
+        return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+      } else {
+        // Looking for regular page - exclude cover
+        return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+      }
+    }
   );
 
   // Jump to a specific page (for TOC navigation)
   const jumpToPage = useCallback((targetChapterIndex, targetPageIndex) => {
     if (isTransitioning || pages.length === 0) return;
     
+    // Find target page - if target is cover, find cover; otherwise exclude cover
     const targetPage = pages.find(
-      (p) => p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex
+      (p) => {
+        if (targetChapterIndex === -1) {
+          // Looking for cover page
+          return p.isCover && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
+        } else {
+          // Looking for regular page - exclude cover
+          return !p.isCover && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
+        }
+      }
     );
     
     if (!targetPage) return;
@@ -4137,14 +4222,23 @@ export const PageReader = ({
     return <div className="page-reader-loading">Loading...</div>;
   }
 
-  // Calculate current page number (1-indexed)
+  // Calculate current page number (1-indexed, excluding cover page)
   const pageKey = `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`;
-  const currentPageNumber =
-    pages.findIndex(
+  
+  // For cover page, don't calculate page number
+  let currentPageNumber = 0;
+  let totalPages = 0;
+  
+  if (!pageToDisplay.isCover) {
+    // Find index excluding cover page
+    const nonCoverPages = pages.filter(p => !p.isCover);
+    const pageIndex = nonCoverPages.findIndex(
       (p) => p.chapterIndex === pageToDisplay.chapterIndex && p.pageIndex === pageToDisplay.pageIndex
-    ) + 1;
-  const totalPages = pages.length;
-  const shouldShowTopBar = !pageToDisplay.hasHeading && !pageToDisplay.isEpigraph;
+    );
+    currentPageNumber = pageIndex >= 0 ? pageIndex + 1 : 0;
+    totalPages = nonCoverPages.length;
+  }
+  const shouldShowTopBar = !pageToDisplay.hasHeading && !pageToDisplay.isEpigraph && !pageToDisplay.isCover;
 
   return (
     <div
@@ -4158,9 +4252,24 @@ export const PageReader = ({
         ref={pageContainerRef}
         className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
       >
-        <article className={`page-sheet content-page ${pageToDisplay.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay.isVideo ? 'video-page' : ''} ${pageToDisplay.backgroundVideo ? 'background-video-page' : ''}`}>
+        <article className={`page-sheet content-page ${pageToDisplay.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay.isVideo ? 'video-page' : ''} ${pageToDisplay.backgroundVideo ? 'background-video-page' : ''} ${pageToDisplay.isCover ? 'cover-page' : ''}`}>
           <section className="page-body content-body">
-            {pageToDisplay.backgroundVideo && (
+            {pageToDisplay.isCover ? (
+              <div 
+                key={pageKey}
+                className="cover-content"
+              >
+                <div className="cover-title">
+                  <img src="/weirdfeathers.png" alt="Weird Attachments" className="cover-title-image" />
+                </div>
+                <div className="cover-author">
+                  Ema Maznik Antic
+                </div>
+                <div className="cover-illustration">
+                  <img src="/cursor 1.png" alt="" className="cover-feathers-image" />
+                </div>
+              </div>
+            ) : pageToDisplay.backgroundVideo && (
               <>
                 <video
                   ref={backgroundVideoRef}
@@ -4229,7 +4338,7 @@ export const PageReader = ({
                   </button>
                 )}
               </div>
-            ) : (
+            ) : !pageToDisplay.isCover && (
               <div 
                 key={pageKey}
                 ref={pageContentRefCallback} 
@@ -4240,9 +4349,11 @@ export const PageReader = ({
           </section>
         </article>
       </div>
-      <div className="page-number">
-        {currentPageNumber}
-      </div>
+      {!pageToDisplay.isCover && (
+        <div className="page-number">
+          {currentPageNumber}
+        </div>
+      )}
       {shouldShowTopBar && (
         <ReaderTopBar
           chapterTitle={pageToDisplay.chapterTitle}

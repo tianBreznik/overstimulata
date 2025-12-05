@@ -124,28 +124,43 @@ export const Dinkus = Node.create({
   parseHTML() {
     return [
       {
+        tag: 'div.dinkus',
+      },
+      {
         tag: 'p.dinkus',
       },
       {
-        tag: 'div.dinkus',
+        tag: 'img.dinkus-image',
+        getAttrs: () => ({ isDinkus: true }),
       },
     ];
   },
 
   renderHTML() {
-    return ['p', { class: 'dinkus' }, '* * *'];
+    return ['div', { class: 'dinkus' }, ['img', { src: '/dinkus.png', alt: '', class: 'dinkus-image' }]];
   },
 
   addNodeView() {
     return () => {
-      const p = document.createElement('p');
-      p.className = 'dinkus';
-      p.textContent = '* * *';
-      p.style.textAlign = 'center';
-      p.style.margin = '1rem 0';
-      p.style.opacity = '0.5';
+      const container = document.createElement('div');
+      container.className = 'dinkus';
+      container.style.textAlign = 'center';
+      container.style.margin = '0.5rem 0';
+      
+      const img = document.createElement('img');
+      img.src = '/dinkus.png';
+      img.alt = '';
+      img.className = 'dinkus-image';
+      img.style.maxWidth = '40px';
+      img.style.width = 'auto';
+      img.style.height = 'auto';
+      img.style.display = 'block';
+      img.style.margin = '0 auto';
+      
+      container.appendChild(img);
+      
       return {
-        dom: p,
+        dom: container,
       };
     };
   },
@@ -357,6 +372,20 @@ export const TextColor = Mark.create({
 // Custom Mark for Underline
 export const Underline = Mark.create({
   name: 'underline',
+  
+  addCommands() {
+    return {
+      toggleUnderline: () => ({ chain }) => {
+        return chain().toggleMark(this.name).run();
+      },
+      setUnderline: () => ({ chain }) => {
+        return chain().setMark(this.name).run();
+      },
+      unsetUnderline: () => ({ chain }) => {
+        return chain().unsetMark(this.name).run();
+      },
+    };
+  },
   
   parseHTML() {
     return [
