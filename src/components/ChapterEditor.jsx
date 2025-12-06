@@ -2097,7 +2097,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="button"
                   onClick={applyBold}
                   className={`toolbar-btn ${activeFormats.bold ? 'active' : ''}`}
-                  title="Bold"
+                  title="Krepko"
                 >
                   <strong>B</strong>
                 </button>
@@ -2105,7 +2105,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="button"
                   onClick={applyItalic}
                   className={`toolbar-btn ${activeFormats.italic ? 'active' : ''}`}
-                  title="Italic"
+                  title="Ležeče"
                 >
                   <em>I</em>
                 </button>
@@ -2113,7 +2113,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="button"
                   onClick={applyStrikethrough}
                   className={`toolbar-btn ${activeFormats.strikethrough ? 'active' : ''}`}
-                  title="Strikethrough"
+                  title="Prečrtano"
                 >
                   <span style={{textDecoration: 'line-through'}}>S</span>
                 </button>
@@ -2121,7 +2121,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="button"
                   onClick={applyUnderline}
                   className={`toolbar-btn ${activeFormats.underline ? 'active' : ''}`}
-                  title="Underline"
+                  title="Podčrtano"
                 >
                   <span style={{textDecoration: 'underline'}}>U</span>
                 </button>
@@ -2134,7 +2134,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     applyFontSize(size);
                   }}
                   className="toolbar-font-size"
-                  title="Font Size"
+                  title="Velikost pisave"
                 >
                   <option value="10">10</option>
                   <option value="12">12</option>
@@ -2151,7 +2151,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button
                   onClick={handleImageButtonClick}
                   className={`toolbar-btn ${uploadingImage ? 'uploading' : ''}`}
-                  title={uploadingImage ? "Uploading image..." : "Insert Image"}
+                  title={uploadingImage ? "Nalaganje slike..." : "Vstavi sliko"}
                   disabled={uploadingImage}
                   style={uploadingImage ? {
                     '--upload-progress': `${imageUploadProgress}%`
@@ -2164,7 +2164,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button
                   onClick={() => inlineImageInputRef.current?.click()}
                   className={`toolbar-btn ${uploadingImage ? 'uploading' : ''}`}
-                  title={uploadingImage ? "Uploading..." : "Insert Inline Image (Flows with Text)"}
+                  title={uploadingImage ? "Nalaganje..." : "Vstavi vrstno sliko (teče z besedilom)"}
                   disabled={uploadingImage}
                 >
                   <span className="toolbar-btn-icon">📎</span>
@@ -2174,7 +2174,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button
                   onClick={handleVideoButtonClick}
                   className={`toolbar-btn ${uploadingVideo ? 'uploading' : ''}`}
-                  title={uploadingVideo ? "Uploading video..." : "Insert Video"}
+                  title={uploadingVideo ? "Nalaganje video..." : "Vstavi video"}
                   disabled={uploadingVideo}
                   style={uploadingVideo ? {
                     '--upload-progress': `${videoUploadProgress}%`
@@ -2193,7 +2193,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     setShowBackgroundVideoDialog(true);
                   }}
                   className="toolbar-btn"
-                  title="Insert Background Video"
+                  title="Vstavi ozadje video"
                 >
                   <span className="toolbar-btn-icon">🎬</span>
                 </button>
@@ -2237,14 +2237,14 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     setKaraokeTimingMethod('upload');
                   }}
                   className="toolbar-btn karaoke-btn"
-                  title="Insert Karaoke"
+                  title="Vstavi karaoke"
                 >
                   🎤
                 </button>
                 <button
                   onClick={handleInsertFootnote}
                   className="toolbar-btn"
-                  title="Insert Footnote"
+                  title="Vstavi opombo"
                 >
                   <sup>¹</sup>
                 </button>
@@ -2256,11 +2256,11 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     value={textColor}
                     onChange={handleTextColorChange}
                     className="color-input"
-                    title="Text Color"
+                    title="Barva besedila"
                   />
                 </div>
                 {/* Highlight H-swatch next to text color */}
-                <div className="highlight-picker-container" title="Highlight (click to apply, Alt-click to clear)">
+                <div className="highlight-picker-container" title="Označi (klikni za uporabo, Alt+klik za brisanje)">
                   <input
                     ref={highlightInputRef}
                     type="color"
@@ -2274,28 +2274,28 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button 
                   onClick={alignLeft}
                   className={`toolbar-btn ${activeFormats.alignLeft ? 'active' : ''}`}
-                  title="Align Left"
+                  title="Poravnaj levo"
                 >
                   ⬑
                 </button>
                 <button 
                   onClick={alignCenter}
                   className={`toolbar-btn ${activeFormats.alignCenter ? 'active' : ''}`}
-                  title="Align Center"
+                  title="Poravnaj na sredino"
                 >
                   ≡
                 </button>
                 <button 
                   onClick={alignRight}
                   className={`toolbar-btn ${activeFormats.alignRight ? 'active' : ''}`}
-                  title="Align Right"
+                  title="Poravnaj desno"
                 >
                   ⬏
                 </button>
                 <button 
                   onClick={alignJustify}
                   className={`toolbar-btn ${activeFormats.alignJustify ? 'active' : ''}`}
-                  title="Align Justify"
+                  title="Poravnaj obojestransko"
                 >
                   ☰
                 </button>
@@ -2306,21 +2306,21 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     <button
                       onClick={applyImageAlignLeft}
                       className={`toolbar-btn ${activeFormats.imageAlignLeft ? 'active' : ''}`}
-                      title="Image: Align Left (Text Wraps Right)"
+                      title="Slika: Poravnaj levo (besedilo se ovije desno)"
                     >
                       ⬅️
                     </button>
                     <button
                       onClick={applyImageAlignCenter}
                       className={`toolbar-btn ${activeFormats.imageAlignCenter ? 'active' : ''}`}
-                      title="Image: Center (No Wrap)"
+                      title="Slika: Sredina (brez ovijanja)"
                     >
                       ⬆️
                     </button>
                     <button
                       onClick={applyImageAlignRight}
                       className={`toolbar-btn ${activeFormats.imageAlignRight ? 'active' : ''}`}
-                      title="Image: Align Right (Text Wraps Left)"
+                      title="Slika: Poravnaj desno (besedilo se ovije levo)"
                     >
                       ➡️
                     </button>
@@ -2330,56 +2330,56 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button 
                   onClick={applyBlockquote}
                   className={`toolbar-btn ${activeFormats.blockquote ? 'active' : ''}`}
-                  title="Blockquote"
+                  title="Citat"
                 >
                   "
                 </button>
                 <button 
                   onClick={applySubscript}
                   className={`toolbar-btn ${activeFormats.subscript ? 'active' : ''}`}
-                  title="Subscript"
+                  title="Podpisano"
                 >
                   <span style={{ fontSize: '0.9em' }}>x₂</span>
                 </button>
                 <button 
                   onClick={applySuperscript}
                   className={`toolbar-btn ${activeFormats.superscript ? 'active' : ''}`}
-                  title="Superscript"
+                  title="Nadpisano"
                 >
                   <span style={{ fontSize: '0.9em' }}>x²</span>
                 </button>
                 <button 
                   onClick={applyIndent}
                   className="toolbar-btn"
-                  title="Indent"
+                  title="Zamik"
                 >
                   →
                 </button>
                 <button 
                   onClick={applyOutdent}
                   className="toolbar-btn"
-                  title="Outdent"
+                  title="Zmanjšaj zamik"
                 >
                   ←
                 </button>
                 <button
                   onClick={applyIntroParagraph}
                   className={`toolbar-btn ${activeFormats.introParagraph ? 'active' : ''}`}
-                  title="Intro paragraph style"
+                  title="Slog uvodnega odstavka"
                 >
                   <span style={{ fontStyle: 'italic', fontSize: '1.1em' }}>¶</span>
                 </button>
                 <button
                   onClick={applyWhisperParagraph}
                   className={`toolbar-btn ${activeFormats.whisperParagraph ? 'active' : ''}`}
-                  title="Whisper / aside paragraph style"
+                  title="Slog odstavka šepet / ob strani"
                 >
                   <span style={{ fontSize: '0.95em', color: '#777' }}>¶</span>
                 </button>
                 <button
                   onClick={applyEpigraphParagraph}
                   className={`toolbar-btn ${activeFormats.epigraphParagraph ? 'active' : ''}`}
-                  title="Epigraph (quote before chapter)"
+                  title="Epigraf (citat pred poglavjem)"
                 >
                   <span style={{ fontStyle: 'italic', fontSize: '0.9em' }}>"</span>
                 </button>
@@ -2400,7 +2400,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button 
                   onClick={applyDropCap}
                   className={`toolbar-btn ${activeFormats.dropCap ? 'active' : ''}`}
-                  title="Drop Cap"
+                  title="Velika začetnica"
                 >
                   <span style={{ fontSize: '1.5em', lineHeight: '0.8' }}>A</span>
                 </button>
@@ -2430,7 +2430,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="button"
                   onClick={handleLinkButtonClick}
                   className={`toolbar-btn ${activeFormats.link ? 'active' : ''}`}
-                  title="Link"
+                  title="Povezava"
                 >
                   <span style={{textDecoration: 'none'}}>🔗</span>
                 </button>
@@ -2499,29 +2499,29 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               setGeneratingTimings(false);
             }}>✕</button>
             <div className="karaoke-dialog-content">
-              <h3>Insert Karaoke</h3>
+              <h3>Vstavi karaoke</h3>
               <p style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-                Enter the text, upload audio, and provide word timings
+                Vnesite besedilo, naložite avdio in zagotovite časovne oznake besed
               </p>
               
               <div>
-                <label>Karaoke Text:</label>
+                <label>Karaoke besedilo:</label>
                 <textarea
                   value={karaokeText}
                   onChange={(e) => setKaraokeText(e.target.value)}
-                  placeholder="Enter the text that will be highlighted..."
+                  placeholder="Vnesite besedilo, ki bo označeno..."
                   rows={3}
                 />
               </div>
 
               <div>
-                <label>Audio:</label>
+                <label>Avdio:</label>
                 <input
                   type="file"
                   accept="audio/*"
                   onChange={handleKaraokeAudioFileSelected}
                 />
-                <div className="karaoke-form-divider">or</div>
+                <div className="karaoke-form-divider">ali</div>
             <input
               type="text"
                   value={karaokeAudioUrl}
@@ -2529,12 +2529,12 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     setKaraokeAudioUrl(e.target.value);
                     setKaraokeAudioFile(null);
                   }}
-                  placeholder="Paste audio URL..."
+                  placeholder="Prilepite URL avdio..."
                 />
               </div>
 
               <div>
-                <label>Word Timings:</label>
+                <label>Časovne oznake besed:</label>
                 <div className="karaoke-form-radio-group">
                   <label>
                     <input
@@ -2542,7 +2542,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       checked={karaokeTimingMethod === 'upload'}
                       onChange={() => setKaraokeTimingMethod('upload')}
                     />
-                    Upload SRT/VTT file
+                    Naloži SRT/VTT datoteko
                   </label>
                   <label>
                     <input
@@ -2550,7 +2550,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       checked={karaokeTimingMethod === 'auto'}
                       onChange={() => setKaraokeTimingMethod('auto')}
                     />
-                    Auto-generate
+                    Samodejno generiraj
                   </label>
                 </div>
                 {karaokeTimingMethod === 'upload' && (
@@ -2562,7 +2562,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 )}
                 {karaokeTimingMethod === 'auto' && (
                   <div style={{ fontSize: '11px', color: '#666', fontStyle: 'italic' }}>
-                    {generatingTimings ? 'Generating word timings...' : 'Word timings will be automatically generated from the audio using Deepgram API.'}
+                    {generatingTimings ? 'Generiranje časovnih oznak besed...' : 'Časovne oznake besed bodo samodejno generirane iz avdio z uporabo Deepgram API.'}
                   </div>
                 )}
               </div>
@@ -2579,15 +2579,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   }} 
                   className="btn-cancel"
                 >
-                Cancel
+                Prekliči
               </button>
                 <button 
                   onClick={handleInsertKaraoke} 
                   className="btn-save"
                   disabled={!karaokeText.trim() || (!karaokeAudioFile && !karaokeAudioUrl.trim()) || generatingTimings}
                 >
-                  {generatingTimings ? 'Generating...' : 'Insert'}
-              </button>
+                  {generatingTimings ? 'Generiranje...' : 'Vstavi'}
+                </button>
             </div>
           </div>
         </div>
@@ -2648,7 +2648,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     onClick={() =>
                       setEpigraphDraft((prev) => ({ ...prev, align: 'left' }))
                     }
-                    title="Align Left"
+                    title="Poravnaj levo"
                   >
                     ⬑
                   </button>
@@ -2658,7 +2658,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     onClick={() =>
                       setEpigraphDraft((prev) => ({ ...prev, align: 'center' }))
                     }
-                    title="Align Center"
+                    title="Poravnaj na sredino"
                   >
                     ≡
                   </button>
@@ -2668,7 +2668,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     onClick={() =>
                       setEpigraphDraft((prev) => ({ ...prev, align: 'right' }))
                     }
-                    title="Align Right"
+                    title="Poravnaj desno"
                   >
                     ⬏
                   </button>
@@ -2730,9 +2730,9 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               ✕
             </button>
             <div className="karaoke-dialog-content epigraph-dialog">
-              <h2 className="epigraph-dialog-title">Background Video</h2>
+              <h2 className="epigraph-dialog-title">Ozadje video</h2>
               <div className="form-group">
-                <label htmlFor="background-video-file">Video File</label>
+                <label htmlFor="background-video-file">Video datoteka</label>
                 <input
                   ref={backgroundVideoFileInputRef}
                   id="background-video-file"
@@ -2743,13 +2743,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 />
                 {backgroundVideoDraft.file && (
                   <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
-                    Selected: {backgroundVideoDraft.file.name}
+                    Izbrano: {backgroundVideoDraft.file.name}
                   </div>
                 )}
                 {uploadingVideo && (
                   <div style={{ marginTop: '0.5rem' }}>
                     <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.25rem' }}>
-                      Uploading... {videoUploadProgress}%
+                      Nalaganje... {videoUploadProgress}%
                     </div>
                     <div style={{ width: '100%', height: '4px', backgroundColor: '#e0e0e0', borderRadius: '2px', overflow: 'hidden' }}>
                       <div style={{ width: `${videoUploadProgress}%`, height: '100%', backgroundColor: '#4285f4', transition: 'width 0.3s' }} />
@@ -2758,7 +2758,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 )}
               </div>
               <div className="form-group">
-                <label htmlFor="background-video-page">Target Page Number (relative to chapter)</label>
+                <label htmlFor="background-video-page">Številka strani (glede na poglavje)</label>
                 <input
                   id="background-video-page"
                   type="number"
@@ -2770,7 +2770,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   disabled={uploadingVideo}
                 />
                 <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#666' }}>
-                  The video will appear as background on page {backgroundVideoDraft.targetPage} of this chapter.
+                  Video bo prikazan kot ozadje na strani {backgroundVideoDraft.targetPage} tega poglavja.
                 </div>
               </div>
               <div className="epigraph-actions">
@@ -2780,7 +2780,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   onClick={handleBackgroundVideoSubmit}
                   disabled={uploadingVideo || !backgroundVideoDraft.file}
                 >
-                  {uploadingVideo ? 'Uploading...' : 'Insert Background Video'}
+                  {uploadingVideo ? 'Nalaganje...' : 'Vstavi ozadje video'}
                 </button>
               </div>
             </div>
@@ -2816,15 +2816,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               ✕
             </button>
             <div className="karaoke-dialog-content epigraph-dialog">
-              <h2 className="epigraph-dialog-title">Insert Link</h2>
+              <h2 className="epigraph-dialog-title">Vstavi povezavo</h2>
               <div className="form-group">
-                <label htmlFor="link-text">Link Text</label>
+                <label htmlFor="link-text">Besedilo povezave</label>
                 <input
                   id="link-text"
                   type="text"
                   value={linkDraft.text}
                   onChange={(e) => setLinkDraft((prev) => ({ ...prev, text: e.target.value }))}
-                  placeholder="Link text (optional)"
+                  placeholder="Besedilo povezave (opcijsko)"
                 />
               </div>
               <div className="form-group">
@@ -2834,7 +2834,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   type="url"
                   value={linkDraft.url}
                   onChange={(e) => setLinkDraft((prev) => ({ ...prev, url: e.target.value }))}
-                  placeholder="https://example.com"
+                  placeholder="https://primer.com"
                   autoFocus
                 />
               </div>
@@ -2852,7 +2852,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       setLinkDraft({ url: '', text: '' });
                     }}
                   >
-                    Remove Link
+                    Odstrani povezavo
                   </button>
                 )}
                 <button
@@ -2865,7 +2865,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   }}
                   disabled={!linkDraft.url.trim() && !activeFormats.link}
                 >
-                  {activeFormats.link ? 'Update Link' : 'Add Link'}
+                  {activeFormats.link ? 'Posodobi povezavo' : 'Dodaj povezavo'}
                 </button>
               </div>
             </div>

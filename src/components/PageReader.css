@@ -648,7 +648,7 @@
   /* Poetry: centered, preserves line breaks, treated as atomic for pagination */
   text-align: center;
   font-style: italic;
-  margin: 1.5em 0;
+  margin: 0.8em 0;
   padding: 0 1em;
 }
 

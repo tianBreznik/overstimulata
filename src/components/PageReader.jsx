@@ -474,7 +474,7 @@ export const PageReader = ({
         const poetryBlocks = container.querySelectorAll('div.poetry');
         poetryBlocks.forEach(poetry => {
           // Apply poetry-specific styles that affect height measurement
-          if (!poetry.style.margin) poetry.style.margin = '1.5em 0';
+          if (!poetry.style.margin) poetry.style.margin = '0.8em 0';
           if (!poetry.style.padding) poetry.style.padding = '0 1em';
           if (!poetry.style.textAlign) poetry.style.textAlign = 'center';
           if (!poetry.style.fontStyle) poetry.style.fontStyle = 'italic';
