@@ -583,6 +583,21 @@ export const Video = Node.create({
           };
         },
       },
+      targetPage: {
+        default: null, // Page number (1-indexed) for background videos
+        parseHTML: (element) => {
+          const page = element.getAttribute('data-target-page');
+          return page ? parseInt(page, 10) : null;
+        },
+        renderHTML: (attributes) => {
+          if (attributes.targetPage && attributes.mode === 'background') {
+            return {
+              'data-target-page': attributes.targetPage.toString(),
+            };
+          }
+          return {};
+        },
+      },
     };
   },
 
@@ -590,12 +605,16 @@ export const Video = Node.create({
     return [
       {
         tag: 'video',
-        getAttrs: (node) => ({
-          src: node.getAttribute('src'),
-          controls: node.hasAttribute('controls'),
-          style: node.getAttribute('style') || 'max-width:100%;height:auto;display:block;margin:8px 0;',
-          mode: node.getAttribute('data-video-mode') || 'blank-page',
-        }),
+        getAttrs: (node) => {
+          const targetPage = node.getAttribute('data-target-page');
+          return {
+            src: node.getAttribute('src'),
+            controls: node.hasAttribute('controls'),
+            style: node.getAttribute('style') || 'max-width:100%;height:auto;display:block;margin:8px 0;',
+            mode: node.getAttribute('data-video-mode') || 'blank-page',
+            targetPage: targetPage ? parseInt(targetPage, 10) : null,
+          };
+        },
       },
     ];
   },
@@ -624,7 +643,14 @@ export const Video = Node.create({
       // Add mode badge
       const badge = document.createElement('div');
       badge.className = 'video-mode-badge';
-      badge.textContent = mode === 'background' ? '🎬 BG' : '📄 Page';
+      const targetPage = HTMLAttributes.targetPage || node.attrs.targetPage;
+      if (mode === 'background' && targetPage) {
+        badge.textContent = `🎬 BG Page ${targetPage}`;
+      } else if (mode === 'background') {
+        badge.textContent = '🎬 BG';
+      } else {
+        badge.textContent = '📄 Page';
+      }
       badge.style.position = 'absolute';
       badge.style.top = '8px';
       badge.style.right = '8px';
@@ -670,18 +696,31 @@ export const Video = Node.create({
         dom: container,
         contentDOM: null, // Video is an atom node, no content
         update: (updatedNode) => {
-          // Update badge when mode changes
+          // Update badge when mode or targetPage changes
           const updatedMode = updatedNode.attrs.mode || 'blank-page';
-          badge.textContent = updatedMode === 'background' ? '🎬 BG' : '📄 Page';
+          const updatedTargetPage = updatedNode.attrs.targetPage;
+          if (updatedMode === 'background' && updatedTargetPage) {
+            badge.textContent = `🎬 BG Page ${updatedTargetPage}`;
+          } else if (updatedMode === 'background') {
+            badge.textContent = '🎬 BG';
+          } else {
+            badge.textContent = '📄 Page';
+          }
           badge.style.backgroundColor = updatedMode === 'background' 
             ? 'rgba(59, 130, 246, 0.9)' 
             : 'rgba(107, 114, 128, 0.9)';
           
-          // Update video data attribute
+          // Update video data attributes
           if (updatedMode !== 'blank-page') {
             video.setAttribute('data-video-mode', updatedMode);
+            if (updatedTargetPage) {
+              video.setAttribute('data-target-page', updatedTargetPage.toString());
+            } else {
+              video.removeAttribute('data-target-page');
+            }
           } else {
             video.removeAttribute('data-video-mode');
+            video.removeAttribute('data-target-page');
           }
           
           return true;
@@ -690,17 +729,36 @@ export const Video = Node.create({
     };
   },
 
-  renderHTML({ HTMLAttributes }) {
+  renderHTML({ node, HTMLAttributes }) {
+    // TipTap may not include all attributes in HTMLAttributes, so we need to check node.attrs directly
+    // HTMLAttributes contains the merged result of attribute-level renderHTML functions
+    // But we need to access node.attrs to get the actual values
+    const mode = node?.attrs?.mode || HTMLAttributes?.mode;
+    const targetPage = node?.attrs?.targetPage || HTMLAttributes?.targetPage;
+    const src = node?.attrs?.src || HTMLAttributes?.src;
+    const controls = (node?.attrs?.controls !== false) && (HTMLAttributes?.controls !== false);
+    const style = node?.attrs?.style || HTMLAttributes?.style || 'max-width:100%;height:auto;display:block;margin:8px 0;';
+    
     const attrs = {
-      src: HTMLAttributes.src,
-      controls: HTMLAttributes.controls !== false,
-      style: HTMLAttributes.style || 'max-width:100%;height:auto;display:block;margin:8px 0;',
+      src: src,
+      controls: controls,
+      style: style,
     };
     
     // Add data-video-mode attribute if mode is set and not 'blank-page'
-    if (HTMLAttributes.mode && HTMLAttributes.mode !== 'blank-page') {
-      attrs['data-video-mode'] = HTMLAttributes.mode;
+    if (mode && mode !== 'blank-page') {
+      attrs['data-video-mode'] = mode;
+      // Add data-target-page if targetPage is set
+      if (targetPage) {
+        attrs['data-target-page'] = targetPage.toString();
+      }
     }
+    
+    console.log('[Video renderHTML] Rendering video:', {
+      'node.attrs': node?.attrs,
+      'HTMLAttributes': HTMLAttributes,
+      'final attrs': attrs
+    });
     
     return ['video', attrs];
   },

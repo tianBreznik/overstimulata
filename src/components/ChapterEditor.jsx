@@ -70,6 +70,12 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     author: '',
     align: 'center',
   });
+  const [showBackgroundVideoDialog, setShowBackgroundVideoDialog] = useState(false);
+  const [backgroundVideoDraft, setBackgroundVideoDraft] = useState({
+    targetPage: 1,
+    file: null,
+  });
+  const backgroundVideoFileInputRef = useRef(null);
 
   
   // Ref to track if we're programmatically setting content (to avoid update loops)
@@ -999,6 +1005,22 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       console.log('[Save] Drop cap paragraphs found:', matches);
     }
     try {
+      // Debug: Check if background videos are in the HTML before saving
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = currentContent;
+      const bgVideos = tempDiv.querySelectorAll('video[data-video-mode="background"]');
+      if (bgVideos.length > 0) {
+        console.log('[ChapterEditor] Saving with', bgVideos.length, 'background videos');
+        bgVideos.forEach((vid, idx) => {
+          console.log('[ChapterEditor] Background video', idx, ':', {
+            src: vid.getAttribute('src'),
+            mode: vid.getAttribute('data-video-mode'),
+            targetPage: vid.getAttribute('data-target-page'),
+            outerHTML: vid.outerHTML.substring(0, 200)
+          });
+        });
+      }
+      
       await onSave({ title, epigraph, contentHtml: currentContent, version: entityVersion });
     } catch (err) {
       if (err?.code === 'version-conflict') {
@@ -1694,6 +1716,64 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     }
   };
 
+  const handleBackgroundVideoFileSelected = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Store file temporarily, will upload when dialog is submitted
+      setBackgroundVideoDraft((prev) => ({ ...prev, file }));
+    }
+  };
+
+  const handleBackgroundVideoSubmit = async () => {
+    if (!backgroundVideoDraft.file) {
+      alert('Please select a video file.');
+      return;
+    }
+
+    if (!backgroundVideoDraft.targetPage || backgroundVideoDraft.targetPage < 1) {
+      alert('Please enter a valid page number (1 or higher).');
+      return;
+    }
+
+    setUploadingVideo(true);
+    setVideoUploadProgress(0);
+
+    try {
+      const downloadURL = await uploadVideoToStorage(backgroundVideoDraft.file, {
+        onProgress: (progress) => {
+          setVideoUploadProgress(progress);
+        }
+      });
+
+      if (!editor) return;
+
+      // Insert video node with background mode and targetPage
+      editor.chain().focus().insertContent({
+        type: 'video',
+        attrs: {
+          src: downloadURL,
+          controls: true,
+          style: 'max-width:100%;height:auto;display:block;margin:8px 0;',
+          mode: 'background',
+          targetPage: backgroundVideoDraft.targetPage,
+        },
+      }).run();
+
+      // Close dialog and reset
+      setShowBackgroundVideoDialog(false);
+      setBackgroundVideoDraft({ targetPage: 1 });
+      if (backgroundVideoFileInputRef.current) backgroundVideoFileInputRef.current.value = '';
+      
+      refreshToolbarState();
+    } catch (err) {
+      console.error('Background video upload failed', err);
+      alert(err.message || 'Video upload failed. Please try again.');
+    } finally {
+      setUploadingVideo(false);
+      setVideoUploadProgress(0);
+    }
+  };
+
   // Parse SRT/VTT file to extract word timings
   const parseTimingFile = async (file) => {
     const text = await file.text();
@@ -2092,6 +2172,20 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   {uploadingVideo && <div className="toolbar-btn-progress" />}
                 </button>
                 <input ref={videoFileInputRef} type="file" accept="video/*" onChange={handleVideoFileSelected} style={{ display: 'none' }} disabled={uploadingVideo} />
+                <button
+                  onClick={() => {
+                    if (editor) {
+                      editor.commands.blur();
+                    }
+                    setBackgroundVideoDraft({ targetPage: 1 });
+                    setShowBackgroundVideoDialog(true);
+                  }}
+                  className="toolbar-btn"
+                  title="Insert Background Video"
+                >
+                  <span className="toolbar-btn-icon">🎬</span>
+                </button>
+                <input ref={backgroundVideoFileInputRef} type="file" accept="video/*" onChange={handleBackgroundVideoFileSelected} style={{ display: 'none' }} />
                 {/* Video mode toggle disabled for now - focusing on blank-page mode only */}
                 {/* {activeFormats.videoSelected && (
                   <button
@@ -2587,6 +2681,86 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   }}
                 >
                   Shrani epigraf
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* Background Video dialog */}
+      {showBackgroundVideoDialog && createPortal(
+        <div 
+          className="karaoke-dialog-overlay"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setShowBackgroundVideoDialog(false);
+            }
+          }}
+        >
+          <div 
+            className="karaoke-dialog epigraph-dialog-wrapper"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              className="close-btn close-top"
+              onClick={() => setShowBackgroundVideoDialog(false)}
+            >
+              ✕
+            </button>
+            <div className="karaoke-dialog-content epigraph-dialog">
+              <h2 className="epigraph-dialog-title">Background Video</h2>
+              <div className="form-group">
+                <label htmlFor="background-video-file">Video File</label>
+                <input
+                  ref={backgroundVideoFileInputRef}
+                  id="background-video-file"
+                  type="file"
+                  accept="video/*"
+                  onChange={handleBackgroundVideoFileSelected}
+                  disabled={uploadingVideo}
+                />
+                {backgroundVideoDraft.file && (
+                  <div style={{ marginTop: '0.5rem', fontSize: '0.9rem', color: '#666' }}>
+                    Selected: {backgroundVideoDraft.file.name}
+                  </div>
+                )}
+                {uploadingVideo && (
+                  <div style={{ marginTop: '0.5rem' }}>
+                    <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.25rem' }}>
+                      Uploading... {videoUploadProgress}%
+                    </div>
+                    <div style={{ width: '100%', height: '4px', backgroundColor: '#e0e0e0', borderRadius: '2px', overflow: 'hidden' }}>
+                      <div style={{ width: `${videoUploadProgress}%`, height: '100%', backgroundColor: '#4285f4', transition: 'width 0.3s' }} />
+                    </div>
+                  </div>
+                )}
+              </div>
+              <div className="form-group">
+                <label htmlFor="background-video-page">Target Page Number (relative to chapter)</label>
+                <input
+                  id="background-video-page"
+                  type="number"
+                  min="1"
+                  value={backgroundVideoDraft.targetPage}
+                  onChange={(e) =>
+                    setBackgroundVideoDraft((prev) => ({ ...prev, targetPage: parseInt(e.target.value, 10) || 1 }))
+                  }
+                  disabled={uploadingVideo}
+                />
+                <div style={{ marginTop: '0.25rem', fontSize: '0.85rem', color: '#666' }}>
+                  The video will appear as background on page {backgroundVideoDraft.targetPage} of this chapter.
+                </div>
+              </div>
+              <div className="epigraph-actions">
+                <button
+                  type="button"
+                  className="epigraph-save-btn"
+                  onClick={handleBackgroundVideoSubmit}
+                  disabled={uploadingVideo || !backgroundVideoDraft.file}
+                >
+                  {uploadingVideo ? 'Uploading...' : 'Insert Background Video'}
                 </button>
               </div>
             </div>

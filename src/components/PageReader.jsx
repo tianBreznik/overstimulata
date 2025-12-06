@@ -446,11 +446,49 @@ export const PageReader = ({
 
         if (contentBlocks.length === 0) continue;
 
+        // First, collect all background videos with their targetPage from all blocks
+        const backgroundVideosByPage = new Map(); // Map<pageNumber, videoSrc>
+        contentBlocks.forEach((block, blockIdx) => {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = block.content || '';
+          
+          // Debug: log a snippet of the HTML to see what we're working with
+          const htmlSnippet = (block.content || '').substring(0, 500);
+          if (htmlSnippet.includes('video') || htmlSnippet.includes('Video')) {
+            console.log('[Background Video] Block', blockIdx, 'HTML snippet:', htmlSnippet);
+          }
+          
+          // Try multiple selectors to find background videos
+          const videoElements = tempDiv.querySelectorAll('video');
+          console.log('[Background Video] Block', blockIdx, 'Found', videoElements.length, 'video elements');
+          
+          videoElements.forEach((video, vidIdx) => {
+            const videoMode = video.getAttribute('data-video-mode');
+            const targetPage = parseInt(video.getAttribute('data-target-page'), 10);
+            const videoSrc = video.getAttribute('src');
+            const outerHTML = video.outerHTML.substring(0, 200);
+            
+            console.log('[Background Video] Block', blockIdx, 'Video', vidIdx, ':', {
+              mode: videoMode,
+              targetPage: targetPage,
+              src: videoSrc,
+              outerHTML: outerHTML,
+              allAttributes: Array.from(video.attributes).map(attr => `${attr.name}="${attr.value}"`)
+            });
+            
+            if (videoMode === 'background' && targetPage && videoSrc && !isNaN(targetPage)) {
+              // Store the video for this page number (1-indexed)
+              backgroundVideosByPage.set(targetPage, videoSrc);
+              console.log('[Background Video] ✓ Stored background video for page', targetPage, 'src:', videoSrc);
+            }
+          });
+        });
+        console.log('[Background Video] Final collected videos for chapter:', Array.from(backgroundVideosByPage.entries()));
+
         let chapterPageIndex = 0;
         let currentPageElements = [];
         let pageHasHeading = false;
         let currentPageFootnotes = new Set(); // Track footnote numbers on current page
-        let currentBlockBackgroundVideo = null; // Track background video for current block
 
         const startNewPage = (initialHeading = false) => {
           currentPageElements = [];
@@ -1017,6 +1055,13 @@ export const PageReader = ({
           const reservedSpace = pageFootnotes.length > 0 ? footnotesHeight : bottomMargin;
           const contentWrapper = `<div class="page-content-main" style="padding-bottom: ${reservedSpace}px;">${processedContent}</div>${footnotesHtml}`;
           
+          // Check if this page should have a background video (1-indexed page number)
+          const pageNumber = chapterPageIndex + 1; // Convert 0-indexed to 1-indexed
+          const backgroundVideoSrc = backgroundVideosByPage.get(pageNumber) || null;
+          if (backgroundVideoSrc) {
+            console.log('[Background Video] Assigning video to page', pageNumber, 'src:', backgroundVideoSrc);
+          }
+
           newPages.push({
             chapterIndex: chapterIdx,
             chapterId: chapter.id,
@@ -1027,14 +1072,9 @@ export const PageReader = ({
             hasHeading: pageHasHeading,
             content: contentWrapper,
             footnotes: pageFootnotes, // Store footnotes for this page
-            backgroundVideo: currentBlockBackgroundVideo ? currentBlockBackgroundVideo.src : null,
+            backgroundVideo: backgroundVideoSrc,
           });
           chapterPageIndex += 1;
-          
-          // Clear background video after using it (so it only applies to one page)
-          if (currentBlockBackgroundVideo) {
-            currentBlockBackgroundVideo = null;
-          }
           
           startNewPage(false);
         };
@@ -1629,7 +1669,7 @@ export const PageReader = ({
           let htmlContent = block.content;
           
           // Extract blank-page videos from content before processing (remove them)
-          // Background videos stay in content so we can track their position
+          // Also remove background videos from content (they're matched by targetPage during pagination)
           const videoElements = [];
           const videoRegex = /<video[^>]*>[\s\S]*?<\/video>/gi;
           let videoMatch;
@@ -1651,11 +1691,13 @@ export const PageReader = ({
                 // Remove blank-page videos from content (they'll be on separate pages)
                 videoElements.push(videoData);
                 videosToRemove.push(videoMatch[0]);
+              } else if (mode === 'background') {
+                // Remove background videos from content (they're matched by targetPage during pagination)
+                videosToRemove.push(videoMatch[0]);
               }
-              // Background videos stay in content - we'll handle them during pagination
             }
           }
-          // Remove only blank-page videos from content
+          // Remove blank-page and background videos from content
           videosToRemove.forEach(videoHtml => {
             htmlContent = htmlContent.replace(videoHtml, '');
           });
@@ -1725,18 +1767,12 @@ export const PageReader = ({
               measure.body.offsetHeight;
             }
 
-            // Handle background video elements - mark current page with background video
+            // Handle background video elements - skip them from content (they're matched by page number)
             if (element.tagName === 'VIDEO') {
               const videoMode = element.getAttribute('data-video-mode') || 'blank-page';
               if (videoMode === 'background') {
-                const videoSrc = element.getAttribute('src');
-                if (videoSrc) {
-                  // Mark that the current page (or next page if we need to start a new one) should have this background video
-                  // We'll set this when we push the page
-                  currentBlockBackgroundVideo = { src: videoSrc, mode: 'background' };
-                  // Skip this element - don't add it to page content, just use it for background
-                  continue;
-                }
+                // Skip this element - don't add it to page content, it's matched by targetPage
+                continue;
               }
             }
 
@@ -4241,17 +4277,43 @@ export const PageReader = ({
   const shouldShowTopBar = !pageToDisplay.hasHeading && !pageToDisplay.isEpigraph && !pageToDisplay.isCover;
 
   return (
-    <div
-      ref={containerRef}
-      className="page-reader"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
-    >
+    <>
+      {pageToDisplay.backgroundVideo && (
+        <video
+          ref={backgroundVideoRef}
+          src={pageToDisplay.backgroundVideo}
+          loop
+          muted
+          playsInline
+          preload="auto"
+          className="background-video"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            width: '100vw',
+            height: '100vh',
+            objectFit: 'cover',
+            zIndex: 0,
+            pointerEvents: 'none',
+            margin: 0,
+            padding: 0,
+          }}
+        />
+      )}
       <div
-        ref={pageContainerRef}
-        className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
+        ref={containerRef}
+        className="page-reader"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       >
+        <div
+          ref={pageContainerRef}
+          className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
+        >
         <article className={`page-sheet content-page ${pageToDisplay.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay.isVideo ? 'video-page' : ''} ${pageToDisplay.backgroundVideo ? 'background-video-page' : ''} ${pageToDisplay.isCover ? 'cover-page' : ''}`}>
           <section className="page-body content-body">
             {pageToDisplay.isCover ? (
@@ -4269,34 +4331,7 @@ export const PageReader = ({
                   <img src="/cursor 1.png" alt="" className="cover-feathers-image" />
                 </div>
               </div>
-            ) : pageToDisplay.backgroundVideo && (
-              <>
-                <video
-                  ref={backgroundVideoRef}
-                  src={pageToDisplay.backgroundVideo}
-                  loop
-                  muted
-                  playsInline
-                  preload="auto"
-                  className="background-video"
-                />
-                {!videoUnmuted && (
-                  <button
-                    onClick={() => {
-                      if (backgroundVideoRef.current) {
-                        backgroundVideoRef.current.muted = false;
-                        setVideoUnmuted(true);
-                      }
-                    }}
-                    className="video-play-button"
-                    aria-label="Unmute video"
-                  >
-                    UNMUTE
-                  </button>
-                )}
-              </>
-            )}
-            {pageToDisplay.isEpigraph ? (
+            ) : pageToDisplay.isEpigraph ? (
               <div 
                 key={pageKey}
                 ref={pageContentRefCallback} 
@@ -4340,11 +4375,12 @@ export const PageReader = ({
               </div>
             ) : !pageToDisplay.isCover && (
               <div 
-                key={pageKey}
-                ref={pageContentRefCallback} 
-                className={`page-content ${pageToDisplay.backgroundVideo ? 'background-video-text' : ''}`}
-                dangerouslySetInnerHTML={{ __html: pageToDisplay.content }} 
-              />
+                  key={pageKey}
+                  ref={pageContentRefCallback} 
+                  className={`page-content ${pageToDisplay.backgroundVideo ? 'background-video-text' : ''}`}
+                  dangerouslySetInnerHTML={{ __html: pageToDisplay.content }} 
+                  style={pageToDisplay.backgroundVideo ? { position: 'relative', zIndex: 1 } : {}}
+                />
             )}
           </section>
         </article>
@@ -4418,6 +4454,7 @@ export const PageReader = ({
         onToggleEditorReader={onToggleEditorReader}
       />
     </div>
+    </>
   );
 };
 
