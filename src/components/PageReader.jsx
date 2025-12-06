@@ -3441,11 +3441,13 @@ export const PageReader = ({
     const deltaX = e.touches[0].clientX - touchStartRef.current.x;
     const deltaY = e.touches[0].clientY - touchStartRef.current.y;
     
+    // Prevent pull-to-refresh on all downward swipes
+    if (deltaY > 0) {
+      e.preventDefault();
+    }
+    
     // Track vertical swipe down for TOC drag
     if (!isTOCOpen && Math.abs(deltaY) > Math.abs(deltaX) && deltaY > 0) {
-      // Prevent page scrolling immediately when swiping down for TOC
-      e.preventDefault();
-      
       // Swiping down - track the drag progress
       if (tocDragStartYRef.current === null) {
         tocDragStartYRef.current = touchStartRef.current.y;
@@ -3484,8 +3486,7 @@ export const PageReader = ({
       }
     }
     
-    // Only prevent default if it's clearly a horizontal swipe
-    // This preserves gesture context for audio unlock
+    // Prevent default for horizontal swipes as well
     if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
       e.preventDefault();
     }
@@ -4315,6 +4316,51 @@ export const PageReader = ({
       }
     }
   }, [pageToDisplay, initializeKaraokeSlices, startVisibleKaraoke]); // Include dependencies
+
+  // Prevent pull-to-refresh on mobile - use document-level listener with passive: false
+  // This is necessary because React's onTouchMove may be passive, preventing preventDefault
+  useEffect(() => {
+    let touchStartY = null;
+    
+    const handleTouchStart = (e) => {
+      // Only track if we're inside the page-reader
+      const pageReader = document.querySelector('.page-reader');
+      if (!pageReader || !pageReader.contains(e.target)) return;
+      
+      if (e.touches && e.touches.length > 0) {
+        touchStartY = e.touches[0].clientY;
+      }
+    };
+    
+    const handleTouchMove = (e) => {
+      // Only prevent if we're inside the page-reader
+      const pageReader = document.querySelector('.page-reader');
+      if (!pageReader || !pageReader.contains(e.target)) {
+        touchStartY = null;
+        return;
+      }
+      
+      if (touchStartY !== null && e.touches && e.touches.length > 0) {
+        const touchY = e.touches[0].clientY;
+        const deltaY = touchY - touchStartY;
+        
+        // Prevent all downward swipes to block pull-to-refresh
+        // The page-reader is fixed and shouldn't allow any scrolling
+        if (deltaY > 0) {
+          e.preventDefault();
+        }
+      }
+    };
+    
+    // Use passive: false to allow preventDefault
+    document.addEventListener('touchstart', handleTouchStart, { passive: false });
+    document.addEventListener('touchmove', handleTouchMove, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchstart', handleTouchStart);
+      document.removeEventListener('touchmove', handleTouchMove);
+    };
+  }, []);
 
   // Handle footnote clicks - jump to acknowledgements chapter
   useEffect(() => {

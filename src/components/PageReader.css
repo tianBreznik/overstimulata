@@ -15,6 +15,9 @@
   /* Prevent any scrolling on the page-frame */
   touch-action: none;
   -webkit-overflow-scrolling: none;
+  /* Prevent pull-to-refresh */
+  overscroll-behavior-y: none;
+  overscroll-behavior: none;
 }
 
 .page-container {

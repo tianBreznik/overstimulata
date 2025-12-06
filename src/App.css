@@ -38,6 +38,9 @@ html.with-page-reader {
   position: fixed !important;
   width: 100% !important;
   height: 100% !important;
+  /* Prevent pull-to-refresh on mobile */
+  overscroll-behavior-y: none !important;
+  overscroll-behavior: none !important;
 }
 
 /* Subtle grayscale e‑ink texture (very light) */
