@@ -283,6 +283,15 @@
   /* Subtle text shadow for grainy/furry typewriter aesthetic - mobile only */
 }
 
+/* Exclude karaoke elements from text alignment/spacing to preserve highlighting alignment */
+.page-content p:has(.karaoke-slice),
+.page-content p:has(.karaoke-player) {
+  text-align: left !important;  /* Left-align paragraphs containing karaoke */
+  word-spacing: normal !important;
+  letter-spacing: normal !important;
+  text-justify: auto !important;
+}
+
 @media (max-width: 768px) {
   .page-content p {
     text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
@@ -878,7 +887,8 @@
   --karaoke-fill: 0;
   font: inherit;
   line-height: inherit;
-  letter-spacing: inherit;
+  letter-spacing: normal !important; /* Reset letter-spacing to ensure highlighting alignment */
+  word-spacing: normal !important;    /* Reset word-spacing to ensure highlighting alignment */
   text-shadow: none;
   -webkit-text-stroke: none;
 }
@@ -904,7 +914,7 @@
   pointer-events: none;
   opacity: var(--karaoke-fill);
   font: inherit;
-  letter-spacing: inherit;
+  letter-spacing: normal !important; /* Match parent's normal spacing for alignment */
   line-height: inherit;
   font-weight: inherit;
   -webkit-text-stroke: 0.75px rgba(255, 214, 0, 0.95);
@@ -922,7 +932,7 @@
   pointer-events: none;
   opacity: var(--karaoke-fill);
   font: inherit;
-  letter-spacing: inherit;
+  letter-spacing: normal !important; /* Match parent's normal spacing for alignment */
   line-height: inherit;
   font-weight: inherit;
   -webkit-text-stroke: 0.75px rgba(255, 214, 0, 0.95);
