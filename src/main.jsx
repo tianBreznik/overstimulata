@@ -47,11 +47,25 @@ const applyTexture = () => {
   }
 };
 
-// Apply texture when DOM is ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', applyTexture);
+// Apply texture asynchronously to avoid blocking initial render
+// Use requestIdleCallback to defer until browser is idle
+if (window.requestIdleCallback) {
+  requestIdleCallback(() => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyTexture);
+    } else {
+      applyTexture();
+    }
+  }, { timeout: 2000 });
 } else {
-  applyTexture();
+  // Fallback for browsers without requestIdleCallback
+  setTimeout(() => {
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', applyTexture);
+    } else {
+      applyTexture();
+    }
+  }, 100);
 }
 
 createRoot(document.getElementById('root')).render(

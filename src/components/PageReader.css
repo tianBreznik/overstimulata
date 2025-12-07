@@ -857,6 +857,9 @@
   font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   color: #0a0a0a;
   font-size: 1rem;
+  /* Ensure loading state is visible immediately */
+  opacity: 1;
+  visibility: visible;
 }
 
 .loading-gif {
@@ -864,6 +867,8 @@
   max-height: 200px;
   width: auto;
   height: auto;
+  /* Preload the GIF to avoid delay */
+  image-rendering: auto;
 }
 
 /* Page number in bottom right corner */

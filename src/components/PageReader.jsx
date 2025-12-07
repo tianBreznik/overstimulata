@@ -528,24 +528,19 @@ export const PageReader = ({
         if (contentBlocks.length === 0) continue;
 
         // First, collect all background videos with their targetPage from all blocks
+        // Use regex to avoid expensive DOM creation for every block
         const backgroundVideosByPage = new Map(); // Map<pageNumber, videoSrc>
-        contentBlocks.forEach((block, blockIdx) => {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = block.content || '';
-          
-          // Find background videos
-          const videoElements = tempDiv.querySelectorAll('video');
-          
-          videoElements.forEach((video) => {
-            const videoMode = video.getAttribute('data-video-mode');
-            const targetPage = parseInt(video.getAttribute('data-target-page'), 10);
-            const videoSrc = video.getAttribute('src');
-            
-            if (videoMode === 'background' && targetPage && videoSrc && !isNaN(targetPage)) {
-              // Store the video for this page number (1-indexed)
+        const videoRegex = /<video[^>]*data-video-mode=["']background["'][^>]*data-target-page=["'](\d+)["'][^>]*src=["']([^"']+)["'][^>]*>/gi;
+        contentBlocks.forEach((block) => {
+          const content = block.content || '';
+          let match;
+          while ((match = videoRegex.exec(content)) !== null) {
+            const targetPage = parseInt(match[1], 10);
+            const videoSrc = match[2];
+            if (targetPage && videoSrc && !isNaN(targetPage)) {
               backgroundVideosByPage.set(targetPage, videoSrc);
             }
-          });
+          }
         });
 
         let chapterPageIndex = 0;
@@ -693,7 +688,7 @@ export const PageReader = ({
           };
         };
 
-        // Check if element is atomic (cannot be split): images, videos, headings, poetry
+        // Check if element is atomic (cannot be split): images, videos, headings, poetry, dinkus
         // NOTE: Karaoke blocks CAN be split (they have their own splitting logic via handleKaraokeElement)
         const isAtomicElement = (element) => {
           const tagName = element.tagName?.toLowerCase();
@@ -705,6 +700,10 @@ export const PageReader = ({
           // They are handled separately by handleKaraokeElement before this check
           // Poetry blocks - must stay together as a unit
           if (element.classList.contains('poetry') || element.tagName?.toLowerCase() === 'div' && element.classList.contains('poetry')) {
+            return true;
+          }
+          // Dinkus blocks - must stay together as a unit
+          if (element.classList.contains('dinkus') || element.querySelector('.dinkus, .dinkus-image')) {
             return true;
           }
           // Elements containing atomic children
@@ -1088,8 +1087,8 @@ export const PageReader = ({
           pageFootnotes.sort((a, b) => a.globalNumber - b.globalNumber);
           
           // Add footnotes section at the bottom if there are any
-          // Apply hyphenation to content for better justified text
-          processedContent = applyHyphenationToHTML(processedContent);
+          // NOTE: Hyphenation is deferred until after pagination to improve performance
+          // It will be applied when pages are rendered
           
           // Wrap content in a container and position footnotes absolutely at bottom
           let footnotesHtml = '';
@@ -2390,8 +2389,41 @@ export const PageReader = ({
         page.totalPages = pagesByChapter[key]?.length || 1;
       });
 
+      // Set pages immediately for faster initial render
       setPages(newPages);
       setKaraokeSources(newKaraokeSources);
+      
+      // Apply hyphenation to all pages asynchronously after initial render
+      // This improves performance by not blocking the initial page display
+      // Use requestIdleCallback to apply hyphenation when browser is idle
+      const applyHyphenationBatch = () => {
+        setPages(prevPages => {
+          // Only apply if pages haven't changed (avoid race conditions)
+          if (prevPages.length !== newPages.length) return prevPages;
+          
+          return prevPages.map(page => {
+            if (page.isCover || page.isEpigraph || page.isVideo) {
+              return page; // Skip hyphenation for special pages
+            }
+            // Only apply if not already hyphenated (check for soft hyphens)
+            if (page.content.includes('\u00AD')) {
+              return page; // Already hyphenated
+            }
+            return {
+              ...page,
+              content: applyHyphenationToHTML(page.content)
+            };
+          });
+        });
+      };
+      
+      // Apply hyphenation asynchronously to avoid blocking initial render
+      if (window.requestIdleCallback) {
+        requestIdleCallback(applyHyphenationBatch, { timeout: 500 });
+      } else {
+        // Fallback for browsers without requestIdleCallback
+        setTimeout(applyHyphenationBatch, 100);
+      }
       
       // Restore initial position immediately when pages are calculated
       // Cover page is always at index 0, so start there if no bookmark
@@ -2429,13 +2461,19 @@ export const PageReader = ({
       }
     };
 
-    // Delay to ensure DOM is ready
-    const timer = setTimeout(() => {
-      calculatePages();
-    }, 200);
+    // Start calculation immediately but use requestAnimationFrame to ensure DOM is ready
+    // This allows the loading GIF to appear right away while calculation happens
+    // Use double RAF to ensure React has rendered the loading state first
+    const rafId1 = requestAnimationFrame(() => {
+      const rafId2 = requestAnimationFrame(() => {
+        // Start calculation - loading state should already be visible
+        calculatePages();
+      });
+      return () => cancelAnimationFrame(rafId2);
+    });
 
     return () => {
-      clearTimeout(timer);
+      cancelAnimationFrame(rafId1);
     };
   }, [chapters, initialPosition, pages.length]);
 
@@ -4398,14 +4436,6 @@ export const PageReader = ({
   if (typeof window !== 'undefined' && window.innerWidth > 768) {
     // Desktop: render children normally (no pagination)
     return null;
-  }
-
-  if (pages.length === 0 || isInitializing) {
-    return (
-      <div className="page-reader-loading">
-        <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
-      </div>
-    );
   }
 
   if (!pageToDisplay) {
