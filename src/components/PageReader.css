@@ -977,7 +977,7 @@
   top: 0;
   left: 0;
   z-index: 10000;
-  background: transparent; /* Use body background (speckled texture) */
+  background: #ffffff; /* Plain white background */
   font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   color: #0a0a0a;
   font-size: 1rem;
@@ -1243,6 +1243,19 @@
 .inline-footnote-text {
   font-style: italic; /* Only the text should be italic */
   /* Text will be typed out character by character */
+}
+
+/* Full-bleed chapter background image (behind page frame, mobile reader only) */
+.page-background-image {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  /* Anchor to the left so the spine/left edge of the scan stays visible */
+  object-position: left center;
+  z-index: 0;
+  pointer-events: none;
 }
 
 /* Chapter Progress Bar - Kindle-like thin gray progress bar */

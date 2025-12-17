@@ -18,6 +18,7 @@ import './ChapterEditor.css';
 export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDelete }) => {
   const [epigraph, setEpigraph] = useState(chapter?.epigraph || null);
   const [content, setContent] = useState('');
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState(chapter?.backgroundImageUrl || '');
   const [saving, setSaving] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
   const [highlightColor, setHighlightColor] = useState('#ffeb3b');
@@ -78,6 +79,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     file: null,
   });
   const backgroundVideoFileInputRef = useRef(null);
+  const backgroundImageInputRef = useRef(null);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkDraft, setLinkDraft] = useState({
     url: '',
@@ -588,6 +590,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     if (chapter && editor) {
       const chapterContent = chapter.contentHtml || chapter.content || '';
       const rawEpigraph = chapter.epigraph;
+      // Load existing chapter-level background image if present
+      setBackgroundImageUrl(chapter?.backgroundImageUrl || '');
       if (rawEpigraph && typeof rawEpigraph === 'object') {
         setEpigraph({
           text: rawEpigraph.text || '',
@@ -1191,7 +1195,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     const titleToSave = extractedTitle.trim() || (isSpecialPage ? (chapter?.title || '') : '');
     
     try {
-      await onSave({ title: titleToSave, epigraph, contentHtml: currentContent, version: entityVersion });
+      await onSave({
+        title: titleToSave,
+        epigraph,
+        contentHtml: currentContent,
+        version: entityVersion,
+        backgroundImageUrl: backgroundImageUrl || null,
+      });
     } catch (err) {
       if (err?.code === 'version-conflict') {
         setAutosaveStatus('Chapter updated elsewhere. Reloaded latest content.');
@@ -2690,6 +2700,21 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 >
                   <span style={{textDecoration: 'none'}}>🔗</span>
                 </button>
+                {/* Chapter-level background image (used as full-bleed background in reader) */}
+                {!parentChapter && (
+                  <button
+                    type="button"
+                    className="toolbar-btn"
+                    title="Ozadje poglavja (slika za ozadje strani)"
+                    onClick={() => {
+                      if (backgroundImageInputRef.current) {
+                        backgroundImageInputRef.current.click();
+                      }
+                    }}
+                  >
+                    <span style={{ fontSize: '0.9em' }}>BG</span>
+                  </button>
+                )}
                 <button 
                   className="toolbar-save-btn"
                   onClick={handleSave}
@@ -2699,6 +2724,62 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 </button>
               </div>
             </div>
+            {/* Chapter background image controls (preview + hidden file input) */}
+            {!parentChapter && (
+              <div className="chapter-background-control">
+                <div className="chapter-background-header">
+                  <span className="chapter-background-label">Ozadje poglavja</span>
+                  {backgroundImageUrl && (
+                    <button
+                      type="button"
+                      className="chapter-background-clear"
+                      onClick={() => setBackgroundImageUrl('')}
+                    >
+                      Odstrani
+                    </button>
+                  )}
+                </div>
+                <div className="chapter-background-preview-wrapper">
+                  {backgroundImageUrl ? (
+                    <div
+                      className="chapter-background-preview"
+                      style={{ backgroundImage: `url(${backgroundImageUrl})` }}
+                    />
+                  ) : (
+                    <div className="chapter-background-placeholder">
+                      Ni izbrane slike ozadja
+                    </div>
+                  )}
+                </div>
+                <input
+                  ref={backgroundImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadingImage(true);
+                    try {
+                      const url = await uploadImageToStorage(file, {
+                        compress: true,
+                        onProgress: (p) => setImageUploadProgress(p),
+                      });
+                      setBackgroundImageUrl(url);
+                    } catch (err) {
+                      console.error('Background image upload failed', err);
+                      alert(err?.message || 'Nalaganje slike ozadja je spodletelo.');
+                    } finally {
+                      setUploadingImage(false);
+                      setImageUploadProgress(0);
+                      if (backgroundImageInputRef.current) {
+                        backgroundImageInputRef.current.value = '';
+                      }
+                    }
+                  }}
+                />
+              </div>
+            )}
             <div className="ruler">
               <div className="ruler-track">
                 {Array.from({ length: 24 }).map((_, i) => (

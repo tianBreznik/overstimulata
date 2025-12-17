@@ -42,7 +42,7 @@ export async function getSubchapters(bookId, chapterId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function addChapter(bookId, { title, slug, contentHtml, epigraph, order, isFirstPage, isCover }) {
+export async function addChapter(bookId, { title, slug, contentHtml, epigraph, order, isFirstPage, isCover, backgroundImageUrl }) {
   // If no order specified, get the next available order number
   if (!order) {
     const existingChapters = await getChapters(bookId);
@@ -55,6 +55,7 @@ export async function addChapter(bookId, { title, slug, contentHtml, epigraph, o
     slug: slug ?? title?.toLowerCase().replace(/\s+/g, '-'),
     contentHtml: contentHtml ?? '',
     epigraph: epigraph ?? '',
+    backgroundImageUrl: backgroundImageUrl ?? null,
     order,
     isFirstPage: isFirstPage ?? false,
     isCover: isCover ?? false,

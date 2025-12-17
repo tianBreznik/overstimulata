@@ -23,6 +23,7 @@ function App() {
   const [chapters, setChapters] = useState([]);
   const [defaultExpandedChapterId, setDefaultExpandedChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [backgroundsReady, setBackgroundsReady] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -97,6 +98,7 @@ function App() {
 
   const refresh = async () => {
     setLoading(true);
+    setBackgroundsReady(false);
     return await load();
   };
 
@@ -147,6 +149,80 @@ function App() {
     }
   }, []);
 
+  // Preload all chapter-level background images on mobile before mounting PageReader
+  useEffect(() => {
+    if (!isMobile) {
+      setBackgroundsReady(true);
+      return;
+    }
+    if (loading) {
+      setBackgroundsReady(false);
+      return;
+    }
+    if (!chapters || chapters.length === 0) {
+      setBackgroundsReady(true);
+      return;
+    }
+
+    const urls = Array.from(
+      new Set(
+        chapters
+          .map((c) => c.backgroundImageUrl)
+          .filter((u) => typeof u === 'string' && u.length > 0)
+      )
+    );
+
+    if (urls.length === 0) {
+      setBackgroundsReady(true);
+      return;
+    }
+
+    let cancelled = false;
+    let remaining = urls.length;
+
+    const markOneComplete = () => {
+      if (cancelled) return;
+      remaining -= 1;
+      if (remaining <= 0) {
+        setBackgroundsReady(true);
+      }
+    };
+
+    urls.forEach((url) => {
+      const img = new Image();
+      
+      // If image is already cached and complete, decode it immediately
+      if (img.complete && img.naturalWidth > 0) {
+        img.decode()
+          .then(() => markOneComplete())
+          .catch(() => markOneComplete()); // Even on decode error, mark as done
+        return;
+      }
+
+      // Otherwise, wait for load, then decode
+      const handleLoad = () => {
+        if (cancelled) return;
+        // Decode the image to ensure it's fully ready for rendering
+        img.decode()
+          .then(() => markOneComplete())
+          .catch(() => markOneComplete()); // Even on decode error, mark as done
+      };
+
+      const handleError = () => {
+        if (cancelled) return;
+        markOneComplete(); // Mark as done even on error to avoid blocking
+      };
+
+      img.addEventListener('load', handleLoad, { once: true });
+      img.addEventListener('error', handleError, { once: true });
+      img.src = url;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isMobile, loading, chapters]);
+
   // Detect mobile viewport
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -185,7 +261,7 @@ function App() {
       {/* Mobile: Always show PageReader view - the old chapter list view is gone on mobile */}
       {isMobile && (
         <>
-          {(loading || chapters.length === 0) ? (
+          {(loading || !backgroundsReady || chapters.length === 0) ? (
             <div className="page-reader-loading">
               <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
             </div>

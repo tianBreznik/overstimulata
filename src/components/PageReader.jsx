@@ -326,6 +326,8 @@ export const PageReader = ({
   const [displayPage, setDisplayPage] = useState(null); // The page currently displayed
   const [isInitializing, setIsInitializing] = useState(true); // Track if we're still initializing
   const hasUserInteractedRef = useRef(false); // Track if user has swiped/interacted at least once
+  const [backgroundImageReady, setBackgroundImageReady] = useState(false); // Track if current page background is loaded
+  const hasShownFirstPageWithBackgroundRef = useRef(false); // Track if we've shown the first page with its background loaded
   const [isTOCOpen, setIsTOCOpen] = useState(false);
   const [tocDragProgress, setTocDragProgress] = useState(0); // 0 = fully closed, 1 = fully open
   const tocDragProgressRef = useRef(0); // Use ref to avoid re-renders during drag
@@ -458,10 +460,11 @@ export const PageReader = ({
             // Force reflow to apply CSS changes
             body.offsetHeight;
           },
-          getAvailableHeight: (footnotesHeight = 0) => {
+          getAvailableHeight: (footnotesHeight = 0, isFirstPage = false) => {
             // Return actual available height from CSS-applied styles
             // IMPORTANT: Reserve bottom margin even when there are no footnotes (like a real book)
-            const BOTTOM_MARGIN_NO_FOOTNOTES = 32; // ~2rem in pixels (reduced since footnotes are now inline)
+            // Allow the first page a slightly smaller bottom margin so text can sit lower
+            const BOTTOM_MARGIN_NO_FOOTNOTES = isFirstPage ? 20 : 32; // first page: ~1.25rem, others: ~2rem in pixels
             
             // For desktop PDF viewer, use fixed page height (1000px) minus container padding
             // For mobile, use actual body.clientHeight
@@ -625,6 +628,7 @@ export const PageReader = ({
               hasHeading: false,
               content: '',
               footnotes: [],
+              backgroundImageUrl: chapter.backgroundImageUrl || null,
               isFirstPage: chapter.isFirstPage || false,
               isCover: chapter.isCover || false,
             };
@@ -1276,6 +1280,7 @@ export const PageReader = ({
             content: contentWrapper,
             footnotes: pageFootnotes, // Store footnotes for this page
             backgroundVideo: backgroundVideoSrc,
+            backgroundImageUrl: chapter.backgroundImageUrl || null,
             isFirstPage: chapter.isFirstPage || false,
             isCover: chapter.isCover || false,
           };
@@ -1873,6 +1878,7 @@ export const PageReader = ({
               isCover: chapter.isCover || false,
               content: '',
               footnotes: [],
+              backgroundImageUrl: chapter.backgroundImageUrl || null,
             });
             chapterPageIndex += 1;
           }
@@ -2140,7 +2146,8 @@ export const PageReader = ({
                 
                 // Simulate the actual rendering with padding-bottom
                 // Calculate reserved space: footnotes height if footnotes exist, otherwise bottom margin
-                const BOTTOM_MARGIN_NO_FOOTNOTES = 32; // ~2rem in pixels (reduced since footnotes are now inline)
+                // Use a slightly smaller bottom margin for the first page so text can sit lower
+                const BOTTOM_MARGIN_NO_FOOTNOTES = block.chapter && block.chapter.isFirstPage ? 15 : 32;
                 const finalReservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
                 const finalContentWrapper = document.createElement('div');
                 finalContentWrapper.className = 'page-content-main';
@@ -2542,6 +2549,7 @@ export const PageReader = ({
                 videoSrc: video.src,
                 content: '',
                 footnotes: [],
+                backgroundImageUrl: chapter.backgroundImageUrl || null,
                 isFirstPage: chapter.isFirstPage || false,
                 isCover: chapter.isCover || false,
               });
@@ -4920,6 +4928,49 @@ export const PageReader = ({
     return () => clearTimeout(timeoutId);
   }, [pages, isDesktop]);
 
+  // Preload adjacent page backgrounds for smoother swiping
+  useEffect(() => {
+    if (!displayPage || !pages.length) return;
+
+    const currentIndex = pages.findIndex(
+      (p) => p.chapterIndex === displayPage.chapterIndex && p.pageIndex === displayPage.pageIndex
+    );
+
+    if (currentIndex < 0) return;
+
+    // Preload next page background (if different)
+    const nextPage = pages[currentIndex + 1];
+    if (nextPage?.backgroundImageUrl && nextPage.backgroundImageUrl !== displayPage.backgroundImageUrl) {
+      const img = new Image();
+      img.src = nextPage.backgroundImageUrl;
+    }
+
+    // Preload previous page background (if different)
+    const prevPage = pages[currentIndex - 1];
+    if (prevPage?.backgroundImageUrl && prevPage.backgroundImageUrl !== displayPage.backgroundImageUrl) {
+      const img = new Image();
+      img.src = prevPage.backgroundImageUrl;
+    }
+  }, [displayPage, pages]);
+
+  // Reset background ready state when page changes - but only wait on first page load
+  useEffect(() => {
+    if (!hasShownFirstPageWithBackgroundRef.current) {
+      // On first page load (refresh/initial load), wait for background
+      const hasBackground = !!displayPage?.backgroundImageUrl;
+      if (!hasBackground) {
+        setBackgroundImageReady(true);
+        // Mark as shown even if no background (so swipes don't wait)
+        hasShownFirstPageWithBackgroundRef.current = true;
+      } else {
+        setBackgroundImageReady(false);
+      }
+    } else {
+      // After first page is shown (swiping), backgrounds are preloaded - show immediately
+      setBackgroundImageReady(true);
+    }
+  }, [displayPage?.backgroundImageUrl, displayPage?.chapterIndex, displayPage?.pageIndex]);
+
   // On desktop, render all pages in a PDF reader style (early return)
   // Show loading if pages aren't calculated yet
   if (isDesktop) {
@@ -5083,14 +5134,111 @@ export const PageReader = ({
 
   // Mobile: single page view (existing behavior)
   // Ensure pageToDisplay exists before rendering
-  if (!pageToDisplay) {
+  // Wait for background image to load ONLY on first page load, not on swipes
+  const hasBackground = !!pageToDisplay?.backgroundImageUrl;
+  const shouldShowLoading = !pageToDisplay || (!hasShownFirstPageWithBackgroundRef.current && hasBackground && !backgroundImageReady);
+  
+  // Render background image first (even if loading) so it can load while loading screen is visible
+  const backgroundImage = pageToDisplay?.backgroundImageUrl ? (
+    <img
+      src={pageToDisplay.backgroundImageUrl}
+      alt=""
+      className="page-background-image"
+      loading="eager"
+      decoding="async"
+      style={{
+        position: 'fixed',
+        inset: 0,
+        width: '100%',
+        height: '100%',
+        objectFit: 'cover',
+        objectPosition: 'left center',
+        zIndex: 0,
+        pointerEvents: 'none',
+      }}
+      onLoad={(e) => {
+        // Background image is loaded, decode and wait for paint before marking as ready
+        const img = e.target;
+        if (!backgroundImageReady && img) {
+          img.decode()
+            .then(() => {
+              // Wait for browser to paint the image
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (!backgroundImageReady) {
+                    setBackgroundImageReady(true);
+                    // Mark that we've shown the first page with background loaded
+                    if (!hasShownFirstPageWithBackgroundRef.current) {
+                      hasShownFirstPageWithBackgroundRef.current = true;
+                    }
+                  }
+                });
+              });
+            })
+            .catch(() => {
+              // Even on decode error, mark as ready
+              if (!backgroundImageReady) {
+                setBackgroundImageReady(true);
+                if (!hasShownFirstPageWithBackgroundRef.current) {
+                  hasShownFirstPageWithBackgroundRef.current = true;
+                }
+              }
+            });
+        }
+      }}
+      onError={() => {
+        // Even on error, mark as ready so page can show if we're still waiting
+        if (!backgroundImageReady) {
+          setBackgroundImageReady(true);
+          // Mark that we've shown the first page (even if background failed)
+          if (!hasShownFirstPageWithBackgroundRef.current) {
+            hasShownFirstPageWithBackgroundRef.current = true;
+          }
+        }
+      }}
+      ref={(img) => {
+        // Check if image is already loaded (cached images) - decode and wait for paint
+        if (img && img.complete && img.naturalWidth > 0 && !backgroundImageReady) {
+          img.decode()
+            .then(() => {
+              // Wait for browser to paint the image
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  if (!backgroundImageReady) {
+                    setBackgroundImageReady(true);
+                    // Mark that we've shown the first page with background loaded
+                    if (!hasShownFirstPageWithBackgroundRef.current) {
+                      hasShownFirstPageWithBackgroundRef.current = true;
+                    }
+                  }
+                });
+              });
+            })
+            .catch(() => {
+              // Even on decode error, mark as ready
+              if (!backgroundImageReady) {
+                setBackgroundImageReady(true);
+                if (!hasShownFirstPageWithBackgroundRef.current) {
+                  hasShownFirstPageWithBackgroundRef.current = true;
+                }
+              }
+            });
+        }
+      }}
+    />
+  ) : null;
+  
+  if (shouldShowLoading) {
     return (
-      <div className="page-reader-loading">
-        <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
-      </div>
+      <>
+        {backgroundImage}
+        <div className="page-reader-loading">
+          <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
+        </div>
+      </>
     );
   }
-
+  
   // Calculate current page number (1-indexed, excluding first page and cover page)
   const pageKey = `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`;
   
@@ -5112,6 +5260,7 @@ export const PageReader = ({
 
   const pageContent = (
     <>
+      {backgroundImage}
       {pageToDisplay.backgroundVideo && (
         <video
           ref={backgroundVideoRef}
