@@ -7,7 +7,7 @@
   background: transparent;
   z-index: 1;
   color: #1f140a;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   /* Force own compositing layer to preserve rendering */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
@@ -26,7 +26,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem 1.5rem 0.5rem;
+  padding: 2rem 1rem 0.5rem; /* Reduced left/right padding from 1.5rem to 1rem */
   box-sizing: border-box;
   overflow: hidden;
   /* Force own compositing layer that persists during overlays */
@@ -68,7 +68,7 @@
   align-items: center;
   gap: 1.2rem;
   text-align: center;
-  font-family: 'Iowan Old Style', 'Baskerville', 'Baskerville Old Face', 'Garamond', 'Cormorant Garamond', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Iowan Old Style', 'Garamond', 'Cormorant Garamond', serif;
   color: #1b1209;
   /* Lock layout to prevent re-measurement during overlays */
   contain: layout style;
@@ -81,11 +81,11 @@
   align-items: flex-start;
   gap: 0.4rem;
   text-align: left;
-  width: min(660px, 94vw);
+  width: min(680px, 96vw); /* Slightly wider since we reduced padding */
   /* Lock layout to prevent re-measurement during overlays */
   contain: layout style;
   min-width: 0;
-  max-width: min(660px, 94vw);
+  max-width: min(680px, 96vw);
   box-sizing: border-box;
 }
 
@@ -166,8 +166,9 @@
 
 .page-content {
   overflow-x: hidden; /* Prevent horizontal overflow from tex-linebreak */
+  overflow-y: hidden; /* Hide overflow at page boundaries (for inline footnotes) */
   width: 100%;
-  font-family: 'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Times New Roman', 'Times', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 1.18rem; /* Fixed font size - never dynamic */
   line-height: 1.62; /* Fixed line height - never dynamic */
   word-spacing: normal;
@@ -180,7 +181,9 @@
   box-sizing: border-box;
   /* Don't create positioning context - footnotes position relative to page-body */
   padding-bottom: 0; /* No padding, footnotes will be absolutely positioned */
-  height: 100%; /* Fill parent height */
+  height: 90%; /* Fill parent height */
+  max-height: 95%; /* Ensure content doesn't exceed parent height */
+  position: relative; /* Create clipping context */
 }
 
 .page-content * {
@@ -195,6 +198,7 @@
   color: inherit;
   line-height: inherit;
   letter-spacing: inherit;
+  word-spacing: inherit;
   /* Preserve rendering during overlays */
   transform: translateZ(0);
   -webkit-transform: translateZ(0);
@@ -220,20 +224,16 @@
 .page-content .chapter-header-title,
 .page-content h3.chapter-header-title,
 .page-content h4.chapter-header-title {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Keep original font for headings - override universal rule */
-}
-
-/* Subchapter titles (h4) should be italic and not bold */
-.page-content h4.chapter-header-title {
-  font-style: italic !important;
-  font-weight: normal !important;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* Keep original font for headings - override universal rule */
 }
 
 .page-content-main {
   width: 100%;
   padding-bottom: 0; /* Will be set dynamically via inline style */
   overflow-x: hidden; /* Prevent horizontal overflow from tex-linebreak adjustments */
+  overflow-y: hidden; /* Hide overflow at page boundaries (for inline footnotes) */
   box-sizing: border-box;
+  max-height: 100%; /* Ensure content doesn't exceed parent height */
 }
 
 /* Link styling - standard web link appearance */
@@ -268,9 +268,9 @@
    - Compact vertical rhythm between paragraphs
 */
 .page-content p {
-  font-size: 1.2rem;           /* ~19.2px at 16px root - slightly larger */
-  line-height: 1.2;
-  margin: 0.45rem 0;           /* slightly tighter than before for a more compact, typeset feel */
+  font-size: 1.3rem;           /* ~20.8px at 16px root - increased for better mobile readability */
+  line-height: 1.35;           /* Increased from 1.2 for better readability and less text density */
+  margin: 0.35rem 0;           /* Reduced margin for tighter paragraph spacing */
   text-align: justify;          /* Justified text by default for book-like appearance */
   text-align-last: left;        /* Last line left-aligned (professional typesetting standard) */
   text-justify: inter-word;     /* Use inter-word justification */
@@ -278,6 +278,42 @@
   letter-spacing: 0.01em;       /* Slight letter spacing to help distribute space */
   hyphens: auto;                /* Enable hyphenation to reduce gaps */
   -webkit-hyphens: auto;
+  min-height: 0.45rem;          /* Ensure empty paragraphs still create spacing */
+}
+
+/* Ensure empty paragraphs create visible spacing */
+.page-content p:empty,
+.page-content p:has(> br:only-child) {
+  min-height: 0.7rem;           /* Slightly more than margin for empty paragraphs */
+  display: block;                /* Ensure block display */
+}
+
+/* Respect inline text-align styles from TipTap (center, left, right) */
+.page-content p[style*="text-align: center"],
+.page-content p[style*="text-align:center"] {
+  text-align: center !important;
+  text-align-last: center !important;
+  text-justify: auto !important;
+  word-spacing: normal !important;
+}
+
+.page-content p[style*="text-align: left"],
+.page-content p[style*="text-align:left"] {
+  text-align: left !important;
+  text-align-last: left !important;
+  text-justify: auto !important;
+  word-spacing: normal !important;
+}
+
+.page-content p[style*="text-align: right"],
+.page-content p[style*="text-align:right"] {
+  text-align: right !important;
+  text-align-last: right !important;
+  text-justify: auto !important;
+  word-spacing: normal !important;
+}
+
+.page-content p {
   overflow-wrap: break-word;    /* Allow breaking long words */
   word-wrap: break-word;        /* Legacy support for word breaking */
   max-width: 100%;              /* Ensure paragraphs don't overflow container */
@@ -315,10 +351,7 @@
     text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
   }
   
-  /* Explicitly exclude subchapter titles (h4) from shadow */
-  .page-content h4.chapter-header-title {
-    text-shadow: none !important;
-  }
+  /* Subchapter titles (h4) should have shadows like other content */
 }
 
 .page-content p.para-intro {
@@ -388,7 +421,7 @@
 }
 
 .epigraph-text {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 1.2rem;
   line-height: 1.2;
   font-style: italic;
@@ -465,7 +498,7 @@
   position: absolute;
   bottom: 20%;
   left: 8%;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 1rem;
   color: #1f140a;
   text-align: left;
@@ -785,29 +818,120 @@
   display: block;
 }
 
-/* Chapter and subchapter title styling - match original Chapter.css styling */
-.page-content .chapter-header-title,
-.page-content h3.chapter-header-title {
+/* Chapter title styling (h3) - bold, centered by default, with shadows */
+/* Only apply default center alignment if no inline text-align style is present */
+.page-content .chapter-header-title:not([style*="text-align"]),
+.page-content h3.chapter-header-title:not([style*="text-align"]),
+.page-content h3:not([data-indent]):not([style*="text-align"]) {
   margin: 1.5rem 0 1rem 0;
   font-size: 1.35rem;
   color: #0c0c0c;
-  font-weight: 520;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-weight: bold;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   text-transform: none;
   letter-spacing: 0.015em;
-  text-align: center;
+  text-align: center; /* Default center, but client can change alignment in editor - overridden by inline styles */
   text-shadow: 0 0 0.9px rgba(0,0,0,0.5), 0 0 1.4px rgba(0,0,0,0.18);
   -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
 }
 
-.page-content .chapter-header-title::first-letter {
+/* Ensure headings with inline text-align styles preserve their alignment */
+.page-content h1[style*="text-align"],
+.page-content h2[style*="text-align"],
+.page-content h3[style*="text-align"],
+.page-content h4[style*="text-align"],
+.page-content h5[style*="text-align"],
+.page-content h6[style*="text-align"] {
+  /* Inline styles have highest specificity, but ensure they're not overridden */
+  text-shadow: 0 0 0.9px rgba(0,0,0,0.5), 0 0 1.4px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+}
+
+/* Respect inline text-align styles for headings from TipTap - must come after default rules */
+/* Use attribute selectors to match inline styles - these have higher specificity than class selectors */
+/* TipTap outputs: style="text-align: left" (with space) */
+/* Inline styles have highest specificity, but we add !important rules below to ensure they override default center */
+
+/* Specific overrides for each alignment value - using !important to ensure they override default center */
+.page-content h1[style*="text-align: center"],
+.page-content h1[style*="text-align:center"],
+.page-content h2[style*="text-align: center"],
+.page-content h2[style*="text-align:center"],
+.page-content h3[style*="text-align: center"],
+.page-content h3[style*="text-align:center"],
+.page-content h3.chapter-header-title[style*="text-align: center"],
+.page-content h3.chapter-header-title[style*="text-align:center"],
+.page-content .chapter-header-title[style*="text-align: center"],
+.page-content .chapter-header-title[style*="text-align:center"],
+.page-content h3:not([data-indent])[style*="text-align: center"],
+.page-content h3:not([data-indent])[style*="text-align:center"],
+.page-content h4[style*="text-align: center"],
+.page-content h4[style*="text-align:center"],
+.page-content h5[style*="text-align: center"],
+.page-content h5[style*="text-align:center"],
+.page-content h6[style*="text-align: center"],
+.page-content h6[style*="text-align:center"] {
+  text-align: center !important;
+}
+
+.page-content h1[style*="text-align: left"],
+.page-content h1[style*="text-align:left"],
+.page-content h2[style*="text-align: left"],
+.page-content h2[style*="text-align:left"],
+.page-content h3[style*="text-align: left"],
+.page-content h3[style*="text-align:left"],
+.page-content h3.chapter-header-title[style*="text-align: left"],
+.page-content h3.chapter-header-title[style*="text-align:left"],
+.page-content .chapter-header-title[style*="text-align: left"],
+.page-content .chapter-header-title[style*="text-align:left"],
+.page-content h3:not([data-indent])[style*="text-align: left"],
+.page-content h3:not([data-indent])[style*="text-align:left"],
+.page-content h4[style*="text-align: left"],
+.page-content h4[style*="text-align:left"],
+.page-content h5[style*="text-align: left"],
+.page-content h5[style*="text-align:left"],
+.page-content h6[style*="text-align: left"],
+.page-content h6[style*="text-align:left"] {
+  text-align: left !important;
+}
+
+.page-content h1[style*="text-align: right"],
+.page-content h1[style*="text-align:right"],
+.page-content h2[style*="text-align: right"],
+.page-content h2[style*="text-align:right"],
+.page-content h3[style*="text-align: right"],
+.page-content h3[style*="text-align:right"],
+.page-content h3.chapter-header-title[style*="text-align: right"],
+.page-content h3.chapter-header-title[style*="text-align:right"],
+.page-content .chapter-header-title[style*="text-align: right"],
+.page-content .chapter-header-title[style*="text-align:right"],
+.page-content h3:not([data-indent])[style*="text-align: right"],
+.page-content h3:not([data-indent])[style*="text-align:right"],
+.page-content h4[style*="text-align: right"],
+.page-content h4[style*="text-align:right"],
+.page-content h5[style*="text-align: right"],
+.page-content h5[style*="text-align:right"],
+.page-content h6[style*="text-align: right"],
+.page-content h6[style*="text-align:right"] {
+  text-align: right !important;
+}
+
+.page-content .chapter-header-title::first-letter,
+.page-content h3.chapter-header-title::first-letter {
   text-transform: uppercase;
 }
 
-/* Subchapter titles (h4) */
-.page-content h4.chapter-header-title {
+/* Subchapter title styling (h4) - normal weight, left-aligned by default, with shadows */
+.page-content h4.chapter-header-title,
+.page-content h4 {
   font-size: 1.05rem;
   margin: 1.2rem 0 0.8rem 0;
+  font-weight: normal;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  text-align: left; /* Default left, but client can change alignment in editor */
+  text-shadow: 0 0 0.9px rgba(0,0,0,0.5), 0 0 1.4px rgba(0,0,0,0.18);
+  -webkit-text-stroke: 0.2px rgba(0,0,0,0.22);
+  color: #0c0c0c;
 }
 
 /* Fade transition - smoother and slower */
@@ -854,7 +978,7 @@
   left: 0;
   z-index: 10000;
   background: transparent; /* Use body background (speckled texture) */
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   color: #0a0a0a;
   font-size: 1rem;
   /* Ensure loading state is visible immediately */
@@ -876,7 +1000,7 @@
   position: fixed;
   bottom: calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem); /* Same as footnotes padding + original offset */
   right: 1rem;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 0.9rem;
   color: #1f140a;
   opacity: 0.6;
@@ -1085,5 +1209,58 @@
 
 .footnote-content {
   flex: 1;
+}
+
+/* Inline Footnote Expansion */
+.inline-footnote-container {
+  display: block;
+  width: 100%;
+  margin-top: 0.5em; /* Reduced gap between text and footnote */
+  margin-bottom: 0.25em;
+}
+
+.inline-footnote-divider {
+  height: 1px;
+  background: linear-gradient(to right, rgba(31, 20, 10, 0.3) 0%, rgba(31, 20, 10, 0.1) 100%);
+  margin-bottom: 0.5em;
+  width: 100%;
+}
+
+.inline-footnote {
+  display: inline-block;
+  font-size: 0.75em;
+  line-height: 1.5;
+  color: #1f140a;
+  opacity: 0.85;
+}
+
+.inline-footnote-number {
+  font-weight: 500;
+  margin-right: 0.25em;
+  font-style: normal; /* Number should not be italic */
+}
+
+.inline-footnote-text {
+  font-style: italic; /* Only the text should be italic */
+  /* Text will be typed out character by character */
+}
+
+/* Chapter Progress Bar - Kindle-like thin gray progress bar */
+.chapter-progress-bar {
+  position: fixed;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 2.5rem); /* Moved up to avoid Safari bottom banner */
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background-color: rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  width: 100%;
+}
+
+.chapter-progress-fill {
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.3);
+  transition: width 0.3s ease;
+  width: 0%;
 }
 

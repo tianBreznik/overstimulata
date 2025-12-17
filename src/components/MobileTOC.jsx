@@ -382,6 +382,78 @@ export const MobileTOC = ({
         </div>
         
         <div className="mobile-toc-content">
+          {/* Filter chapters: hide special pages (first page, cover) in viewer mode, show in editor mode */}
+          {(() => {
+            // Get special pages for editor mode
+            const firstPageChapter = chapters.find(c => c.isFirstPage);
+            const coverPageChapter = chapters.find(c => c.isCover);
+            
+            // Filter out special pages from regular chapters list (they're shown separately in editor mode)
+            const regularChapters = chapters.filter(c => !c.isFirstPage && !c.isCover);
+            
+            return (
+              <>
+                {/* Special pages for editor mode: First Page and Cover Page */}
+                {isEditor && firstPageChapter && (
+                  <div
+                    className={`mobile-toc-chapter-item ${currentChapterIndex === firstPageChapter.order && currentPageIndex === 0 ? 'mobile-toc-current' : ''}`}
+                    onClick={() => {
+                      const firstPage = pages.find(p => p.chapterId === firstPageChapter.id);
+                      if (firstPage) {
+                        onJumpToPage(firstPage.chapterIndex, firstPage.pageIndex);
+                        handleClose();
+                      }
+                    }}
+                  >
+                    <span className="mobile-toc-chapter-title">{firstPageChapter.title || 'Prva stran'}</span>
+                    {isEditor && (
+                      <div className="mobile-toc-editor-controls-inline">
+                        <button
+                          className="mobile-toc-btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onEditChapter) {
+                              onEditChapter(firstPageChapter);
+                            }
+                          }}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {isEditor && coverPageChapter && (
+                  <div
+                    className={`mobile-toc-chapter-item ${currentChapterIndex === coverPageChapter.order && currentPageIndex === 0 ? 'mobile-toc-current' : ''}`}
+                    onClick={() => {
+                      const coverPage = pages.find(p => p.chapterId === coverPageChapter.id);
+                      if (coverPage) {
+                        onJumpToPage(coverPage.chapterIndex, coverPage.pageIndex);
+                        handleClose();
+                      }
+                    }}
+                  >
+                    <span className="mobile-toc-chapter-title">{coverPageChapter.title || 'Naslovna stran'}</span>
+                    {isEditor && (
+                      <div className="mobile-toc-editor-controls-inline">
+                        <button
+                          className="mobile-toc-btn-icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (onEditChapter) {
+                              onEditChapter(coverPageChapter);
+                            }
+                          }}
+                          title="Edit"
+                        >
+                          ✎
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
           {isEditor && onReorderChapters ? (
             <DndContext
               collisionDetection={closestCenter}
@@ -397,8 +469,8 @@ export const MobileTOC = ({
                 }
               }}
             >
-              <SortableContext items={chapters.map(c => c.id)} strategy={verticalListSortingStrategy}>
-                {chapters.map((chapter, chapterIndex) => {
+              <SortableContext items={regularChapters.map(c => c.id)} strategy={verticalListSortingStrategy}>
+                {regularChapters.map((chapter, chapterIndex) => {
                   return <SortableChapterRow
                     key={chapter.id}
                     chapter={chapter}
@@ -429,7 +501,7 @@ export const MobileTOC = ({
               </SortableContext>
             </DndContext>
           ) : (
-            chapters.map((chapter, chapterIndex) => {
+            regularChapters.map((chapter, chapterIndex) => {
             const isExpanded = expandedChapters.has(chapter.id);
             const isCurrent = isCurrentChapter(chapter.id);
             const pageNum = findPageNumber(chapter.id);
@@ -441,7 +513,8 @@ export const MobileTOC = ({
                   className={`mobile-toc-chapter-item ${isCurrent ? 'mobile-toc-current' : ''} ${isExpanded ? 'mobile-toc-expanded' : ''}`}
                   onClick={() => handleChapterClick(chapter, chapterIndex)}
                 >
-                  {pageNum && (
+                  {/* Don't show page numbers for special pages */}
+                  {pageNum && !chapter.isFirstPage && !chapter.isCover && (
                     <span className="mobile-toc-page-number">p. {pageNum}:</span>
                   )}
                   <span className="mobile-toc-chapter-title">{chapter.title}</span>
@@ -566,6 +639,9 @@ export const MobileTOC = ({
               </button>
             )}
           </div>
+              </>
+            );
+          })()}
         </div>
       </div>
     </div>

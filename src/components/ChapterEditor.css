@@ -94,8 +94,8 @@
 
 .close-top {
   position: absolute;
-  top: 16px;
-  right: 16px;
+  top: 8px;
+  right: 8px;
   z-index: 100;
 }
 
@@ -170,7 +170,7 @@
   border: none;
   outline: none;
   background: transparent;
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 1rem;
   line-height: 1.5;
   color: #0c0c0c;
@@ -300,11 +300,43 @@
   position: relative;
   padding: 16px 18px;
   background: #ffffff;
-  font-family: Helvetica, Arial, sans-serif;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
   font-size: 1.06rem;
   line-height: 1.8;
   letter-spacing: 0.005em;
   color: #111;
+}
+
+/* Chapter title styling (h3) in editor - same font as body text, fully editable */
+.content-editor-wrapper .ProseMirror h3 {
+  margin: 1.5rem 0 1rem 0;
+  font-size: 1.35rem;
+  color: #0c0c0c;
+  font-weight: bold;
+  /* Use same font as body text - no special styling in editor */
+  text-transform: none;
+  letter-spacing: 0.015em;
+  /* No default alignment - client can set it */
+  /* Ensure full text selection is possible */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* No ::first-letter styling in editor - it interferes with editing */
+
+/* Subchapter title styling (h4) in editor - same font as body text, fully editable */
+.content-editor-wrapper .ProseMirror h4 {
+  font-size: 1.05rem;
+  margin: 1.2rem 0 0.8rem 0;
+  font-weight: normal;
+  /* Use same font as body text - no special styling in editor */
+  /* No default alignment - client can set it */
+  color: #0c0c0c;
+  /* Ensure full text selection is possible */
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
 }
 
 /* Image resize container and handle */
@@ -1099,13 +1131,14 @@
   border-left: none;
   border-right: none;
   border-radius: 0;
-  padding: 10px 12px;
+  padding: 16px 12px 8px 12px; /* Top padding for close button, bottom padding for buttons above separator */
   margin: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-end; /* Align buttons to bottom of toolbar */
   justify-content: space-between;
   box-shadow: 0 1px 0 rgba(0,0,0,0.02); /* minimal handoff */
   flex-shrink: 0; /* Don't allow toolbar to shrink */
+  min-height: 60px; /* Ensure minimum height for close button (16px top + 28px button + 16px bottom = 60px) */
 }
 
 .toolbar-buttons {
@@ -1166,6 +1199,15 @@
   box-shadow: none; /* flatter, part of toolbar */
   position: relative;
   overflow: hidden;
+}
+
+/* Title button (T/P) and line break button should use editor font to show they're related */
+/* Use a more specific selector to only target the Title button and line break button */
+.toolbar-buttons > .toolbar-btn:first-child,
+.toolbar-buttons > .toolbar-btn:nth-child(2) {
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif;
+  color: #0c0c0c;
+  font-weight: bold;
 }
 
 .toolbar-btn-icon {
@@ -1456,10 +1498,10 @@
     -webkit-overflow-scrolling: touch !important;
     scrollbar-width: none !important;
     flex-wrap: nowrap !important;
-    min-height: 48px !important;
+    min-height: 60px !important; /* Increased to match desktop for close button */
     height: auto !important;
-    padding: 10px 12px !important;
-    align-items: center !important;
+    padding: 16px 12px 8px 12px !important; /* Top padding for close button, bottom padding for buttons */
+    align-items: flex-end !important; /* Align buttons to bottom of toolbar */
   }
   
   .editor-toolbar::-webkit-scrollbar {
@@ -1482,8 +1524,8 @@
   }
   
   .close-top {
-    top: 12px !important;
-    right: 12px !important;
+    top: -8px !important;
+    right: 10px !important;
     z-index: 100 !important; /* Ensure it's above title */
   }
   

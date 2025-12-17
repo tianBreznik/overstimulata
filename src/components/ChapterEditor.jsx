@@ -6,16 +6,16 @@ import TextAlign from '@tiptap/extension-text-align';
 import Link from '@tiptap/extension-link';
 import SimpleBar from 'simplebar-react';
 import 'simplebar-react/dist/simplebar.min.css';
+import { TextSelection } from 'prosemirror-state';
 import { uploadImageToStorage, uploadVideoToStorage } from '../services/storage';
 import { generateWordTimingsWithDeepgram } from '../services/autoTiming';
-import { KaraokeBlock, Dinkus, Highlight, TextColor, Underline, FootnoteRef, Indent, CustomParagraph, Video, CustomImage, InlineImage, Poetry } from '../extensions/tiptapExtensions.js';
+import { KaraokeBlock, Dinkus, Highlight, TextColor, Underline, FootnoteRef, Indent, Video, CustomImage, InlineImage, Poetry } from '../extensions/tiptapExtensions.js';
 import Subscript from '@tiptap/extension-subscript';
 import Superscript from '@tiptap/extension-superscript';
 import { FootnotePlugin } from '../extensions/footnotePlugin.js';
 import './ChapterEditor.css';
 
 export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDelete }) => {
-  const [title, setTitle] = useState(chapter?.title || '');
   const [epigraph, setEpigraph] = useState(chapter?.epigraph || null);
   const [content, setContent] = useState('');
   const [saving, setSaving] = useState(false);
@@ -43,8 +43,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     alignRight: false,
     alignJustify: false,
     link: false,
+    isHeading: false, // Track if we're in a heading
   });
-  const titleInputRef = useRef(null);
   const imageInputRef = useRef(null);
   const inlineImageInputRef = useRef(null);
   const videoFileInputRef = useRef(null);
@@ -89,18 +89,14 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const isSettingContentRef = useRef(false);
   const lastSetContentRef = useRef('');
   
-  // TipTap editor instance - Adding extensions back systematically to find the issue
+  // TipTap editor instance - use default heading/paragraph behavior from StarterKit
   const editor = useEditor({
     extensions: [
       StarterKit.configure({
-        // Disable some default extensions we'll customize
-        heading: {
-          levels: [1, 2, 3],
+        hardBreak: {
+          keepMarks: true,
         },
-        // Disable default paragraph - we'll use CustomParagraph instead
-        paragraph: false,
       }),
-      CustomParagraph,
       TextAlign.configure({
         types: ['heading', 'paragraph'],
       }),
@@ -145,6 +141,20 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         }
       }
     },
+    onSelectionUpdate: ({ editor }) => {
+      // Update isHeading state when selection changes
+      const isSubchapter = !!parentChapter;
+      const headingLevel = isSubchapter ? 4 : 3;
+      const currentNode = editor.state.selection.$from.parent;
+      const isInHeading = currentNode.type.name === 'heading' && currentNode.attrs.level === headingLevel;
+      console.log('[onSelectionUpdate] isHeading check:', {
+        nodeType: currentNode.type.name,
+        nodeLevel: currentNode.attrs.level,
+        headingLevel,
+        isInHeading
+      });
+      setActiveFormats(prev => ({ ...prev, isHeading: isInHeading }));
+    },
     onCreate: () => {},
     parseOptions: {
       preserveWhitespace: 'full',
@@ -153,11 +163,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       attributes: {
         class: 'page-area',
       },
-      // Ensure scrolling works properly
-      handleScrollToSelection: () => {
-        // Let TipTap handle scrolling naturally
-        return true;
-      },
+      // Let TipTap/ProseMirror handle key events and scrolling natively
+      handleScrollToSelection: () => true,
     },
   });
 
@@ -521,7 +528,14 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
           }
         })(),
       };
-      setActiveFormats(prev => ({ ...prev, ...state }));
+      
+      // Check if we're in a heading or paragraph for the Title button
+      const isSubchapter = !!parentChapter;
+      const headingLevel = isSubchapter ? 4 : 3;
+      const currentNode = editor.state.selection.$from.parent;
+      const isInHeading = currentNode.type.name === 'heading' && currentNode.attrs.level === headingLevel;
+      
+      setActiveFormats(prev => ({ ...prev, ...state, isHeading: isInHeading }));
 
       // Only sync text color picker with current text color if user didn't just manually change it
       if (!userChangedColorRef.current) {
@@ -565,6 +579,12 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   useEffect(() => {
     if (!editor) return;
     
+    console.log('[ChapterEditor] content init effect fired', {
+      hasChapter: !!chapter,
+      chapterId: chapter?.id,
+      hasParentChapter: !!parentChapter,
+    });
+    
     if (chapter && editor) {
       const chapterContent = chapter.contentHtml || chapter.content || '';
       const rawEpigraph = chapter.epigraph;
@@ -584,13 +604,59 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         setEpigraph(null);
       }
       
+      // Determine if this is effectively an empty/new chapter (no meaningful text)
+      const plainText = (chapterContent || '').replace(/<[^>]+>/g, '').trim();
+      const isNewOrEmptyChapter = !chapterContent || !plainText;
+      console.log('[ChapterEditor] Content load:', {
+        chapterId: chapter?.id,
+        isSubchapter: !!parentChapter,
+        rawChapterContentLength: (chapterContent || '').length,
+        plainTextLength: plainText.length,
+        isNewOrEmptyChapter,
+      });
+      
       // Only set content if it's different from what's currently in the editor
       const currentContent = editor.getHTML();
-      let processedContent = chapterContent; // Use let so we can reassign if needed
+      let processedContent = chapterContent; // Title is now part of content, don't prepend it
+      
+      // Clean up: Remove duplicate h3 elements, keep only the first one
+      if (processedContent) {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = processedContent;
+        const h3Elements = tempDiv.querySelectorAll('h3');
+        if (h3Elements.length > 1) {
+          // Remove all h3s except the first one
+          for (let i = h3Elements.length - 1; i >= 1; i--) {
+            h3Elements[i].remove();
+          }
+          processedContent = tempDiv.innerHTML;
+        }
+      }
       
       if (currentContent !== processedContent) {
-        setTitle(chapter.title);
         setEntityVersion(chapter.version ?? 0);
+        
+        // If content is empty (new chapter), start with a heading
+        // Skip default heading for special pages (first page, cover page)
+        const isSpecialPage = chapter?.isFirstPage || chapter?.isCover;
+        const isSubchapter = !!parentChapter;
+        const headingLevel = isSubchapter ? 4 : 3;
+        let createdDefaultHeading = false;
+        if (isNewOrEmptyChapter && !isSpecialPage) {
+          processedContent = `<h${headingLevel}></h${headingLevel}>`;
+          createdDefaultHeading = true;
+          console.log('[ChapterEditor] Initializing new chapter with default heading', {
+            headingLevel,
+            processedContent,
+          });
+        } else if (isNewOrEmptyChapter && isSpecialPage) {
+          // For special pages, start with empty paragraph instead of heading
+          processedContent = '<p></p>';
+          console.log('[ChapterEditor] Initializing special page without default heading', {
+            isFirstPage: chapter?.isFirstPage,
+            isCover: chapter?.isCover,
+          });
+        }
         
         // Mark that we're programmatically setting content
         isSettingContentRef.current = true;
@@ -599,9 +665,9 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         // Preprocess HTML: Split spans with both background-color and color into nested structure
         // This ensures both Highlight and TextColor marks can be applied
         // Only process spans that are NOT already inside a <mark> tag (to avoid double-processing)
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = processedContent;
-        const spansWithBoth = tempDiv.querySelectorAll('span[style*="background-color"][style*="color"]');
+        const tempDiv2 = document.createElement('div');
+        tempDiv2.innerHTML = processedContent;
+        const spansWithBoth = tempDiv2.querySelectorAll('span[style*="background-color"][style*="color"]');
         
         if (spansWithBoth.length > 0) {
           spansWithBoth.forEach((span) => {
@@ -635,11 +701,37 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
             }
           });
           
-          processedContent = tempDiv.innerHTML;
+          processedContent = tempDiv2.innerHTML;
         }
         
         editor.commands.setContent(processedContent);
         setContent(processedContent);
+        
+        // If we created a default heading for a new chapter, place the cursor inside it
+        if (createdDefaultHeading) {
+          const { state } = editor;
+          let headingPos = null;
+          state.doc.descendants((node, pos) => {
+            if (node.type.name === 'heading' && node.attrs.level === headingLevel && headingPos === null) {
+              headingPos = pos;
+              return false;
+            }
+            return true;
+          });
+          
+          if (headingPos !== null) {
+            try {
+              editor
+                .chain()
+                .focus()
+                .setTextSelection({ from: headingPos + 1, to: headingPos + 1 })
+                .run();
+              setActiveFormats(prev => ({ ...prev, isHeading: true }));
+            } catch (e) {
+              console.warn('[ChapterEditor] Failed to set cursor in default heading', e);
+            }
+          }
+        }
         
         // Ensure editor scroll container works after content is loaded
         // This is especially important when karaoke blocks are present
@@ -684,27 +776,105 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
           });
         }, 100);
       } else {
-        // Content is the same, just update title and version if needed
-        setTitle(chapter.title);
+        // Content is the same, just update version if needed
         setEpigraph(chapter.epigraph || '');
         setEntityVersion(chapter.version ?? 0);
       }
     } else if (parentChapter && editor) {
+      // New subchapter: start with an empty heading (h4) and place cursor inside
       const currentContent = editor.getHTML();
+      console.log('[ChapterEditor] Subchapter content init:', {
+        parentChapterId: parentChapter?.id,
+        currentContentLength: currentContent.length,
+      });
       if (currentContent !== '') {
-        setTitle('');
         setEpigraph('');
         setEntityVersion(0);
         
+        const headingLevel = 4;
+        const defaultContent = `<h${headingLevel}></h${headingLevel}>`;
+        console.log('[ChapterEditor] Initializing new subchapter with default heading', {
+          headingLevel,
+          defaultContent,
+        });
+        
         // Mark that we're programmatically setting content
         isSettingContentRef.current = true;
-        lastSetContentRef.current = '';
-        editor.commands.setContent('');
-        // Reset to black for new chapter
+        lastSetContentRef.current = defaultContent;
+        editor.commands.setContent(defaultContent);
         setTextColor('#000000');
-        setContent('');
+        setContent(defaultContent);
+        
+        // Place cursor inside the heading and mark as heading
+        const { state } = editor;
+        let headingPos = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'heading' && node.attrs.level === headingLevel && headingPos === null) {
+            headingPos = pos;
+            return false;
+          }
+          return true;
+        });
+        if (headingPos !== null) {
+          try {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection({ from: headingPos + 1, to: headingPos + 1 })
+              .run();
+            setActiveFormats(prev => ({ ...prev, isHeading: true }));
+          } catch (e) {
+            console.warn('[ChapterEditor] Failed to set cursor in new subchapter heading', e);
+          }
+        }
         
         // Reset flag after a brief delay
+        setTimeout(() => {
+          isSettingContentRef.current = false;
+        }, 100);
+      }
+    } else if (!chapter && !parentChapter && editor) {
+      // Brand-new chapter created via "Add chapter" (no chapter object yet)
+      const currentContent = editor.getHTML();
+      console.log('[ChapterEditor] New root chapter init:', {
+        currentContentLength: currentContent.length,
+        currentContent,
+      });
+      
+      // Only auto-initialize if editor is effectively empty
+      if (!currentContent || currentContent === '<p></p>' || currentContent === '<p><br></p>') {
+        const headingLevel = 3;
+        const defaultContent = `<h${headingLevel}></h${headingLevel}>`;
+        
+        isSettingContentRef.current = true;
+        lastSetContentRef.current = defaultContent;
+        editor.commands.setContent(defaultContent);
+        setContent(defaultContent);
+        setTextColor('#000000');
+        
+        // Place cursor inside the heading and mark as heading
+        const { state } = editor;
+        let headingPos = null;
+        state.doc.descendants((node, pos) => {
+          if (node.type.name === 'heading' && node.attrs.level === headingLevel && headingPos === null) {
+            headingPos = pos;
+            return false;
+          }
+          return true;
+        });
+        if (headingPos !== null) {
+          try {
+            editor
+              .chain()
+              .focus()
+              .setTextSelection({ from: headingPos + 1, to: headingPos + 1 })
+              .run();
+            setActiveFormats(prev => ({ ...prev, isHeading: true }));
+          } catch (e) {
+            console.warn('[ChapterEditor] Failed to set cursor in new root chapter heading', e);
+          }
+        }
+        
         setTimeout(() => {
           isSettingContentRef.current = false;
         }, 100);
@@ -856,8 +1026,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   // Debounced local autosave
   useEffect(() => {
-    // Skip initial mount when no title and no content
-    if (!title && !content) return;
+    // Skip initial mount when no content
+    if (!content) return;
     setAutosaveStatus('Saving draft...');
     if (autosaveTimerRef.current) {
       clearTimeout(autosaveTimerRef.current);
@@ -865,7 +1035,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     autosaveTimerRef.current = setTimeout(() => {
       try {
         const key = `draft:${chapter?.id || parentChapter?.id || 'new'}`;
-        const data = { title, content, ts: Date.now() };
+        const data = { content, ts: Date.now() };
         localStorage.setItem(key, JSON.stringify(data));
         setAutosaveStatus('Draft saved');
       } catch (e) {
@@ -875,7 +1045,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     return () => {
       if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current);
     };
-  }, [title, content, chapter?.id, parentChapter?.id]);
+  }, [content, chapter?.id, parentChapter?.id]);
 
   // Sync toolbar with selection changes
   useEffect(() => {
@@ -964,7 +1134,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       
       // CRITICAL: Only handle meta/ctrl shortcuts, let all other keys through to editor
       const meta = e.metaKey || e.ctrlKey;
-      if (!meta) return; // Let normal typing pass through
+      if (!meta) return; // Let normal typing (including Enter) pass through
       
       switch (e.key.toLowerCase()) {
         case 'b': 
@@ -997,11 +1167,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
           editor.chain().focus().setTextAlign('right').run(); 
           refreshToolbarState(); 
           break;
-        case 'enter':
-          // Cmd+Enter: Convert ^[...] pattern to footnote
-          e.preventDefault();
-          convertTextToFootnote();
-          break;
         default: break;
       }
     };
@@ -1012,8 +1177,21 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const handleSave = async () => {
     setSaving(true);
     const currentContent = editor ? editor.getHTML() : '';
+    const extractedTitle = extractTitleFromContent(currentContent);
+    
+    // Validate that title exists (skip validation for special pages: first page and cover page)
+    const isSpecialPage = chapter?.isFirstPage || chapter?.isCover;
+    if (!extractedTitle.trim() && !isSpecialPage) {
+      alert('Prosimo, dodajte naslov poglavja z gumbom "Naslov" v orodni vrstici.');
+      setSaving(false);
+      return;
+    }
+    
+    // For special pages, use the chapter title if no title is extracted from content
+    const titleToSave = extractedTitle.trim() || (isSpecialPage ? (chapter?.title || '') : '');
+    
     try {
-      await onSave({ title, epigraph, contentHtml: currentContent, version: entityVersion });
+      await onSave({ title: titleToSave, epigraph, contentHtml: currentContent, version: entityVersion });
     } catch (err) {
       if (err?.code === 'version-conflict') {
         setAutosaveStatus('Chapter updated elsewhere. Reloaded latest content.');
@@ -1036,6 +1214,81 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     }
   };
 
+  // Extract title from editor content (h3 for chapters, h4 for subchapters)
+  const extractTitleFromContent = (htmlContent) => {
+    if (!htmlContent) return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlContent;
+    // Subchapters use h4, chapters use h3
+    const isSubchapter = !!parentChapter;
+    const titleElement = isSubchapter 
+      ? tempDiv.querySelector('h4')
+      : tempDiv.querySelector('h3');
+    return titleElement ? titleElement.textContent.trim() : '';
+  };
+
+  // Insert or update the single title in the editor (h3 for chapters, h4 for subchapters)
+  // Simple approach: just insert/update the heading like any other content
+  // Handle title button click - clean implementation:
+  // - There can be at most one heading of the title level in the document.
+  // - The button never creates a second heading; it either:
+  //   * toggles the current heading back to a paragraph, or
+  //   * focuses the existing heading, or
+  //   * creates a new heading at the cursor if none exists.
+  const handleTitleButtonClick = () => {
+    if (!editor) return;
+    
+    const { state } = editor;
+    const { selection } = state;
+    const { $from } = selection;
+    const isSubchapter = !!parentChapter;
+    const headingLevel = isSubchapter ? 4 : 3;
+    
+    const currentNode = $from.parent;
+    const isInHeading = currentNode.type.name === 'heading' && currentNode.attrs.level === headingLevel;
+    
+    // Find first existing heading of this level, if any
+    let existingHeadingPos = null;
+    let existingHeadingSize = null;
+    state.doc.descendants((node, pos) => {
+      if (node.type.name === 'heading' && node.attrs.level === headingLevel) {
+        existingHeadingPos = pos;
+        existingHeadingSize = node.nodeSize;
+        return false;
+      }
+    });
+    
+    if (isInHeading) {
+      // In the title currently → toggle back to paragraph
+      editor.chain().focus().toggleHeading({ level: headingLevel }).run();
+      setActiveFormats(prev => ({ ...prev, isHeading: false }));
+      return;
+    }
+    
+    if (existingHeadingPos !== null) {
+      // A title already exists somewhere else → move cursor into it
+      editor.chain()
+        .setTextSelection({ from: existingHeadingPos + 1, to: existingHeadingPos + 1 })
+        .focus()
+        .run();
+      setActiveFormats(prev => ({ ...prev, isHeading: true }));
+      return;
+    }
+    
+    // No title yet → turn current block into the title heading
+    editor.chain().focus().toggleHeading({ level: headingLevel }).run();
+    setActiveFormats(prev => ({ ...prev, isHeading: true }));
+  };
+
+
+  const applyLineBreak = (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    if (!editor) return;
+    editor.chain().focus().setHardBreak().run();
+  };
 
   const applyBold = (e) => {
     if (e) {
@@ -2056,19 +2309,16 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   };
 
   useEffect(() => {
-    // Only auto-focus content editor on initial mount, and only if title input is not being focused
+    // Auto-focus content editor on initial mount
     if (!editor) return;
     const timer = setTimeout(() => {
       const activeElement = document.activeElement;
       const editorEl = editor.view?.dom;
-      // Don't auto-focus if title input is focused or if content editor is already focused
-      if (editorEl && 
-          activeElement !== titleInputRef.current && 
-          activeElement !== editorEl &&
-          !titleInputRef.current?.matches(':focus')) {
+      // Don't auto-focus if content editor is already focused
+      if (editorEl && activeElement !== editorEl) {
         editor.commands.focus();
       }
-    }, 300); // Longer delay to allow user to click title first
+    }, 300);
     return () => clearTimeout(timer);
   }, [editor]);
 
@@ -2078,21 +2328,27 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         <button className="close-btn close-top" onClick={onCancel}>✕</button>
         
         <div className="editor-content">
-          <div className="title-row">
-            <input
-              ref={titleInputRef}
-              id="chapter-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="naslov poglavja"
-              className="title-input"
-            />
-          </div>
-
           <div className="page-frame">
             <div className="editor-toolbar attached">
               <div className="toolbar-buttons">
+                <button
+                  className={`toolbar-btn ${activeFormats.isHeading ? 'active' : ''}`}
+                  type="button"
+                  onClick={handleTitleButtonClick}
+                  title={activeFormats.isHeading ? "Pretvori v odstavek" : "Naslov poglavja"}
+                >
+                  <span style={{ fontWeight: 'bold', fontSize: '1.1em' }}>
+                    {activeFormats.isHeading ? 'T' : 'p'}
+                  </span>
+                </button>
+                <button 
+                  type="button"
+                  onClick={applyLineBreak}
+                  className="toolbar-btn"
+                  title="Prelom vrstice (Shift+Enter)"
+                >
+                  <span style={{ fontSize: '0.9em' }}>↵</span>
+                </button>
                 <button 
                   type="button"
                   onClick={applyBold}
@@ -2437,7 +2693,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 <button 
                   className="toolbar-save-btn"
                   onClick={handleSave}
-                  disabled={!title.trim() || saving}
+                  disabled={saving}
                 >
                   {saving ? 'Objavljam' : 'Objavi'}
                 </button>

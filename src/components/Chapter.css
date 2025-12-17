@@ -30,7 +30,7 @@
 /* Scoped print-style typography for chapter content only (not headers) */
 .chapters-list .chapter-content,
 .chapters-list .chapter-content * {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
   letter-spacing: 0.004em;
   line-height: 1.6;
   text-rendering: optimizeLegibility;
@@ -41,7 +41,7 @@
 
 .chapters-list .chapter-content .karaoke-player,
 .chapters-list .chapter-content .karaoke-player * {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
   font-weight: 400 !important;
   font-size: 1rem;
   line-height: 1.6;
@@ -373,7 +373,7 @@
 /* Apply ink bleed to all textual descendants, whatever their tag */
 .chapter-content :where(p, span, strong, em, mark, del, ins, a, b, i, u, s),
 .chapter-content :where(p, span, strong, em, mark, del, ins, a, b, i, u, s) * {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important;
   font-weight: 400 !important;
 }
 
@@ -391,7 +391,7 @@
 
 .chapter-content del,
 .chapter-content s {
-  font-family: 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
+  font-family: 'Baskerville Old Face', 'Baskerville', 'Garamond', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif !important; /* match header font */
   font-weight: 400 !important; /* match header weight exactly */
   /* no explicit shadow/stroke here; spans control ink effect distribution */
 }

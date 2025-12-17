@@ -325,6 +325,7 @@ export const PageReader = ({
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [displayPage, setDisplayPage] = useState(null); // The page currently displayed
   const [isInitializing, setIsInitializing] = useState(true); // Track if we're still initializing
+  const hasUserInteractedRef = useRef(false); // Track if user has swiped/interacted at least once
   const [isTOCOpen, setIsTOCOpen] = useState(false);
   const [tocDragProgress, setTocDragProgress] = useState(0); // 0 = fully closed, 1 = fully open
   const tocDragProgressRef = useRef(0); // Use ref to avoid re-renders during drag
@@ -350,8 +351,9 @@ export const PageReader = ({
 
   // Calculate pages for all chapters based on actual content height
   // Includes subchapters in the flow
+  // Now works on both mobile and desktop
   useEffect(() => {
-    if (typeof window === 'undefined' || window.innerWidth > 768) return;
+    if (typeof window === 'undefined') return;
     if (!chapters || chapters.length === 0) {
       setPages([]);
       return;
@@ -371,20 +373,17 @@ export const PageReader = ({
       const newPages = [];
       const newKaraokeSources = {};
 
-      // Add cover page as the first page (before all chapters)
-      const coverPage = {
-        chapterIndex: -1, // Special index for cover
-        chapterId: null,
-        chapterTitle: null,
-        subchapterId: null,
-        subchapterTitle: null,
-        pageIndex: 0,
-        hasHeading: false,
-        isCover: true,
-        content: '',
-        footnotes: [],
-      };
-      newPages.push(coverPage);
+      // Sort chapters: isFirstPage first, then isCover, then regular chapters by order
+      const sortedChapters = [...chapters].sort((a, b) => {
+        // First page comes first
+        if (a.isFirstPage && !b.isFirstPage) return -1;
+        if (!a.isFirstPage && b.isFirstPage) return 1;
+        // Cover page comes after first page
+        if (a.isCover && !b.isCover) return -1;
+        if (!a.isCover && b.isCover) return 1;
+        // Then sort by order
+        return (a.order || 0) - (b.order || 0);
+      });
 
       // Get all footnotes globally for numbering
       const allFootnotes = getAllFootnotes(chapters);
@@ -394,6 +393,14 @@ export const PageReader = ({
         footnoteContentToNumber.set(fn.content.trim(), fn.globalNumber);
       });
 
+      // Determine if we're calculating for desktop PDF or mobile
+      const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
+      
+      // Desktop PDF page dimensions: 800px width, 1000px min-height
+      // Mobile uses viewport dimensions
+      const pageWidth = isDesktop ? 800 : undefined; // undefined = use CSS min(680px, 96vw)
+      const pageHeight = isDesktop ? 1000 : viewportHeight;
+      
       // Create measurement container that exactly matches rendered page structure
       // This ensures measurement accuracy by using the same CSS classes
       const createMeasureContainer = () => {
@@ -403,8 +410,8 @@ export const PageReader = ({
         container.style.visibility = 'hidden';
         container.style.left = '-9999px';
         container.style.top = '0';
-        container.style.width = '100%';
-        container.style.height = viewportHeight + 'px';
+        container.style.width = isDesktop ? `${pageWidth}px` : '100%';
+        container.style.height = pageHeight + 'px';
         container.style.padding = '2rem 1.5rem 0.5rem';
         container.style.boxSizing = 'border-box';
         container.style.display = 'flex';
@@ -414,7 +421,7 @@ export const PageReader = ({
 
         const sheet = document.createElement('div');
         sheet.className = 'page-sheet content-page';
-        sheet.style.width = 'min(660px, 94vw)';
+        sheet.style.width = isDesktop ? `${pageWidth}px` : 'min(680px, 96vw)';
         sheet.style.height = '100%';
         sheet.style.display = 'flex';
         sheet.style.flexDirection = 'column';
@@ -426,6 +433,17 @@ export const PageReader = ({
         body.style.width = '100%';
         body.style.flex = '1';
         body.style.overflow = 'hidden';
+        // For desktop, ensure body has explicit height for accurate measurement
+        if (isDesktop && pageHeight) {
+          // Container is pageHeight (1000px), padding is 2rem top + 0.5rem bottom
+          // Sheet is 100% height, body fills remaining space
+          // Calculate: pageHeight - container padding top - container padding bottom
+          const containerPaddingTop = 32; // 2rem ≈ 32px
+          const containerPaddingBottom = 8; // 0.5rem ≈ 8px
+          body.style.height = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
+          body.style.minHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
+          body.style.maxHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
+        }
         sheet.appendChild(body);
         document.body.appendChild(container);
 
@@ -443,31 +461,64 @@ export const PageReader = ({
           getAvailableHeight: (footnotesHeight = 0) => {
             // Return actual available height from CSS-applied styles
             // IMPORTANT: Reserve bottom margin even when there are no footnotes (like a real book)
-            const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
-            const height = body.clientHeight;
+            const BOTTOM_MARGIN_NO_FOOTNOTES = 32; // ~2rem in pixels (reduced since footnotes are now inline)
+            
+            // For desktop PDF viewer, use fixed page height (1000px) minus container padding
+            // For mobile, use actual body.clientHeight
+            let height;
+            if (isDesktop && pageHeight) {
+              // Desktop: pageHeight is 1000px, container has padding: 2rem 1.5rem 0.5rem
+              // So body height = 1000px - (2rem top + 0.5rem bottom) = 1000px - ~40px = ~960px
+              const containerPaddingTop = 32; // 2rem ≈ 32px
+              const containerPaddingBottom = 8; // 0.5rem ≈ 8px
+              height = pageHeight - containerPaddingTop - containerPaddingBottom;
+            } else {
+              // Mobile: use actual rendered height
+              height = body.clientHeight;
+            }
+            
             // When footnotes exist, they replace the bottom margin (footnotes are larger)
             // When no footnotes, use the bottom margin for consistent spacing
             const reservedSpace = footnotesHeight > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
             const availableHeight = Math.max(0, height - reservedSpace);
-// console.log('[getAvailableHeight] Returning:', availableHeight, '(full height:', height, '- reserved space:', reservedSpace, footnotesHeight > 0 ? '(footnotes)' : '(bottom margin)', ')');
+// console.log('[getAvailableHeight] Returning:', availableHeight, '(full height:', height, '- reserved space:', reservedSpace, footnotesHeight > 0 ? '(footnotes)' : '(bottom margin)', 'isDesktop:', isDesktop);
             return availableHeight;
           },
         };
       };
 
       const measure = createMeasureContainer();
+      
+      // Calculate content width for measurements (accounting for padding)
+      // Desktop PDF: 800px - 60px padding = 740px
+      // Mobile: use measure.body.clientWidth (dynamic based on viewport)
+      const contentWidth = isDesktop && pageWidth 
+        ? pageWidth - 60  // 2rem * 2 = ~60px padding
+        : measure.body.clientWidth;
 
       // Helper to apply base paragraph CSS to measurement containers
       // This ensures TipTap HTML (with inline text-align styles) is measured
       // with the same base font/line-height/margin as .page-content p
+      // Desktop PDF uses 1.3rem, mobile uses 1.3rem (updated)
+      const desktopFontSize = isDesktop ? '1.3rem' : '1.3rem';
+      const desktopLineHeight = isDesktop ? '1.35' : '1.35';
       const applyParagraphStylesToContainer = (container) => {
         const paragraphs = container.querySelectorAll('p');
         paragraphs.forEach(p => {
           // Only apply if not already set (preserve inline styles from TipTap)
-          if (!p.style.fontSize) p.style.fontSize = '1.2rem';
-          if (!p.style.lineHeight) p.style.lineHeight = '1.2';
-          if (!p.style.margin) p.style.margin = '0.45rem 0';
+          if (!p.style.fontSize) p.style.fontSize = desktopFontSize;
+          if (!p.style.lineHeight) p.style.lineHeight = desktopLineHeight;
+          if (!p.style.margin) p.style.margin = '0.35rem 0';
           if (!p.style.fontFamily) p.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
+          
+          // Ensure empty paragraphs create visible spacing
+          const isEmpty = !p.textContent || p.textContent.trim().length === 0 || (p.children.length === 0 && (!p.textContent || p.textContent.trim() === ''));
+          const hasOnlyBr = p.children.length === 1 && p.children[0].tagName === 'BR' && (!p.textContent || p.textContent.trim() === '');
+          if (isEmpty || hasOnlyBr) {
+            // Ensure empty paragraphs have minimum height to create spacing
+            if (!p.style.minHeight) p.style.minHeight = '0.7rem';
+            if (!p.style.display) p.style.display = 'block';
+          }
         });
         
         // Apply poetry block styles to match actual rendering
@@ -488,9 +539,36 @@ export const PageReader = ({
         });
       };
 
-      // Process chapters sequentially
-      for (let chapterIdx = 0; chapterIdx < chapters.length; chapterIdx++) {
-        const chapter = chapters[chapterIdx];
+      // Process chapters sequentially (now sorted: first page, cover, then regular)
+      console.log('[PageOrder] Processing chapters:', sortedChapters.map(ch => ({
+        id: ch.id,
+        title: ch.title,
+        isFirstPage: ch.isFirstPage,
+        isCover: ch.isCover,
+        hasContent: !!(ch.contentHtml || ch.content)
+      })));
+      
+      for (let chapterIdx = 0; chapterIdx < sortedChapters.length; chapterIdx++) {
+        const chapter = sortedChapters[chapterIdx];
+        
+        // Determine chapterIndex: use order field, or special indices for first page/cover
+        let chapterIndex;
+        if (chapter.isFirstPage) {
+          chapterIndex = -2; // Special index for first page
+        } else if (chapter.isCover) {
+          chapterIndex = -1; // Special index for cover
+        } else {
+          chapterIndex = chapter.order !== undefined ? chapter.order : chapterIdx;
+        }
+        
+        console.log('[PageOrder] Processing chapter:', {
+          chapterId: chapter.id,
+          title: chapter.title,
+          isFirstPage: chapter.isFirstPage,
+          isCover: chapter.isCover,
+          chapterIndex: chapterIndex,
+          hasContent: !!(chapter.contentHtml || chapter.content)
+        });
         
         // Build content array: chapter content + all subchapter content
         const contentBlocks = [];
@@ -525,7 +603,42 @@ export const PageReader = ({
           });
         }
 
-        if (contentBlocks.length === 0) continue;
+        // Special pages (first page, cover) should always create at least one page, even if empty
+        // Regular chapters with no content are skipped
+        if (contentBlocks.length === 0) {
+          if (chapter.isFirstPage || chapter.isCover) {
+            // Create an empty page for special pages
+            console.log('[PageOrder] Creating empty page for special chapter:', {
+              chapterId: chapter.id,
+              title: chapter.title,
+              isFirstPage: chapter.isFirstPage,
+              isCover: chapter.isCover,
+              chapterIndex: chapterIndex
+            });
+            const emptyPage = {
+              chapterIndex: chapterIndex,
+              chapterId: chapter.id,
+              chapterTitle: chapter.title,
+              subchapterId: null,
+              subchapterTitle: null,
+              pageIndex: 0,
+              hasHeading: false,
+              content: '',
+              footnotes: [],
+              isFirstPage: chapter.isFirstPage || false,
+              isCover: chapter.isCover || false,
+            };
+            newPages.push(emptyPage);
+          } else {
+            console.log('[PageOrder] Skipping chapter with no content:', {
+              chapterId: chapter.id,
+              title: chapter.title,
+              isFirstPage: chapter.isFirstPage,
+              isCover: chapter.isCover
+            });
+          }
+          continue;
+        }
 
         // First, collect all background videos with their targetPage from all blocks
         // Use regex to avoid expensive DOM creation for every block
@@ -610,7 +723,18 @@ export const PageReader = ({
           const tempDiv = document.createElement('div');
           tempDiv.className = 'footnotes-section';
           // Apply the same padding-bottom as in CSS
-          tempDiv.style.paddingBottom = 'calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem)';
+          // Desktop PDF uses 2rem, mobile uses calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem)
+          if (isDesktop) {
+            tempDiv.style.paddingBottom = '2rem'; // Desktop doesn't need safe-area-inset
+            tempDiv.style.padding = '1rem 1.5rem';
+          } else {
+            tempDiv.style.paddingBottom = 'calc(env(safe-area-inset-bottom, 0px) + 2rem + 1rem)';
+            tempDiv.style.padding = '1rem 1.5rem';
+          }
+          // Use correct width for desktop PDF
+          if (isDesktop && pageWidth) {
+            tempDiv.style.width = `${pageWidth - 60}px`; // Account for padding (2rem * 2 = ~60px)
+          }
           
           const divider = document.createElement('div');
           divider.className = 'footnotes-divider';
@@ -618,6 +742,11 @@ export const PageReader = ({
           
           const list = document.createElement('div');
           list.className = 'footnotes-list';
+          // Explicitly set font size for desktop to match CSS (0.9rem)
+          if (isDesktop) {
+            list.style.fontSize = '0.9rem';
+            list.style.lineHeight = '1.5';
+          }
           
           // Add actual footnote items with real content
           footnotesToMeasure.forEach((fn) => {
@@ -648,11 +777,12 @@ export const PageReader = ({
           // First, try to add all content
           // Apply base paragraph styles to match actual rendering (without .page-content container rules)
           const tempContainer = document.createElement('div');
-          tempContainer.style.width = measure.body.clientWidth + 'px';
+          tempContainer.style.width = contentWidth + 'px';
           // Apply the same font/line-height/margin rules that .page-content p uses
+          // Desktop PDF uses 1.3rem, mobile uses 1.3rem (updated)
           tempContainer.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
-          tempContainer.style.fontSize = '1.2rem';
-          tempContainer.style.lineHeight = '1.62';
+          tempContainer.style.fontSize = isDesktop ? '1.3rem' : '1.3rem';
+          tempContainer.style.lineHeight = isDesktop ? '1.35' : '1.35';
           measure.body.appendChild(tempContainer);
           
           contentElements.forEach(el => {
@@ -733,7 +863,7 @@ export const PageReader = ({
           // Current page elements are in currentPageElements array but may not be in DOM
           // We need to measure with actual current page content + footnotes
           const tempContainer = document.createElement('div');
-          tempContainer.style.width = measure.body.clientWidth + 'px';
+          tempContainer.style.width = contentWidth + 'px';
           measure.body.appendChild(tempContainer);
           
           // Add all current page elements to temp container for measurement
@@ -807,8 +937,9 @@ export const PageReader = ({
 // console.log('[tryFillRemainingSpace] Checking element at index:', lookAheadIndex, 'tagName:', nextElement?.tagName, 'isAtomic:', isAtomicElement(nextElement));
             
             // Recalculate remaining space after each addition
+            // Use contentWidth for desktop, measure.body.clientWidth for mobile
             const tempContainer2 = document.createElement('div');
-            tempContainer2.style.width = measure.body.clientWidth + 'px';
+            tempContainer2.style.width = contentWidth + 'px';
             measure.body.appendChild(tempContainer2);
             
             // Add current page elements
@@ -906,12 +1037,17 @@ export const PageReader = ({
               
               // Try entire element first
               // Check if content fits in space after reserving footnotes
-              const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, measure.body);
+              // Use contentWidth for desktop, measure.body.clientWidth for mobile
+              const tempFootnotesContainerAtomic2 = document.createElement('div');
+              tempFootnotesContainerAtomic2.style.width = contentWidth + 'px';
+              measure.body.appendChild(tempFootnotesContainerAtomic2);
+              const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, tempFootnotesContainerAtomic2);
+              measure.body.removeChild(tempFootnotesContainerAtomic2);
               const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic);
               const contentAvailableHeightForAtomic = baseAvailableHeightForAtomic;
               
               const tempCheckContainerAtomic = document.createElement('div');
-              tempCheckContainerAtomic.style.width = measure.body.clientWidth + 'px';
+              tempCheckContainerAtomic.style.width = contentWidth + 'px';
               measure.body.appendChild(tempCheckContainerAtomic);
               
               [...currentPageElements, nextElement.outerHTML].forEach(el => {
@@ -999,12 +1135,17 @@ export const PageReader = ({
                   const firstPartFootnotes = extractFootnotesFromContent(splitResult.first);
                   const testFootnotesWithFirst = new Set([...currentPageFootnotes, ...firstPartFootnotes]);
                   // Check if first part fits in space after reserving footnotes
-                  const firstPartFootnotesHeight = measureFootnotesHeight(testFootnotesWithFirst, measure.body);
+                  // Use contentWidth for desktop, measure.body.clientWidth for mobile
+                  const tempFootnotesContainerFirst = document.createElement('div');
+                  tempFootnotesContainerFirst.style.width = contentWidth + 'px';
+                  measure.body.appendChild(tempFootnotesContainerFirst);
+                  const firstPartFootnotesHeight = measureFootnotesHeight(testFootnotesWithFirst, tempFootnotesContainerFirst);
+                  measure.body.removeChild(tempFootnotesContainerFirst);
                   const baseAvailableHeightForFirstPart = measure.getAvailableHeight(firstPartFootnotesHeight);
                   const firstPartContentAvailableHeight = baseAvailableHeightForFirstPart;
                   
                   const tempCheckContainerFirstPart = document.createElement('div');
-                  tempCheckContainerFirstPart.style.width = measure.body.clientWidth + 'px';
+                  tempCheckContainerFirstPart.style.width = contentWidth + 'px';
                   measure.body.appendChild(tempCheckContainerFirstPart);
                   
                   [...currentPageElements, splitResult.first].forEach(el => {
@@ -1124,8 +1265,8 @@ export const PageReader = ({
           const pageNumber = chapterPageIndex + 1; // Convert 0-indexed to 1-indexed
           const backgroundVideoSrc = backgroundVideosByPage.get(pageNumber) || null;
 
-          newPages.push({
-            chapterIndex: chapterIdx,
+          const newPage = {
+            chapterIndex: chapterIndex,
             chapterId: chapter.id,
             chapterTitle: chapter.title,
             subchapterId: blockMeta.subchapterId,
@@ -1135,7 +1276,22 @@ export const PageReader = ({
             content: contentWrapper,
             footnotes: pageFootnotes, // Store footnotes for this page
             backgroundVideo: backgroundVideoSrc,
+            isFirstPage: chapter.isFirstPage || false,
+            isCover: chapter.isCover || false,
+          };
+          
+          console.log('[PageOrder] Creating page from content:', {
+            chapterIndex: newPage.chapterIndex,
+            chapterId: newPage.chapterId,
+            chapterTitle: newPage.chapterTitle,
+            isCover: newPage.isCover,
+            isFirstPage: newPage.isFirstPage,
+            pageIndex: newPage.pageIndex,
+            contentLength: newPage.content.length,
+            hasContent: newPage.content.length > 0
           });
+          
+          newPages.push(newPage);
           chapterPageIndex += 1;
           
           startNewPage(false);
@@ -1702,7 +1858,7 @@ export const PageReader = ({
           
           if (epigraphText) {
             newPages.push({
-              chapterIndex: chapterIdx,
+              chapterIndex: chapterIndex,
               chapterId: chapter.id,
               chapterTitle: chapter.title,
               subchapterId: block.subchapterId,
@@ -1713,6 +1869,8 @@ export const PageReader = ({
               epigraphText,
               epigraphAuthor,
               epigraphAlign,
+              isFirstPage: chapter.isFirstPage || false,
+              isCover: chapter.isCover || false,
               content: '',
               footnotes: [],
             });
@@ -1731,8 +1889,8 @@ export const PageReader = ({
           const contentDiv = document.createElement('div');
           contentDiv.className = 'chapter-content';
           contentDiv.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
-          contentDiv.style.fontSize = '1.2rem'; // Match .page-content p font-size
-          contentDiv.style.lineHeight = '1.62'; // Match .page-body line-height
+          contentDiv.style.fontSize = isDesktop ? '1.3rem' : '1.3rem'; // Match .page-content p font-size (1.3rem for both)
+          contentDiv.style.lineHeight = isDesktop ? '1.35' : '1.35'; // Match .page-content p line-height (1.35 for both)
           contentDiv.style.color = '#0a0a0a';
           
           let htmlContent = block.content;
@@ -1776,15 +1934,8 @@ export const PageReader = ({
           htmlContent = htmlContent.replace(/—/g, '-').replace(/–/g, '-');
           
           // Handle title rendering
-          if (block.includeChapterTitle) {
-            // Chapter has no content, so include both chapter and subchapter titles
-            const chapterTitle = chapters[chapterIdx].title;
-            htmlContent = `<h3 class="chapter-header-title">${chapterTitle}</h3><h4 class="chapter-header-title">${block.title}</h4>${htmlContent}`;
-          } else if (block.type === 'subchapter' || (block.type === 'chapter' && blockIdx === 0)) {
-            // Normal case: add title for first block or subchapter
-            const titleTag = block.type === 'subchapter' ? 'h4' : 'h3';
-            htmlContent = `<${titleTag} class="chapter-header-title">${block.title}</${titleTag}>${htmlContent}`;
-          }
+          // Titles are now part of the editor content (h3 / h4 inside contentHtml),
+          // so we no longer prepend additional heading elements here.
           
           contentDiv.innerHTML = htmlContent;
           tempContainer.appendChild(contentDiv);
@@ -1817,6 +1968,17 @@ export const PageReader = ({
           });
 
           const elements = Array.from(contentDiv.children);
+          
+          console.log('[PageOrder] Processing block content:', {
+            blockType: block.type,
+            chapterId: block.chapterId,
+            subchapterId: block.subchapterId,
+            htmlContentLength: htmlContent.length,
+            elementsCount: elements.length,
+            elementTags: elements.map(el => el.tagName),
+            isCover: chapter.isCover,
+            isFirstPage: chapter.isFirstPage
+          });
 
           // Main pagination loop: process each element
           // SIMPLIFIED ALGORITHM: Fundamentally consider footnotes, no gap-filling complexity
@@ -1865,13 +2027,15 @@ export const PageReader = ({
             
             // Measure footnote height first, then get available height
             // Get available height AFTER heading state is set (if it changed)
+            // Mobile: use measure.body.clientWidth, Desktop: use contentWidth
             const tempFootnotesContainer = document.createElement('div');
-            tempFootnotesContainer.style.width = measure.body.clientWidth + 'px';
+            tempFootnotesContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
             measure.body.appendChild(tempFootnotesContainer);
             const footnotesHeight = measureFootnotesHeight(testFootnotes, tempFootnotesContainer);
             measure.body.removeChild(tempFootnotesContainer);
             
             // Get available height - it will use footnotes height if provided, or bottom margin if not
+            // baseAvailableHeight already accounts for footnotes (subtracts them from page height)
             const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight);
             const contentAvailableHeight = baseAvailableHeight;
 
@@ -1879,7 +2043,8 @@ export const PageReader = ({
             // This ensures we account for footnotes correctly
             const testElements = [...currentPageElements, element.outerHTML];
             const tempTotalContainer = document.createElement('div');
-            tempTotalContainer.style.width = measure.body.clientWidth + 'px';
+            // Mobile: use measure.body.clientWidth, Desktop: use contentWidth
+            tempTotalContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
             measure.body.appendChild(tempTotalContainer);
             
             testElements.forEach(el => {
@@ -1904,7 +2069,8 @@ export const PageReader = ({
             // Calculate remaining space for splitting (if needed)
             // IMPORTANT: Apply paragraph styles to get accurate measurement
             const tempCurrentPageContainer = document.createElement('div');
-            tempCurrentPageContainer.style.width = measure.body.clientWidth + 'px';
+            // Mobile: use measure.body.clientWidth, Desktop: use contentWidth
+            tempCurrentPageContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
             measure.body.appendChild(tempCurrentPageContainer);
             
             currentPageElements.forEach(el => {
@@ -1968,12 +2134,13 @@ export const PageReader = ({
                 // Double-check that the total page content (with padding) still fits
                 const finalTestElements = [...currentPageElements, element.outerHTML];
                 const finalTestContainer = document.createElement('div');
-                finalTestContainer.style.width = measure.body.clientWidth + 'px';
+                // Mobile: use measure.body.clientWidth, Desktop: use contentWidth
+                finalTestContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
                 measure.body.appendChild(finalTestContainer);
                 
                 // Simulate the actual rendering with padding-bottom
                 // Calculate reserved space: footnotes height if footnotes exist, otherwise bottom margin
-                const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
+                const BOTTOM_MARGIN_NO_FOOTNOTES = 32; // ~2rem in pixels (reduced since footnotes are now inline)
                 const finalReservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
                 const finalContentWrapper = document.createElement('div');
                 finalContentWrapper.className = 'page-content-main';
@@ -1997,29 +2164,43 @@ export const PageReader = ({
                 // just include it anyway (better UX than splitting)
                 // ALSO: If remainingContentHeight is very small (< 30px) and element is long enough, try to split
                 // This prevents paragraphs from being pushed to next page when there's a tiny bit of space left
-                const overflowAmount = finalTotalHeight - baseAvailableHeight;
-                const shouldTrySplitDueToSmallSpace = remainingContentHeight < 30 && 
+                // MOBILE: Use baseAvailableHeight (which already accounts for footnotes)
+                // DESKTOP: Use fullPageHeight for direct comparison
+                let overflowAmount;
+                if (isDesktop && pageHeight) {
+                  // Desktop: compare against full page height
+                  const containerPaddingTop = 32; // 2rem ≈ 32px
+                  const containerPaddingBottom = 8; // 0.5rem ≈ 8px
+                  const fullPageHeight = pageHeight - containerPaddingTop - containerPaddingBottom;
+                  overflowAmount = finalTotalHeight - fullPageHeight;
+                } else {
+                  // Mobile: use baseAvailableHeight (previous working logic)
+                  overflowAmount = finalTotalHeight - baseAvailableHeight;
+                }
+                const shouldTrySplitDueToSmallSpace = remainingContentHeight < 50 && 
                                                       remainingContentHeight > 0 &&
                                                       element.textContent && 
-                                                      element.textContent.length > 100;
+                                                      element.textContent.length > 50; // Relaxed: try split with more space and shorter elements
                 
                 // Only allow small overflow tolerance if:
                 // 1. This is the last element in the array (no more elements to process), OR
-                // 2. Remaining space is very small (< 50px) AND overflow is small (< 20px)
-                // This prevents multiple elements from overflowing while allowing the last element to fit
+                // 2. Remaining space is very small (< 80px) AND overflow is small (< 30px), OR
+                // 3. Element is short (< 100 chars) and overflow is small (< 30px) - allow short elements to fit
+                // This prevents multiple elements from overflowing while allowing the last element or short elements to fit
+                const elementTextLength = element.textContent?.length || 0; // Declare early for use below
                 const isLastElement = elementIndex === elements.length - 1;
-                const isLikelyLastElement = remainingContentHeight < 50 && overflowAmount < 20;
-                const allowSmallOverflow = (isLastElement || isLikelyLastElement) && overflowAmount < 20 && overflowAmount > 0;
+                const isLikelyLastElement = remainingContentHeight < 80 && overflowAmount < 30;
+                const isShortElement = elementTextLength < 100 && overflowAmount < 30;
+                const allowSmallOverflow = (isLastElement || isLikelyLastElement || isShortElement) && overflowAmount < 30 && overflowAmount > 0;
                 
                 // Only attempt split if overflow is significant (>= 20px) or there's very little space left
                 // BUT: Allow small overflow (< 20px) only for the last element or when remaining space is very small
                 // ALSO: Skip split if remaining space is very small (< 50px) and element is long - push whole element instead
-                const elementTextLength = element.textContent?.length || 0;
-                const shouldSkipSplitDueToSmallSpace = remainingContentHeight < 50 && 
+                const shouldSkipSplitDueToSmallSpace = remainingContentHeight < 20 && 
                                                         remainingContentHeight > 0 &&
-                                                        elementTextLength > 100; // Element is long enough that split would likely be awkward
+                                                        elementTextLength > 200; // Relaxed: only skip if very little space AND very long element
                 
-                if ((overflowAmount >= 20 || shouldTrySplitDueToSmallSpace) && finalTotalHeight > baseAvailableHeight && !allowSmallOverflow && !shouldSkipSplitDueToSmallSpace) {
+                if ((overflowAmount >= 10 || shouldTrySplitDueToSmallSpace) && finalTotalHeight > baseAvailableHeight && !allowSmallOverflow && !shouldSkipSplitDueToSmallSpace) { // Relaxed: reduced overflow threshold from 20px to 10px
 // console.log('[Pagination] Attempting split:', {
 //                    reason: overflowAmount >= 20 ? 'overflows with padding' : 'small remaining space',
 //                    finalTotalHeight,
@@ -2042,7 +2223,7 @@ export const PageReader = ({
                     // Check if first part is too short (just a few words) - if so, push whole element to next page
                     const firstPartText2 = first.replace(/<[^>]*>/g, '').trim(); // Strip HTML tags to get text
                     const firstPartWordCount2 = firstPartText2.split(/\s+/).filter(w => w.length > 0).length;
-                    const isFirstPartTooShort2 = firstPartWordCount2 < 8; // Less than 8 words is too short
+                    const isFirstPartTooShort2 = firstPartWordCount2 < 2; // Relaxed: Less than 2 words is too short
                     
 // console.log('[Pagination] Split result check (elementFits=false):', {
 //                      firstPartText: firstPartText2.substring(0, 100),
@@ -2066,7 +2247,7 @@ export const PageReader = ({
                     // Check if first part is too short (just a few words) - if so, push whole element to next page
                     const firstPartText = first.replace(/<[^>]*>/g, '').trim(); // Strip HTML tags to get text
                     const firstPartWordCount = firstPartText.split(/\s+/).filter(w => w.length > 0).length;
-                    const isFirstPartTooShort = firstPartWordCount < 8; // Less than 8 words is too short
+                    const isFirstPartTooShort = firstPartWordCount < 2; // Relaxed: Less than 2 words is too short
                     
 // console.log('[Pagination] Split result check:', {
 //                      firstPartText: firstPartText.substring(0, 100),
@@ -2115,16 +2296,16 @@ export const PageReader = ({
                     
                     const firstPartRemainingSpace = baseAvailableHeight - firstPartHeight;
                     
-                    // Case 1: First part leaves significant unused space (> 50px) and overflow was small (< 20px)
-                    // -> Don't split, include whole element with small overflow
-                    if (firstPartRemainingSpace > 50 && overflowAmount < 20) {
+                    // Case 1: First part leaves significant unused space (> 30px) and overflow was small (< 30px)
+                    // -> Don't split, include whole element with small overflow (relaxed thresholds)
+                    if (firstPartRemainingSpace > 30 && overflowAmount < 30) {
                       // Don't split - include whole element with small overflow
                       elementFootnotes.forEach(num => currentPageFootnotes.add(num));
                       currentPageElements.push(element.outerHTML);
                     }
-                    // Case 2: First part leaves very little to no space (< 30px) and overflow was small (< 20px)
+                    // Case 2: First part leaves very little to no space (< 15px) and overflow was small (< 30px)
                     // -> Push whole element to next page instead of splitting (avoids unnecessary tiny first part)
-                    else if (firstPartRemainingSpace < 30 && overflowAmount < 20) {
+                    else if (firstPartRemainingSpace < 15 && overflowAmount < 30) {
                       // Push whole element to next page - avoid split that would leave tiny first part
                       if (currentPageElements.length > 0) {
                         pushPage(block);
@@ -2174,11 +2355,11 @@ export const PageReader = ({
 //                });
                 
                 // Check if we should skip splitting and push whole element instead
-                // Conditions: very small remaining space (< 50px) AND element is long enough that split would be awkward
+                // Conditions: very small remaining space (< 20px) AND element is long enough that split would be awkward
                 const elementTextLength = element.textContent?.length || 0;
-                const shouldSkipSplit = remainingContentHeight < 50 && 
+                const shouldSkipSplit = remainingContentHeight < 20 && 
                                         remainingContentHeight > 0 &&
-                                        elementTextLength > 100; // Element is long enough that split would likely be awkward
+                                        elementTextLength > 200; // Relaxed: only skip if very little space AND very long element
                 
                 if (shouldSkipSplit) {
 // console.log('[Pagination] Skipping split - remaining space too small, pushing whole element to next page');
@@ -2254,7 +2435,7 @@ export const PageReader = ({
                     
                     // Recalculate available height with first part's footnotes
                     const tempFootnotesContainerFirst = document.createElement('div');
-                    tempFootnotesContainerFirst.style.width = measure.body.clientWidth + 'px';
+                    tempFootnotesContainerFirst.style.width = contentWidth + 'px';
                     measure.body.appendChild(tempFootnotesContainerFirst);
                     const footnotesHeightWithFirst = measureFootnotesHeight(testFootnotesWithFirst, tempFootnotesContainerFirst);
                     measure.body.removeChild(tempFootnotesContainerFirst);
@@ -2350,7 +2531,7 @@ export const PageReader = ({
           if (videoElements.length > 0) {
             videoElements.forEach((video) => {
               newPages.push({
-                chapterIndex: chapterIdx,
+                chapterIndex: chapterIndex,
                 chapterId: chapter.id,
                 chapterTitle: chapter.title,
                 subchapterId: block.subchapterId,
@@ -2361,6 +2542,8 @@ export const PageReader = ({
                 videoSrc: video.src,
                 content: '',
                 footnotes: [],
+                isFirstPage: chapter.isFirstPage || false,
+                isCover: chapter.isCover || false,
               });
               chapterPageIndex += 1;
             });
@@ -2383,12 +2566,51 @@ export const PageReader = ({
       });
       
       newPages.forEach(page => {
-        // Cover page doesn't need totalPages calculation
-        if (page.isCover) return;
+        // Special pages don't need totalPages calculation
+        if (page.isCover || page.isFirstPage) return;
         const key = `${page.chapterIndex}`;
         page.totalPages = pagesByChapter[key]?.length || 1;
       });
 
+      // Verify page order: first page should be first, then cover, then regular chapters
+      console.log('[PageOrder] Setting pages, total:', newPages.length);
+      console.log('[PageOrder] First 5 pages:', newPages.slice(0, 5).map((p, i) => ({
+        index: i,
+        isFirstPage: p.isFirstPage,
+        isCover: p.isCover,
+        isVideo: p.isVideo,
+        isEpigraph: p.isEpigraph,
+        chapterIndex: p.chapterIndex,
+        pageIndex: p.pageIndex,
+        chapterId: p.chapterId
+      })));
+      
+      // Verify first page is at position 0 (if it exists)
+      const firstPageIndex = newPages.findIndex(p => p?.isFirstPage);
+      const coverPageIndex = newPages.findIndex(p => p?.isCover && !p?.isFirstPage);
+      
+      if (firstPageIndex !== -1 && firstPageIndex !== 0) {
+        console.warn('[PageOrder] First page is not at position 0! Moving it.', { firstPageIndex });
+        const firstPage = newPages[firstPageIndex];
+        newPages.splice(firstPageIndex, 1);
+        newPages.unshift(firstPage);
+      }
+      
+      // Verify cover page is after first page (if both exist)
+      if (coverPageIndex !== -1 && firstPageIndex !== -1 && coverPageIndex !== 1) {
+        console.warn('[PageOrder] Cover page is not after first page! Moving it.', { coverPageIndex, firstPageIndex });
+        const coverPage = newPages[coverPageIndex];
+        newPages.splice(coverPageIndex, 1);
+        // Insert after first page (position 1)
+        newPages.splice(1, 0, coverPage);
+      } else if (coverPageIndex !== -1 && firstPageIndex === -1 && coverPageIndex !== 0) {
+        // No first page, cover should be first
+        console.warn('[PageOrder] Cover page is not first! Moving it.', { coverPageIndex });
+        const coverPage = newPages[coverPageIndex];
+        newPages.splice(coverPageIndex, 1);
+        newPages.unshift(coverPage);
+      }
+      
       // Set pages immediately for faster initial render
       setPages(newPages);
       setKaraokeSources(newKaraokeSources);
@@ -2398,10 +2620,30 @@ export const PageReader = ({
       // Use requestIdleCallback to apply hyphenation when browser is idle
       const applyHyphenationBatch = () => {
         setPages(prevPages => {
-          // Only apply if pages haven't changed (avoid race conditions)
-          if (prevPages.length !== newPages.length) return prevPages;
+          console.log('[Hyphenation] Applying hyphenation, prevPages.length:', prevPages.length, 'newPages.length:', newPages.length);
           
-          return prevPages.map(page => {
+          // Only apply if pages haven't changed (avoid race conditions)
+          if (prevPages.length !== newPages.length) {
+            console.warn('[Hyphenation] Page count mismatch, skipping hyphenation', {
+              prevLength: prevPages.length,
+              newLength: newPages.length
+            });
+            return prevPages;
+          }
+          
+          // Verify page order hasn't changed
+          const orderChanged = prevPages.some((page, index) => {
+            const expectedPage = newPages[index];
+            return !expectedPage || page.chapterIndex !== expectedPage.chapterIndex || page.pageIndex !== expectedPage.pageIndex;
+          });
+          
+          if (orderChanged) {
+            console.warn('[Hyphenation] Page order changed, skipping hyphenation');
+            return prevPages;
+          }
+          
+          // Preserve the exact order of pages - map maintains order
+          const hyphenatedPages = prevPages.map((page, index) => {
             if (page.isCover || page.isEpigraph || page.isVideo) {
               return page; // Skip hyphenation for special pages
             }
@@ -2414,6 +2656,9 @@ export const PageReader = ({
               content: applyHyphenationToHTML(page.content)
             };
           });
+          
+          console.log('[Hyphenation] Hyphenation complete, returning', hyphenatedPages.length, 'pages');
+          return hyphenatedPages;
         });
       };
       
@@ -3283,27 +3528,30 @@ export const PageReader = ({
   const goToNextPage = useCallback(() => {
     if (isTransitioning || pages.length === 0) return;
 
-    // Find current page - if we're on cover, find cover; otherwise exclude cover
+    // Find current page - handle special pages (first page, cover) and regular pages
     const currentPage = pages.find(
       (p) => {
-        if (currentChapterIndex === -1) {
+        if (currentChapterIndex === -2) {
+          // Looking for first page
+          return p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        } else if (currentChapterIndex === -1) {
           // Looking for cover page
-          return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+          return p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
         } else {
-          // Looking for regular page - exclude cover
-          return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+          // Looking for regular page - exclude special pages
+          return !p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
         }
       }
     );
 
     if (!currentPage) {
-      // Fallback to cover page if current not found (cover is always first)
+      // Fallback: try to find first page, then cover, then first regular page
       if (pages.length > 0) {
-        const coverPage = pages.find(p => p.isCover);
-        if (coverPage) {
+        const firstPage = pages.find(p => p.isFirstPage);
+        if (firstPage) {
           setIsTransitioning(true);
-          setCurrentChapterIndex(coverPage.chapterIndex);
-          setCurrentPageIndex(coverPage.pageIndex);
+          setCurrentChapterIndex(firstPage.chapterIndex);
+          setCurrentPageIndex(firstPage.pageIndex);
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               setIsTransitioning(false);
@@ -3311,17 +3559,16 @@ export const PageReader = ({
           });
           if (onPageChange) {
             onPageChange({
-              chapterId: null,
-              pageIndex: 0,
+              chapterId: firstPage.chapterId,
+              pageIndex: firstPage.pageIndex,
             });
           }
         } else {
-          // No cover page, fallback to first non-cover page
-          const firstNonCoverPage = pages.find(p => !p.isCover);
-          if (firstNonCoverPage) {
+          const coverPage = pages.find(p => p.isCover && !p.isFirstPage);
+          if (coverPage) {
             setIsTransitioning(true);
-            setCurrentChapterIndex(firstNonCoverPage.chapterIndex);
-            setCurrentPageIndex(firstNonCoverPage.pageIndex);
+            setCurrentChapterIndex(coverPage.chapterIndex);
+            setCurrentPageIndex(coverPage.pageIndex);
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
                 setIsTransitioning(false);
@@ -3329,9 +3576,28 @@ export const PageReader = ({
             });
             if (onPageChange) {
               onPageChange({
-                chapterId: firstNonCoverPage.chapterId,
-                pageIndex: firstNonCoverPage.pageIndex,
+                chapterId: coverPage.chapterId,
+                pageIndex: coverPage.pageIndex,
               });
+            }
+          } else {
+            // No special pages, fallback to first regular page
+            const firstRegularPage = pages.find(p => !p.isCover && !p.isFirstPage);
+            if (firstRegularPage) {
+              setIsTransitioning(true);
+              setCurrentChapterIndex(firstRegularPage.chapterIndex);
+              setCurrentPageIndex(firstRegularPage.pageIndex);
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  setIsTransitioning(false);
+                });
+              });
+              if (onPageChange) {
+                onPageChange({
+                  chapterId: firstRegularPage.chapterId,
+                  pageIndex: firstRegularPage.pageIndex,
+                });
+              }
             }
           }
         }
@@ -3339,10 +3605,10 @@ export const PageReader = ({
       return;
     }
 
-    // Check if there's a next page in current chapter (exclude cover page)
+    // Check if there's a next page in current chapter (exclude special pages from regular navigation)
     const nextPageInChapter = pages.find(
       (p) =>
-        !p.isCover &&
+        !p.isCover && !p.isFirstPage &&
         p.chapterIndex === currentChapterIndex &&
         p.pageIndex === currentPageIndex + 1
     );
@@ -3373,36 +3639,101 @@ export const PageReader = ({
         });
       }
     } else {
-      // Move to next chapter, first page (exclude cover page)
-      if (!chapters || currentChapterIndex + 1 >= chapters.length) return;
-      const nextChapter = chapters[currentChapterIndex + 1];
-      if (nextChapter) {
-        const firstPageOfNextChapter = pages.find(
-          (p) => !p.isCover && p.chapterIndex === currentChapterIndex + 1 && p.pageIndex === 0
-        );
-        if (firstPageOfNextChapter) {
+      // Move to next chapter/page
+      // Handle special case: if we're on first page, go to cover page
+      if (currentChapterIndex === -2) {
+        const coverPage = pages.find(p => p.isCover && !p.isFirstPage && p.chapterIndex === -1);
+        if (coverPage) {
           setIsTransitioning(true);
-          // Wait for fade-out to complete (1s), then update content and fade in
           setTimeout(() => {
-            // Update both displayPage and indices together
-            setDisplayPage(firstPageOfNextChapter);
-            setCurrentChapterIndex(currentChapterIndex + 1);
-            setCurrentPageIndex(0);
-            // Wait for DOM to update and ink effect to be applied before starting fade-in
+            setDisplayPage(coverPage);
+            setCurrentChapterIndex(coverPage.chapterIndex);
+            setCurrentPageIndex(coverPage.pageIndex);
             requestAnimationFrame(() => {
               requestAnimationFrame(() => {
                 setIsTransitioning(false);
               });
             });
-          }, 1000); // Wait for full fade-out duration
-
+          }, 1000);
           if (onPageChange) {
             onPageChange({
-              chapterId: nextChapter.id,
-              pageIndex: 0,
-              subchapterId: firstPageOfNextChapter.subchapterId,
+              chapterId: coverPage.chapterId,
+              pageIndex: coverPage.pageIndex,
             });
           }
+        }
+        return;
+      }
+      
+      // Handle special case: if we're on cover page, go to first regular chapter
+      if (currentChapterIndex === -1) {
+        // Find first regular chapter (order >= 0, not special pages)
+        const sortedChapterIndices = [...new Set(pages.map(p => p.chapterIndex).filter(idx => idx >= 0))].sort((a, b) => a - b);
+        if (sortedChapterIndices.length > 0) {
+          const firstRegularChapterIndex = sortedChapterIndices[0];
+          // Find the first page of the first regular chapter (lowest pageIndex)
+          const pagesOfFirstChapter = pages.filter(
+            (p) => !p.isCover && !p.isFirstPage && p.chapterIndex === firstRegularChapterIndex
+          );
+          if (pagesOfFirstChapter.length > 0) {
+            // Sort by pageIndex to get the first page
+            pagesOfFirstChapter.sort((a, b) => a.pageIndex - b.pageIndex);
+            const firstPageOfFirstChapter = pagesOfFirstChapter[0];
+            setIsTransitioning(true);
+            setTimeout(() => {
+              setDisplayPage(firstPageOfFirstChapter);
+              setCurrentChapterIndex(firstRegularChapterIndex);
+              setCurrentPageIndex(firstPageOfFirstChapter.pageIndex);
+              requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                  setIsTransitioning(false);
+                });
+              });
+            }, 1000);
+            if (onPageChange) {
+              onPageChange({
+                chapterId: firstPageOfFirstChapter.chapterId,
+                pageIndex: firstPageOfFirstChapter.pageIndex,
+                subchapterId: firstPageOfFirstChapter.subchapterId,
+              });
+            }
+          }
+        }
+        return;
+      }
+      
+      // Find next chapter by looking for next chapterIndex in sorted order
+      const sortedChapterIndices = [...new Set(pages.map(p => p.chapterIndex).filter(idx => idx >= 0))].sort((a, b) => a - b);
+      const currentIdxInSorted = sortedChapterIndices.indexOf(currentChapterIndex);
+      if (currentIdxInSorted === -1 || currentIdxInSorted + 1 >= sortedChapterIndices.length) {
+        return;
+      }
+      const nextChapterIndex = sortedChapterIndices[currentIdxInSorted + 1];
+      const firstPageOfNextChapter = pages.find(
+        (p) => !p.isCover && !p.isFirstPage && p.chapterIndex === nextChapterIndex && p.pageIndex === 0
+      );
+      if (firstPageOfNextChapter) {
+        setIsTransitioning(true);
+        // Wait for fade-out to complete (1s), then update content and fade in
+        setTimeout(() => {
+          // Update both displayPage and indices together
+          setDisplayPage(firstPageOfNextChapter);
+          setCurrentChapterIndex(nextChapterIndex);
+          setCurrentPageIndex(0);
+          // Wait for DOM to update and ink effect to be applied before starting fade-in
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setIsTransitioning(false);
+            });
+          });
+        }, 1000); // Wait for full fade-out duration
+
+        if (onPageChange) {
+          onPageChange({
+            chapterId: firstPageOfNextChapter.chapterId,
+            pageIndex: 0,
+            subchapterId: firstPageOfNextChapter.subchapterId,
+          });
         }
       }
     }
@@ -3510,17 +3841,22 @@ export const PageReader = ({
 
   // Navigate to previous page
   const goToPreviousPage = useCallback(() => {
+    // Mark that user has interacted
+    hasUserInteractedRef.current = true;
     if (isTransitioning || pages.length === 0) return;
 
-    // Find current page - if we're on cover, find cover; otherwise exclude cover
+    // Find current page - handle special pages (first page, cover) and regular pages
     const currentPage = pages.find(
       (p) => {
-        if (currentChapterIndex === -1) {
+        if (currentChapterIndex === -2) {
+          // Looking for first page
+          return p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        } else if (currentChapterIndex === -1) {
           // Looking for cover page
-          return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+          return p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
         } else {
-          // Looking for regular page - exclude cover
-          return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+          // Looking for regular page - exclude special pages
+          return !p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
         }
       }
     );
@@ -3529,10 +3865,10 @@ export const PageReader = ({
 
     // Check if there's a previous page in current chapter
     if (currentPageIndex > 0) {
-      // Previous page in same chapter (exclude cover)
+      // Previous page in same chapter (exclude special pages)
       const prevPage = pages.find(
         (p) =>
-          !p.isCover &&
+          !p.isCover && !p.isFirstPage &&
           p.chapterIndex === currentChapterIndex &&
           p.pageIndex === currentPageIndex - 1
       );
@@ -3561,38 +3897,88 @@ export const PageReader = ({
         }
       }
     } else {
-      // Move to previous chapter, last page (exclude cover)
-      if (currentChapterIndex > 0 && chapters && chapters.length > 0) {
-        const prevChapter = chapters[currentChapterIndex - 1];
-        if (prevChapter) {
-          const lastPageOfPrevChapter = pages
-            .filter((p) => !p.isCover && p.chapterIndex === currentChapterIndex - 1)
-            .sort((a, b) => b.pageIndex - a.pageIndex)[0];
-
-          if (lastPageOfPrevChapter) {
+      // Move to previous chapter, last page (exclude special pages)
+      // Handle special case: if we're on cover page, go back to first page
+      if (currentChapterIndex === -1) {
+        const firstPage = pages.find(p => p.isFirstPage && p.chapterIndex === -2);
+        if (firstPage) {
+          setIsTransitioning(true);
+          setTimeout(() => {
+            setDisplayPage(firstPage);
+            setCurrentChapterIndex(firstPage.chapterIndex);
+            setCurrentPageIndex(firstPage.pageIndex);
+            requestAnimationFrame(() => {
+              requestAnimationFrame(() => {
+                setIsTransitioning(false);
+              });
+            });
+          }, 1000);
+          if (onPageChange) {
+            onPageChange({
+              chapterId: firstPage.chapterId,
+              pageIndex: firstPage.pageIndex,
+            });
+          }
+        }
+        return;
+      }
+      
+      // Find previous chapter by looking for previous chapterIndex in sorted order
+      const sortedChapterIndices = [...new Set(pages.map(p => p.chapterIndex).filter(idx => idx >= 0))].sort((a, b) => a - b);
+      const currentIdxInSorted = sortedChapterIndices.indexOf(currentChapterIndex);
+      if (currentIdxInSorted === -1 || currentIdxInSorted === 0) {
+        // Check if we can go to cover page (if we're on first regular chapter)
+        if (currentIdxInSorted === 0) {
+          const coverPage = pages.find(p => p.isCover && !p.isFirstPage && p.chapterIndex === -1);
+          if (coverPage) {
             setIsTransitioning(true);
-            // Wait for fade-out to complete (1s), then update content and fade in
             setTimeout(() => {
-              // Update both displayPage and indices together
-              setDisplayPage(lastPageOfPrevChapter);
-              setCurrentChapterIndex(currentChapterIndex - 1);
-              setCurrentPageIndex(lastPageOfPrevChapter.pageIndex);
-              // Wait for DOM to update and ink effect to be applied before starting fade-in
+              setDisplayPage(coverPage);
+              setCurrentChapterIndex(coverPage.chapterIndex);
+              setCurrentPageIndex(coverPage.pageIndex);
               requestAnimationFrame(() => {
                 requestAnimationFrame(() => {
                   setIsTransitioning(false);
                 });
               });
-            }, 1000); // Wait for full fade-out duration
-
+            }, 1000);
             if (onPageChange) {
               onPageChange({
-                chapterId: prevChapter.id,
-                pageIndex: lastPageOfPrevChapter.pageIndex,
-                subchapterId: lastPageOfPrevChapter.subchapterId,
+                chapterId: coverPage.chapterId,
+                pageIndex: coverPage.pageIndex,
               });
             }
           }
+        }
+        return;
+      }
+      const prevChapterIndex = sortedChapterIndices[currentIdxInSorted - 1];
+      const lastPageOfPrevChapter = pages
+        .filter((p) => !p.isCover && !p.isFirstPage && p.chapterIndex === prevChapterIndex)
+        .sort((a, b) => b.pageIndex - a.pageIndex)[0];
+
+      if (lastPageOfPrevChapter) {
+        setIsTransitioning(true);
+        // Wait for fade-out to complete (1s), then update content and fade in
+        setTimeout(() => {
+          // Update both displayPage and indices together
+          setDisplayPage(lastPageOfPrevChapter);
+          setCurrentChapterIndex(prevChapterIndex);
+          setCurrentPageIndex(lastPageOfPrevChapter.pageIndex);
+          // Wait for DOM to update and ink effect to be applied before starting fade-in
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setIsTransitioning(false);
+            });
+          });
+        }, 1000); // Wait for full fade-out duration
+
+        if (onPageChange) {
+          onPageChange({
+            chapterId: lastPageOfPrevChapter.chapterId,
+            pageIndex: lastPageOfPrevChapter.pageIndex,
+            subchapterId: lastPageOfPrevChapter.subchapterId,
+          });
         }
       }
     }
@@ -3770,15 +4156,18 @@ export const PageReader = ({
     [goToNextPage, goToPreviousPage, isTOCOpen]
   );
 
-  // Get current page data - if we're on cover, find cover; otherwise exclude cover
+  // Get current page data - handle special pages (first page, cover) and regular pages
   const currentPage = pages.find(
     (p) => {
-      if (currentChapterIndex === -1) {
+      if (currentChapterIndex === -2) {
+        // Looking for first page
+        return p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+      } else if (currentChapterIndex === -1) {
         // Looking for cover page
-        return p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        return p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
       } else {
-        // Looking for regular page - exclude cover
-        return !p.isCover && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
+        // Looking for regular page - exclude special pages
+        return !p.isCover && !p.isFirstPage && p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex;
       }
     }
   );
@@ -3787,15 +4176,18 @@ export const PageReader = ({
   const jumpToPage = useCallback((targetChapterIndex, targetPageIndex) => {
     if (isTransitioning || pages.length === 0) return;
     
-    // Find target page - if target is cover, find cover; otherwise exclude cover
+    // Find target page - handle special pages (first page, cover) and regular pages
     const targetPage = pages.find(
       (p) => {
-        if (targetChapterIndex === -1) {
+        if (targetChapterIndex === -2) {
+          // Looking for first page
+          return p.isFirstPage && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
+        } else if (targetChapterIndex === -1) {
           // Looking for cover page
-          return p.isCover && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
+          return p.isCover && !p.isFirstPage && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
         } else {
-          // Looking for regular page - exclude cover
-          return !p.isCover && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
+          // Looking for regular page - exclude special pages
+          return !p.isCover && !p.isFirstPage && p.chapterIndex === targetChapterIndex && p.pageIndex === targetPageIndex;
         }
       }
     );
@@ -3835,8 +4227,8 @@ export const PageReader = ({
   // Ensure valid page state - MUST be before any conditional returns
   useEffect(() => {
     if (pages.length > 0 && !currentPage) {
-      // Current page not found, reset to first page
-      const firstPage = pages[0];
+      // Current page not found, reset to first page (isFirstPage if exists, otherwise first page)
+      const firstPage = pages.find(p => p.isFirstPage) || pages[0];
       if (firstPage) {
         setCurrentChapterIndex(firstPage.chapterIndex);
         setCurrentPageIndex(firstPage.pageIndex);
@@ -3865,6 +4257,26 @@ export const PageReader = ({
   const isTransitioningRef = useRef(false);
   const preservedInkHTMLRef = useRef(null); // Store HTML with ink effect before transition
   const preservedPageKeyRef = useRef(null); // Track which page the preserved HTML belongs to
+  
+  // Calculate chapter progress for progress bar (must be at top level for Rules of Hooks)
+  const chapterProgress = useMemo(() => {
+    if (!displayPage || displayPage.isFirstPage || displayPage.isCover) {
+      return 0;
+    }
+    const currentChapterPages = pages.filter(p => 
+      p.chapterIndex === displayPage.chapterIndex && 
+      !p.isFirstPage && 
+      !p.isCover
+    );
+    const currentPageInChapter = currentChapterPages.findIndex(p => 
+      p.pageIndex === displayPage.pageIndex && 
+      p.chapterIndex === displayPage.chapterIndex
+    );
+    const totalPagesInChapter = currentChapterPages.length;
+    return totalPagesInChapter > 0 
+      ? (currentPageInChapter + 1) / totalPagesInChapter 
+      : 0;
+  }, [displayPage, pages]);
   
   // Pause all karaoke when transitioning
   useEffect(() => {
@@ -4247,25 +4659,48 @@ export const PageReader = ({
         }
       };
       
-      // Always check immediately - if ink chars are missing, reapply
-      // This is especially important during transitions when React might reset the HTML
+      // DON'T apply ink effect immediately - it interferes with initial text layout
+      // Only check if we should restore preserved HTML during transitions
       const hasInkChars = node.querySelectorAll('.ink-char-mobile').length > 0;
-      if (!hasInkChars) {
-        // During transitions, restore from preserved HTML only if it's for the current page
-        if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
-          node.innerHTML = preservedInkHTMLRef.current;
-        } else {
-          applyInk();
-        }
-      } else if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
+      if (hasInkChars && (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey)) {
         // Ink chars exist but we haven't preserved HTML yet for this page - preserve it now
         preservedInkHTMLRef.current = node.innerHTML;
         preservedPageKeyRef.current = currentPageKey;
       }
+      // During transitions, restore from preserved HTML if available
+      if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey && !hasInkChars) {
+        node.innerHTML = preservedInkHTMLRef.current;
+      }
       
-      // Always try after DOM is fully ready, regardless of transition state
-      // This ensures ink effect is applied even if content loads asynchronously
-      requestAnimationFrame(() => {
+      // CRITICAL FIX: Skip applying ink effect on initial load to prevent word spacing issues
+      // Only apply ink effect after user has interacted (swiped) at least once
+      // This ensures the browser has completed its initial text layout calculation
+      const applyInkWhenReady = async () => {
+        // Skip ink effect on initial load - wait for user interaction
+        if (!hasUserInteractedRef.current) {
+          return; // Don't apply ink effect until user has swiped at least once
+        }
+        
+        // Wait for fonts to be loaded
+        if (document.fonts && document.fonts.ready) {
+          try {
+            await document.fonts.ready;
+          } catch (e) {
+            console.warn('[PageReader] Font loading check failed:', e);
+          }
+        }
+        
+        if (!node || !node.isConnected) return;
+        
+        // Small delay to ensure layout is stable
+        await new Promise(resolve => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              setTimeout(resolve, 100);
+            });
+          });
+        });
+        
         if (node && node.isConnected) {
           const hasInkChars = node.querySelectorAll('.ink-char-mobile').length > 0;
           if (!hasInkChars) {
@@ -4273,7 +4708,11 @@ export const PageReader = ({
             if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
               node.innerHTML = preservedInkHTMLRef.current;
             } else {
+              // Apply ink effect only after user has interacted
               applyInk();
+              // Immediately preserve the HTML so we can restore it later without re-applying
+              preservedInkHTMLRef.current = node.innerHTML;
+              preservedPageKeyRef.current = currentPageKey;
             }
           } else if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
             // Ink chars exist but we haven't preserved HTML yet for this page - preserve it now
@@ -4283,33 +4722,42 @@ export const PageReader = ({
           
           // Initialize karaoke slices after ink effect is applied
           initializeKaraokeSlices(node);
-          
-          // One more try after next frame as backup
-          requestAnimationFrame(() => {
-            if (node && node.isConnected) {
-              const hasInkChars = node.querySelectorAll('.ink-char-mobile').length > 0;
-              if (!hasInkChars) {
-                // During transitions, restore from preserved HTML only if it's for the current page
-                if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
-                  node.innerHTML = preservedInkHTMLRef.current;
-                } else {
-                  applyInk();
-                }
-              } else if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
-                // Ink chars exist but we haven't preserved HTML yet for this page - preserve it now
-                preservedInkHTMLRef.current = node.innerHTML;
-                preservedPageKeyRef.current = currentPageKey;
-              }
-              
-              // Initialize karaoke slices again after second frame
-              initializeKaraokeSlices(node);
-              
-              // DON'T call startVisibleKaraoke here - let the transition end effect handle it
-              // This ensures resume state is always checked before starting playback
-            }
-          });
         }
-      });
+      };
+      
+      // Only apply ink effect after user interaction
+      applyInkWhenReady();
+      
+      // Backup: Only apply ink effect after user interaction
+      if (hasUserInteractedRef.current) {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(() => {
+              if (node && node.isConnected) {
+                const hasInkChars = node.querySelectorAll('.ink-char-mobile').length > 0;
+                if (!hasInkChars) {
+                  // During transitions, restore from preserved HTML only if it's for the current page
+                  if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
+                    node.innerHTML = preservedInkHTMLRef.current;
+                  } else {
+                    applyInk();
+                  }
+                } else if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
+                  // Ink chars exist but we haven't preserved HTML yet for this page - preserve it now
+                  preservedInkHTMLRef.current = node.innerHTML;
+                  preservedPageKeyRef.current = currentPageKey;
+                }
+                
+                // Initialize karaoke slices again after second frame
+                initializeKaraokeSlices(node);
+                
+                // DON'T call startVisibleKaraoke here - let the transition end effect handle it
+                // This ensures resume state is always checked before starting playback
+              }
+            }, 50);
+          });
+        });
+      }
       
       // During transitions, also check after a short delay to catch any race conditions
       // where React might reset the HTML after the initial application
@@ -4433,11 +4881,208 @@ export const PageReader = ({
     };
   }, []);
 
-  if (typeof window !== 'undefined' && window.innerWidth > 768) {
-    // Desktop: render children normally (no pagination)
-    return null;
+  // Check if we're on desktop
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
+
+  // Apply ink effect to desktop PDF pages after render and fix font sizes
+  useEffect(() => {
+    if (!isDesktop || pages.length === 0) return;
+    
+    const applyInkAndFixFonts = () => {
+      const pageContents = document.querySelectorAll('.pdf-page-wrapper .page-content');
+      pageContents.forEach((pageContent) => {
+        // Remove inline font-size styles that might override CSS
+        const allElements = pageContent.querySelectorAll('*');
+        allElements.forEach((el) => {
+          if (el.style && el.style.fontSize) {
+            // Remove inline font-size to let CSS take over
+            el.style.removeProperty('font-size');
+          }
+        });
+        // Also remove from the container itself
+        if (pageContent.style && pageContent.style.fontSize) {
+          pageContent.style.removeProperty('font-size');
+        }
+        
+        // Apply ink effect
+        // Skip if already processed
+        if (pageContent.querySelectorAll('.ink-char-mobile').length > 0) return;
+        // Skip karaoke players
+        if (pageContent.closest('.karaoke-player')) return;
+        // Apply ink effect with skipMobileCheck to allow desktop usage
+        applyInkEffectToTextMobile(pageContent, { probability: 0.45, skipMobileCheck: true });
+      });
+    };
+    
+    // Apply after a short delay to ensure DOM is ready
+    const timeoutId = setTimeout(applyInkAndFixFonts, 100);
+    
+    return () => clearTimeout(timeoutId);
+  }, [pages, isDesktop]);
+
+  // On desktop, render all pages in a PDF reader style (early return)
+  // Show loading if pages aren't calculated yet
+  if (isDesktop) {
+    if (pages.length === 0) {
+      return (
+        <div className="page-reader-loading">
+          <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
+        </div>
+      );
+    }
+    // Always start at page 1 (cover page)
+    // The cover page should always be first in the pages array
+    // Verify the first page is the cover page
+    console.log('[PDFViewer] Rendering PDF viewer with', pages.length, 'pages');
+    const firstPage = pages.find(p => p.isFirstPage) || pages[0];
+    if (firstPage && !firstPage.isFirstPage && !firstPage.isCover) {
+      console.error('[PageOrder] First page is not first page or cover page!', {
+        firstPageType: firstPage.isVideo ? 'video' : firstPage.isEpigraph ? 'epigraph' : 'content',
+        firstPageChapterIndex: firstPage.chapterIndex,
+        firstPagePageIndex: firstPage.pageIndex,
+        totalPages: pages.length,
+        firstFewPages: pages.slice(0, 5).map(p => ({
+          isCover: p.isCover,
+          isVideo: p.isVideo,
+          isEpigraph: p.isEpigraph,
+          chapterIndex: p.chapterIndex,
+          pageIndex: p.pageIndex
+        }))
+      });
+    }
+    
+    // Check for duplicate pages
+    const pageKeys = new Set();
+    const duplicates = [];
+    pages.forEach((page, index) => {
+      const key = `chapter-${page.chapterIndex}-page-${page.pageIndex}`;
+      if (pageKeys.has(key)) {
+        duplicates.push({ index, key, page });
+      }
+      pageKeys.add(key);
+    });
+    if (duplicates.length > 0) {
+      console.error('[PDFViewer] Found duplicate pages!', duplicates);
+    }
+    
+    const initialPage = 1;
+    
+    return (
+      <PDFViewer
+        currentPage={initialPage}
+        totalPages={pages.length}
+        onPageChange={(pageNum) => {
+          // Scroll to the page
+          const pageElement = document.getElementById(`pdf-page-${pageNum - 1}`);
+          if (pageElement) {
+            pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }}
+        filename="weird-attachments.pdf"
+      >
+        <div className="pdf-pages-container">
+          {pages.map((page, index) => {
+            if (!page) return null;
+            
+            // Debug: Log first few pages to verify order
+            if (index < 5) {
+              console.log(`[PDFViewer] Rendering page ${index + 1}:`, {
+                isCover: page.isCover,
+                isVideo: page.isVideo,
+                isEpigraph: page.isEpigraph,
+                chapterIndex: page.chapterIndex,
+                pageIndex: page.pageIndex,
+                chapterTitle: page.chapterTitle
+              });
+            }
+            
+            // Use index as key to ensure unique keys and prevent React from reusing components incorrectly
+            // Also include page properties to help React identify changes
+            const pageKey = `pdf-page-${index}-${page.chapterIndex}-${page.pageIndex}`;
+            const pageNumber = index + 1;
+            // Calculate page number excluding first page and cover (for display)
+            // Page numbers start at 1 after the cover page
+            const regularPages = pages.filter(p => !p.isFirstPage && !p.isCover);
+            const displayPageNumber = (page.isFirstPage || page.isCover) ? 0 : regularPages.findIndex(
+              (p) => p.chapterIndex === page.chapterIndex && p.pageIndex === page.pageIndex
+            ) + 1;
+            const shouldShowTopBar = page && !page.hasHeading && !page.isEpigraph && !page.isCover && !page.isFirstPage;
+            
+            return (
+              <div
+                key={pageKey}
+                id={`pdf-page-${index}`}
+                className="pdf-page-wrapper"
+                style={{
+                  // Ensure each page is in normal document flow
+                  position: 'relative',
+                  display: 'block',
+                  width: '100%'
+                }}
+              >
+                <article className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''}`}>
+                  {/* Background videos disabled in desktop PDF viewer for now */}
+                  <section className="page-body content-body">
+                    {page?.isCover ? (
+                      <div 
+                        className="page-content"
+                        dangerouslySetInnerHTML={{ __html: page.content || '' }}
+                      />
+                    ) : page?.isFirstPage ? (
+                      <div 
+                        className="page-content"
+                        dangerouslySetInnerHTML={{ __html: page.content || '' }}
+                      />
+                    ) : page?.isEpigraph ? (
+                      <div className="page-content epigraph-content">
+                        <div className={`epigraph-text epigraph-align-${page?.epigraphAlign || 'center'}`}>
+                          <div>{page?.epigraphText || ''}</div>
+                          {page?.epigraphAuthor && (
+                            <div className="epigraph-author">– {page.epigraphAuthor}</div>
+                          )}
+                        </div>
+                      </div>
+                    ) : page?.isVideo ? (
+                      <div className="page-content video-content">
+                        <video
+                          src={page?.videoSrc}
+                          loop
+                          muted
+                          playsInline
+                          preload="auto"
+                          className="fullscreen-video"
+                        />
+                      </div>
+                    ) : (
+                      <div 
+                        className="page-content"
+                        dangerouslySetInnerHTML={{ __html: page?.content || '' }} 
+                      />
+                    )}
+                  </section>
+                  {!page?.isFirstPage && !page?.isCover && (
+                    <div className="page-number">
+                      {displayPageNumber}
+                    </div>
+                  )}
+                  {shouldShowTopBar && (
+                    <ReaderTopBar
+                      chapterTitle={page.chapterTitle}
+                      subchapterTitle={page.subchapterTitle}
+                      pageKey={pageKey}
+                    />
+                  )}
+                </article>
+              </div>
+            );
+          })}
+        </div>
+      </PDFViewer>
+    );
   }
 
+  // Mobile: single page view (existing behavior)
+  // Ensure pageToDisplay exists before rendering
   if (!pageToDisplay) {
     return (
       <div className="page-reader-loading">
@@ -4446,25 +5091,26 @@ export const PageReader = ({
     );
   }
 
-  // Calculate current page number (1-indexed, excluding cover page)
+  // Calculate current page number (1-indexed, excluding first page and cover page)
   const pageKey = `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`;
   
-  // For cover page, don't calculate page number
+  // For first page and cover page, don't calculate page number
   let currentPageNumber = 0;
   let totalPages = 0;
   
-  if (!pageToDisplay.isCover) {
-    // Find index excluding cover page
-    const nonCoverPages = pages.filter(p => !p.isCover);
-    const pageIndex = nonCoverPages.findIndex(
+  if (!pageToDisplay.isFirstPage && !pageToDisplay.isCover) {
+    // Find index excluding first page and cover page
+    // Page numbers start at 1 after the cover page
+    const regularPages = pages.filter(p => !p.isFirstPage && !p.isCover);
+    const pageIndex = regularPages.findIndex(
       (p) => p.chapterIndex === pageToDisplay.chapterIndex && p.pageIndex === pageToDisplay.pageIndex
     );
     currentPageNumber = pageIndex >= 0 ? pageIndex + 1 : 0;
-    totalPages = nonCoverPages.length;
+    totalPages = regularPages.length;
   }
-  const shouldShowTopBar = !pageToDisplay.hasHeading && !pageToDisplay.isEpigraph && !pageToDisplay.isCover;
+  const shouldShowTopBar = !pageToDisplay.hasHeading && !pageToDisplay.isEpigraph && !pageToDisplay.isCover && !pageToDisplay.isFirstPage;
 
-  return (
+  const pageContent = (
     <>
       {pageToDisplay.backgroundVideo && (
         <video
@@ -4502,44 +5148,43 @@ export const PageReader = ({
           ref={pageContainerRef}
           className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
         >
-        <article className={`page-sheet content-page ${pageToDisplay.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay.isVideo ? 'video-page' : ''} ${pageToDisplay.backgroundVideo ? 'background-video-page' : ''} ${pageToDisplay.isCover ? 'cover-page' : ''}`}>
+        <article className={`page-sheet content-page ${pageToDisplay?.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay?.isVideo ? 'video-page' : ''} ${pageToDisplay?.backgroundVideo ? 'background-video-page' : ''} ${pageToDisplay?.isCover ? 'cover-page' : ''} ${pageToDisplay?.isFirstPage ? 'first-page' : ''}`}>
           <section className="page-body content-body">
-            {pageToDisplay.isCover ? (
+            {pageToDisplay?.isCover ? (
               <div 
                 key={pageKey}
-                className="cover-content"
-              >
-                <div className="cover-title">
-                  <img src="/weirdfeathers.png" alt="Weird Attachments" className="cover-title-image" />
-                </div>
-                <div className="cover-author">
-                  Ema Maznik Antic
-                </div>
-                <div className="cover-illustration">
-                  <img src="/cursor 1.png" alt="" className="cover-feathers-image" />
-                </div>
-              </div>
-            ) : pageToDisplay.isEpigraph ? (
+                ref={pageContentRefCallback}
+                className="page-content"
+                dangerouslySetInnerHTML={{ __html: pageToDisplay.content || '' }}
+              />
+            ) : pageToDisplay?.isFirstPage ? (
+              <div 
+                key={pageKey}
+                ref={pageContentRefCallback}
+                className="page-content"
+                dangerouslySetInnerHTML={{ __html: pageToDisplay.content || '' }}
+              />
+            ) : pageToDisplay?.isEpigraph ? (
               <div 
                 key={pageKey}
                 ref={pageContentRefCallback} 
                 className="page-content epigraph-content"
               >
-                <div className={`epigraph-text epigraph-align-${pageToDisplay.epigraphAlign || 'center'}`}>
-                  <div>{pageToDisplay.epigraphText}</div>
-                  {pageToDisplay.epigraphAuthor && (
+                <div className={`epigraph-text epigraph-align-${pageToDisplay?.epigraphAlign || 'center'}`}>
+                  <div>{pageToDisplay?.epigraphText || ''}</div>
+                  {pageToDisplay?.epigraphAuthor && (
                     <div className="epigraph-author">– {pageToDisplay.epigraphAuthor}</div>
                   )}
                 </div>
               </div>
-            ) : pageToDisplay.isVideo ? (
+            ) : pageToDisplay?.isVideo ? (
               <div 
                 key={pageKey}
                 className="page-content video-content"
               >
                 <video
                   ref={blankPageVideoRef}
-                  src={pageToDisplay.videoSrc}
+                  src={pageToDisplay?.videoSrc}
                   loop
                   muted
                   playsInline
@@ -4561,24 +5206,33 @@ export const PageReader = ({
                   </button>
                 )}
               </div>
-            ) : !pageToDisplay.isCover && (
+             ) : pageToDisplay && !pageToDisplay.isCover && !pageToDisplay.isFirstPage && (
               <div 
                   key={pageKey}
                   ref={pageContentRefCallback} 
                   className={`page-content ${pageToDisplay.backgroundVideo ? 'background-video-text' : ''}`}
-                  dangerouslySetInnerHTML={{ __html: pageToDisplay.content }} 
+                  dangerouslySetInnerHTML={{ __html: pageToDisplay.content || '' }} 
                   style={pageToDisplay.backgroundVideo ? { position: 'relative', zIndex: 1 } : {}}
                 />
             )}
           </section>
         </article>
       </div>
-      {!pageToDisplay.isCover && (
-        <div className="page-number">
-          {currentPageNumber}
-        </div>
-      )}
-      {shouldShowTopBar && (
+       {pageToDisplay && !pageToDisplay.isFirstPage && !pageToDisplay.isCover && (
+         <div className="page-number">
+           {currentPageNumber}
+         </div>
+       )}
+       {/* Chapter progress bar - Kindle-like thin gray bar */}
+       {pageToDisplay && !pageToDisplay.isFirstPage && !pageToDisplay.isCover && chapterProgress > 0 && (
+         <div className="chapter-progress-bar">
+           <div 
+             className="chapter-progress-fill" 
+             style={{ width: `${chapterProgress * 100}%` }}
+           />
+         </div>
+       )}
+      {shouldShowTopBar && pageToDisplay && (
         <ReaderTopBar
           chapterTitle={pageToDisplay.chapterTitle}
           subchapterTitle={pageToDisplay.subchapterTitle}
@@ -4644,5 +5298,21 @@ export const PageReader = ({
     </div>
     </>
   );
+
+  // On desktop, wrap with PDFViewer; on mobile, return page content directly
+  if (isDesktop) {
+    return (
+      <PDFViewer
+        currentPage={pdfPageNumber}
+        totalPages={pdfTotalPages}
+        onPageChange={handlePDFPageChange}
+        filename="weird-attachments.pdf"
+      >
+        {pageContent}
+      </PDFViewer>
+    );
+  }
+
+  return pageContent;
 };
 

@@ -78,22 +78,41 @@ export const applyInkEffectToTextMobile = (element, options = {}) => {
     const text = textNode.textContent;
     const fragment = document.createDocumentFragment();
 
-    Array.from(text).forEach((char) => {
-      const span = document.createElement('span');
-      span.className = 'ink-char-mobile';
-      span.textContent = char;
+    // Split text into words and spaces to preserve word spacing
+    // This prevents wrapping spaces in spans which breaks text justification
+    const words = text.split(/(\s+)/); // Split but keep separators
+    
+    words.forEach((segment) => {
+      if (!segment) return;
+      
+      // If it's whitespace, add it as a text node (not wrapped in span)
+      // This preserves the browser's natural word spacing calculation
+      if (isWhitespace(segment[0])) {
+        fragment.appendChild(document.createTextNode(segment));
+      } else {
+        // For non-whitespace segments (words), wrap characters in spans
+        Array.from(segment).forEach((char) => {
+          const span = document.createElement('span');
+          span.className = 'ink-char-mobile';
+          span.textContent = char;
 
-      // Randomly apply ink effect to ~15% of non-whitespace, non-punctuation characters
-      if (!isWhitespace(char) && !isPunctuation(char) && Math.random() < probability) {
-        span.dataset.ink = '1';
+          // Randomly apply ink effect to ~15% of non-whitespace, non-punctuation characters
+          if (!isWhitespace(char) && !isPunctuation(char) && Math.random() < probability) {
+            span.dataset.ink = '1';
+          }
+
+          fragment.appendChild(span);
+        });
       }
-
-      fragment.appendChild(span);
     });
 
     parent.replaceChild(fragment, textNode);
     parent.classList.add('ink-processed-mobile');
   });
+  
+  // DON'T force layout recalculation here - it causes word spacing issues
+  // The browser should maintain the existing text layout when we wrap characters
+  // Only the visual appearance changes (text-shadow), not the layout
 };
 
 const normalizeWord = (value) => {

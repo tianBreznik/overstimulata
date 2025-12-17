@@ -124,6 +124,18 @@ async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality 
  */
 export async function uploadImageToStorage(file, { onProgress, compress = true } = {}) {
   try {
+    // Check if storage is properly initialized
+    if (!storage) {
+      throw new Error('Firebase Storage is not initialized. Check your firebase.js configuration.');
+    }
+    
+    // Log storage bucket for debugging
+    const bucket = storage.app?.options?.storageBucket;
+    console.log('Storage bucket:', bucket);
+    if (!bucket) {
+      throw new Error('Storage bucket is not configured. Check VITE_FIREBASE_STORAGE_BUCKET in .env.local');
+    }
+    
     // Detect animated formats that must NOT be compressed (e.g., GIF)
     const isAnimatedFormat =
       file.type === 'image/gif' ||
@@ -176,15 +188,20 @@ export async function uploadImageToStorage(file, { onProgress, compress = true }
     return downloadURL;
   } catch (error) {
     console.error('Image upload failed:', error);
+    console.error('Error code:', error.code);
+    console.error('Error message:', error.message);
+    console.error('Storage bucket:', storage.app.options.storageBucket);
     
     // Provide more helpful error messages
     if (error.code === 'storage/unauthorized' || error.code === 'storage/unknown') {
-      throw new Error('Firebase Storage is not enabled or configured. Please enable Storage in your Firebase Console.');
+      throw new Error(`Firebase Storage is not enabled or configured. Error: ${error.code || 'unknown'}. Please check: 1) Storage is enabled in Firebase Console, 2) Security rules are published, 3) VITE_FIREBASE_STORAGE_BUCKET is set correctly in .env.local`);
     } else if (error.message?.includes('404') || error.code === 'storage/object-not-found') {
       throw new Error('Firebase Storage bucket not found. Please check your Firebase configuration and ensure Storage is enabled.');
+    } else if (error.code === 'storage/quota-exceeded') {
+      throw new Error('Storage quota exceeded. Please check your Firebase billing plan.');
     }
     
-    throw new Error(`Failed to upload image: ${error.message || 'Unknown error'}`);
+    throw new Error(`Failed to upload image: ${error.message || 'Unknown error'} (Code: ${error.code || 'N/A'})`);
   }
 }
 

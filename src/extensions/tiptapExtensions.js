@@ -1,5 +1,7 @@
 import { Node, Mark, Extension } from '@tiptap/core';
 import Paragraph from '@tiptap/extension-paragraph';
+import Heading from '@tiptap/extension-heading';
+import { TextSelection } from 'prosemirror-state';
 
 // Custom block node for karaoke
 export const KaraokeBlock = Node.create({
@@ -551,6 +553,19 @@ export const CustomParagraph = Paragraph.extend({
       },
     };
   },
+  // Preserve empty paragraphs by including a <br> tag so they're not truly empty
+  renderHTML({ node, HTMLAttributes }) {
+    // If paragraph is empty, include a <br> to preserve it
+    if (node.content.size === 0 || (node.content.childCount === 1 && node.content.firstChild?.type.name === 'hardBreak')) {
+      return ['p', HTMLAttributes, ['br']];
+    }
+    return ['p', HTMLAttributes, 0];
+  },
+});
+
+// Custom Heading extension - just use default Heading, no custom behavior
+export const CustomHeading = Heading.extend({
+  // No overrides - TipTap's default Heading behavior works fine
 });
 
 // Custom block node for video
@@ -608,10 +623,10 @@ export const Video = Node.create({
         getAttrs: (node) => {
           const targetPage = node.getAttribute('data-target-page');
           return {
-            src: node.getAttribute('src'),
-            controls: node.hasAttribute('controls'),
-            style: node.getAttribute('style') || 'max-width:100%;height:auto;display:block;margin:8px 0;',
-            mode: node.getAttribute('data-video-mode') || 'blank-page',
+          src: node.getAttribute('src'),
+          controls: node.hasAttribute('controls'),
+          style: node.getAttribute('style') || 'max-width:100%;height:auto;display:block;margin:8px 0;',
+          mode: node.getAttribute('data-video-mode') || 'blank-page',
             targetPage: targetPage ? parseInt(targetPage, 10) : null,
           };
         },
