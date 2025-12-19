@@ -108,14 +108,22 @@ const ensureWordSliceInitialized = (karaokeSourcesRef, karaokeId, sliceElement, 
     // visual fragment of a wrapped inline, so the continuation of a
     // hyphenated word on the next line does not receive the gold overlay.
     //
-    // Fixing this “properly” would require either:
+    // Fixing this "properly" would require either:
     //   (1) returning to per-character spans and driving highlight at
     //       character level (sacrificing native hyphenation behaviour), or
     //   (2) a layout-aware JS solution that inspects getClientRects() and
-    //       injects fragment-level overlays.
+    //       injects fragment-level overlays with accurate positioning and
+    //       character range detection (using Range API to determine which
+    //       characters are in each fragment).
+    //
+    // Previous attempt: Tried implementing option (2) but encountered issues
+    // with fragment positioning accuracy and character range detection
+    // (highlight fragment was breaking one character too soon, positioning was
+    // incorrect). This needs more investigation to get the positioning and
+    // character mapping correct.
     //
     // For now we accept this limitation as a known polish issue so that we
-    // can keep the browser’s native, book-like hyphenation for karaoke text.
+    // can keep the browser's native, book-like hyphenation for karaoke text.
     const wordMetadata = source.wordCharRanges || [];
 
 // console.log('[[INIT]] Initializing slice with word-level highlighting', {
@@ -3055,20 +3063,22 @@ export const PageReader = ({
           return;
         }
 
+        let fillValue = 0;
         if (current >= end) {
           span.classList.add('karaoke-word-complete');
           span.classList.remove('karaoke-word-active');
-          span.style.setProperty('--karaoke-fill', '1');
+          fillValue = 1;
         } else if (current >= start) {
           const duration = Math.max(end - start, 0.001);
-          const progress = Math.min(Math.max((current - start) / duration, 0), 1);
+          fillValue = Math.min(Math.max((current - start) / duration, 0), 1);
           span.classList.add('karaoke-word-active');
           span.classList.remove('karaoke-word-complete');
-          span.style.setProperty('--karaoke-fill', progress.toFixed(3));
         } else {
           span.classList.remove('karaoke-word-active', 'karaoke-word-complete');
-          span.style.setProperty('--karaoke-fill', '0');
+          fillValue = 0;
         }
+        
+        span.style.setProperty('--karaoke-fill', fillValue.toFixed(3));
       });
 
       // If we're resuming and have passed the resume point, clear the waiting flag
@@ -3814,6 +3824,8 @@ export const PageReader = ({
 
   // Navigate to next page
   const goToNextPage = useCallback(() => {
+    // Mark that user has interacted
+    hasUserInteractedRef.current = true;
     if (isTransitioning || pages.length === 0) return;
 
     // Find current page - handle special pages (first page, cover) and regular pages
@@ -4751,6 +4763,9 @@ export const PageReader = ({
           initializeKaraokeSlices(node);
         }
         
+        // POLISH NOTE: Ink effect application to karaoke text is disabled (see note above)
+        // Karaoke text uses thicker general text shadow instead
+        
         // Check if audio is unlocked, if not wait for it
         if (audioUnlockedRef.current) {
 // console.log('Transition ended, audio unlocked, starting karaoke');
@@ -4798,7 +4813,7 @@ export const PageReader = ({
       }, 1200); // After fade-in completes (1000ms fade + 200ms buffer)
       return () => clearTimeout(timer);
     }
-  }, [isTransitioning, startVisibleKaraoke, initializeKaraokeSlices]);
+  }, [isTransitioning, startVisibleKaraoke, initializeKaraokeSlices, pageToDisplay]);
 
   // Keep ref in sync with state only. Ink restoration during transitions has
   // been disabled to avoid complex innerHTML rewrites that conflicted with
@@ -4982,9 +4997,17 @@ export const PageReader = ({
               // Initialize karaoke slices FIRST (creates structure with <br> tags)
               try {
                 initializeKaraokeSlices(node);
-                // Then apply ink effect to wrap characters in the initialized karaoke structure
-                applyInk();
-                // Immediately preserve the HTML so we can restore it later without re-applying
+                // POLISH NOTE:
+                // -------------------------------
+                // Ink effect (character-level shadows) is currently disabled for karaoke text
+                // because wrapping characters in spans interferes with browser hyphenation.
+                // The ink effect causes hyphenation to break on initial load, requiring a swipe
+                // to fix. For now, karaoke text uses a thicker general text shadow instead.
+                // Future polish: Find a way to apply ink effect to karaoke text without
+                // breaking hyphenation, or wait for browser to complete hyphenation before
+                // applying ink effect.
+                // -------------------------------
+                // Don't apply ink effect to karaoke text - preserve HTML without ink
                 preservedInkHTMLRef.current = node.innerHTML;
                 preservedPageKeyRef.current = currentPageKey;
               } catch (error) {
@@ -5002,8 +5025,8 @@ export const PageReader = ({
             if (!hasInitializedKaraoke) {
               // Initialize karaoke slices (this will rebuild, losing ink effect)
               initializeKaraokeSlices(node);
-              // Re-apply ink effect after karaoke initialization
-              applyInk();
+              // POLISH NOTE: Ink effect disabled for karaoke text (see note above)
+              // Don't re-apply ink effect to karaoke text
             }
             // Preserve HTML after both are done
             if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
@@ -5022,7 +5045,7 @@ export const PageReader = ({
       // Only apply ink effect after user interaction
       applyInkWhenReady();
       
-      // Backup: Only apply ink effect after user interaction
+      // Backup: Only apply ink effect after user interaction (but skip karaoke text - see polish note above)
       if (hasUserInteractedRef.current) {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -5031,26 +5054,32 @@ export const PageReader = ({
                 const hasInkChars = node.querySelectorAll('.ink-char-mobile').length > 0;
                 // Check if karaoke slices are already initialized (have .karaoke-word spans)
                 const hasInitializedKaraoke = node.querySelectorAll('.karaoke-slice .karaoke-word').length > 0;
-                if (!hasInkChars) {
+                // Skip applying ink to karaoke text (see polish note above)
+                if (!hasInkChars && !hasInitializedKaraoke) {
                   // During transitions, restore from preserved HTML only if it's for the current page
-                  // BUT don't restore if karaoke slices are already initialized (would overwrite them)
-                  if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey && !hasInitializedKaraoke) {
+                  if (isTransitioningRef.current && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
                     node.innerHTML = preservedInkHTMLRef.current;
                   } else {
                     applyInk();
                   }
+                } else if (!hasInkChars && hasInitializedKaraoke) {
+                  // Karaoke text - don't apply ink, just preserve HTML
+                  preservedInkHTMLRef.current = node.innerHTML;
+                  preservedPageKeyRef.current = currentPageKey;
                 } else if (!preservedInkHTMLRef.current || preservedPageKeyRef.current !== currentPageKey) {
                   // Ink chars exist but we haven't preserved HTML yet for this page - preserve it now
                   preservedInkHTMLRef.current = node.innerHTML;
                   preservedPageKeyRef.current = currentPageKey;
                 }
                 
-                // Initialize karaoke slices again after second frame
-                initializeKaraokeSlices(node);
-                // Preserve HTML AFTER karaoke initialization
-                if (node && node.isConnected) {
-                  preservedInkHTMLRef.current = node.innerHTML;
-                  preservedPageKeyRef.current = currentPageKey;
+                // Initialize karaoke slices again after second frame (if needed)
+                if (hasInitializedKaraoke) {
+                  initializeKaraokeSlices(node);
+                  // Preserve HTML AFTER karaoke initialization
+                  if (node && node.isConnected) {
+                    preservedInkHTMLRef.current = node.innerHTML;
+                    preservedPageKeyRef.current = currentPageKey;
+                  }
                 }
                 
                 // DON'T call startVisibleKaraoke here - let the transition end effect handle it

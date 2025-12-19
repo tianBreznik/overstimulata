@@ -1,3 +1,43 @@
+/* Show white screen with message when in landscape mode - hide all content */
+@media screen and (orientation: landscape) and (max-width: 768px) {
+  html, body {
+    width: 100vw !important;
+    height: 100vh !important;
+    overflow: hidden !important;
+    position: fixed !important;
+    background: #ffffff !important;
+  }
+  
+  html::before {
+    content: 'Please keep portrait';
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 99999;
+    color: #ff0000;
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    white-space: nowrap;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+  
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: #ffffff;
+    z-index: 99998;
+  }
+  
+  #root,
+  #root > * {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
 .page-reader {
   position: fixed;
   inset: 0;
@@ -1028,8 +1068,19 @@
   font: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  text-shadow: none;
-  -webkit-text-stroke: none;
+  /* Fluffy, scanned paper-like text shadow for karaoke text (ink effect disabled - see polish note in PageReader.jsx) */
+  text-shadow: 
+    0 0.2px 0.4px rgba(0, 0, 0, 0.3),
+    0 0.3px 0.6px rgba(0, 0, 0, 0.28),
+    0 0.4px 0.8px rgba(0, 0, 0, 0.25),
+    0 0.5px 1px rgba(0, 0, 0, 0.22),
+    0 0.6px 1.4px rgba(0, 0, 0, 0.2),
+    0 0.8px 1.8px rgba(0, 0, 0, 0.18),
+    0 1px 2.2px rgba(0, 0, 0, 0.15),
+    0 1.2px 2.8px rgba(0, 0, 0, 0.12),
+    0.1px 0.1px 0.4px rgba(0, 0, 0, 0.25),
+    -0.1px -0.1px 0.4px rgba(0, 0, 0, 0.2);
+  -webkit-text-stroke: 0.08px rgba(0, 0, 0, 0.15);
 }
 
 .karaoke-slice .karaoke-word,
@@ -1048,8 +1099,19 @@
   font: inherit;
   line-height: inherit;
   letter-spacing: inherit;
-  text-shadow: none;
-  -webkit-text-stroke: none;
+  /* Fluffy, scanned paper-like text shadow for karaoke text (ink effect disabled - see polish note in PageReader.jsx) */
+  text-shadow: 
+    0 0.2px 0.4px rgba(0, 0, 0, 0.3),
+    0 0.3px 0.6px rgba(0, 0, 0, 0.28),
+    0 0.4px 0.8px rgba(0, 0, 0, 0.25),
+    0 0.5px 1px rgba(0, 0, 0, 0.22),
+    0 0.6px 1.4px rgba(0, 0, 0, 0.2),
+    0 0.8px 1.8px rgba(0, 0, 0, 0.18),
+    0 1px 2.2px rgba(0, 0, 0, 0.15),
+    0 1.2px 2.8px rgba(0, 0, 0, 0.12),
+    0.1px 0.1px 0.4px rgba(0, 0, 0, 0.25),
+    -0.1px -0.1px 0.4px rgba(0, 0, 0, 0.2);
+  -webkit-text-stroke: 0.08px rgba(0, 0, 0, 0.15);
 }
 
 .karaoke-slice .karaoke-char[data-ink="1"],
@@ -1099,6 +1161,7 @@
   transition: opacity 90ms linear;
   top: -0.05em; /* Move up slightly to align with text */
 }
+
 
 .karaoke-slice .karaoke-char.karaoke-char-complete,
 .karaoke-slice .karaoke-char.karaoke-char-active,
