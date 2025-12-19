@@ -3447,6 +3447,8 @@ export const PageReader = ({
           });
           
           // For touchend events, check if it's a tap (not a swipe)
+          // If touch refs are set (user swiped first), check for movement
+          // If touch refs are null (direct tap), allow it to proceed
           if (e.type === 'touchend' && touchStartRef.current && touchCurrentRef.current) {
             const deltaX = touchCurrentRef.current.x - touchStartRef.current.x;
             const deltaY = touchCurrentRef.current.y - touchStartRef.current.y;
@@ -3457,6 +3459,9 @@ export const PageReader = ({
               console.log('[KARAOKE TAP] Ignored - movement too large (swipe)');
               return;
             }
+          } else if (e.type === 'touchend' && !touchStartRef.current) {
+            // Direct tap on karaoke slice - this is valid, allow it
+            console.log('[KARAOKE TAP] Direct tap detected (no touch refs)');
           }
           
           e.stopPropagation(); // Prevent swipe from triggering
@@ -3503,8 +3508,39 @@ export const PageReader = ({
             if (controller && controller.audio) {
               const audio = controller.audio;
               
-              // Wait for audio to be ready before playing
-              const playAudio = async () => {
+              // CRITICAL FOR iOS: audio.play() must be called synchronously within the user gesture handler
+              // On iOS, attempting audio.play() (even if it fails) unlocks the audio context
+              // So we try to play immediately to capture the gesture context
+              if (!audioUnlockedRef.current) {
+                console.log('[KARAOKE PLAY] Unlocking audio via karaoke click (iOS-compatible)...');
+                // Try to unlock immediately with a synchronous play attempt
+                // This must happen synchronously in the gesture handler
+                try {
+                  const playPromise = audio.play();
+                  if (playPromise !== undefined) {
+                    // Handle the promise, but don't wait for it - we've already unlocked
+                    playPromise.then(() => {
+                      // If it actually played, pause it immediately
+                      audio.pause();
+                      audio.currentTime = 0;
+                    }).catch(() => {
+                      // Ignore errors - the unlock still happened
+                    });
+                  }
+                  // Mark as unlocked immediately (the attempt unlocked it)
+                  audioUnlockedRef.current = true;
+                  window.dispatchEvent(new CustomEvent('audioUnlocked'));
+                  console.log('[KARAOKE PLAY] Audio context unlocked');
+                } catch (unlockErr) {
+                  // Even if play() throws, attempting it may have unlocked the context
+                  console.warn('[KARAOKE PLAY] Unlock attempt had error, but continuing', unlockErr);
+                  audioUnlockedRef.current = true;
+                  window.dispatchEvent(new CustomEvent('audioUnlocked'));
+                }
+              }
+              
+              // Now proceed with actual playback (async is fine now that context is unlocked)
+              (async () => {
                 // Check if audio has an error
                 if (audio.error) {
                   console.error('[KARAOKE PLAY] Audio has error', {
@@ -3524,103 +3560,62 @@ export const PageReader = ({
                   });
                   
                   // Wait for loadeddata or canplaythrough
-                  await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => {
-                      reject(new Error('Audio load timeout'));
-                    }, 10000); // 10 second timeout
-                    
-                    const onReady = () => {
-                      clearTimeout(timeout);
-                      audio.removeEventListener('canplaythrough', onReady);
-                      audio.removeEventListener('error', onError);
-                      resolve();
-                    };
-                    
-                    const onError = (e) => {
-                      clearTimeout(timeout);
-                      audio.removeEventListener('canplaythrough', onReady);
-                      audio.removeEventListener('error', onError);
-                      reject(e);
-                    };
-                    
-                    if (audio.readyState >= 4) {
-                      clearTimeout(timeout);
-                      resolve();
-                    } else {
-                      audio.addEventListener('canplaythrough', onReady, { once: true });
-                      audio.addEventListener('error', onError, { once: true });
-                      // Also try to load if not already loading
-                      if (audio.networkState === 0) {
-                        audio.load();
+                  try {
+                    await new Promise((resolve, reject) => {
+                      const timeout = setTimeout(() => {
+                        reject(new Error('Audio load timeout'));
+                      }, 10000); // 10 second timeout
+                      
+                      const onReady = () => {
+                        clearTimeout(timeout);
+                        audio.removeEventListener('canplaythrough', onReady);
+                        audio.removeEventListener('error', onError);
+                        resolve();
+                      };
+                      
+                      const onError = (e) => {
+                        clearTimeout(timeout);
+                        audio.removeEventListener('canplaythrough', onReady);
+                        audio.removeEventListener('error', onError);
+                        reject(e);
+                      };
+                      
+                      if (audio.readyState >= 4) {
+                        clearTimeout(timeout);
+                        resolve();
+                      } else {
+                        audio.addEventListener('canplaythrough', onReady, { once: true });
+                        audio.addEventListener('error', onError, { once: true });
+                        // Also try to load if not already loading
+                        if (audio.networkState === 0) {
+                          audio.load();
+                        }
                       }
-                    }
-                  });
+                    });
+                  } catch (loadErr) {
+                    console.error('[KARAOKE PLAY] Audio load failed', loadErr);
+                    // Continue anyway - might still work
+                  }
                 }
                 
-                // Now try to play
+                // Now start actual playback
                 try {
-                  await audio.play();
-                  return true;
-                } catch (err) {
-                  console.error('[KARAOKE PLAY] Play failed', err);
-                  throw err;
+                  // Stop other karaoke instances
+                  karaokeControllersRef.current.forEach((ctrl, id) => {
+                    if (id !== karaokeId) {
+                      ctrl.pause();
+                    }
+                  });
+                  
+                  controller.resumeWordIndex = null;
+                  controller.resumeTime = null;
+                  controller.waitingForNextPage = false;
+                  controller.playSlice(slice, startChar, endChar);
+                  currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
+                } catch (playErr) {
+                  console.error('[KARAOKE PLAY] Failed to start playback', playErr);
                 }
-              };
-              
-              // Unlock audio by playing the actual karaoke audio (best gesture context)
-              if (!audioUnlockedRef.current) {
-                console.log('[KARAOKE PLAY] Unlocking audio via karaoke click...');
-                playAudio().then(() => {
-                  audio.pause();
-                  audio.currentTime = 0;
-                  audioUnlockedRef.current = true;
-                  console.log('[KARAOKE PLAY] Audio unlocked via karaoke click');
-                  window.dispatchEvent(new CustomEvent('audioUnlocked'));
-                  // Now start playback from this slice, clearing any pending resume
-                  karaokeControllersRef.current.forEach((ctrl, id) => {
-                    if (id !== karaokeId) {
-                      ctrl.pause();
-                    }
-                  });
-                  controller.resumeWordIndex = null;
-                  controller.resumeTime = null;
-                  controller.waitingForNextPage = false;
-                  controller.playSlice(slice, startChar, endChar);
-                  currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
-                }).catch((err) => {
-                  console.error('[KARAOKE PLAY] Failed to unlock via karaoke click', err);
-                  // Still try to play - might work if audio context is unlocked
-                  audioUnlockedRef.current = true;
-                  window.dispatchEvent(new CustomEvent('audioUnlocked'));
-                  karaokeControllersRef.current.forEach((ctrl, id) => {
-                    if (id !== karaokeId) {
-                      ctrl.pause();
-                    }
-                  });
-                  controller.resumeWordIndex = null;
-                  controller.resumeTime = null;
-                  controller.waitingForNextPage = false;
-                  controller.playSlice(slice, startChar, endChar);
-                  currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
-                });
-              } else {
-                // Already unlocked, just play
-                console.log('[KARAOKE PLAY] Audio already unlocked, starting playback');
-                playAudio().then(() => {
-                  karaokeControllersRef.current.forEach((ctrl, id) => {
-                    if (id !== karaokeId) {
-                      ctrl.pause();
-                    }
-                  });
-                  controller.resumeWordIndex = null;
-                  controller.resumeTime = null;
-                  controller.waitingForNextPage = false;
-                  controller.playSlice(slice, startChar, endChar);
-                  currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
-                }).catch((err) => {
-                  console.error('[KARAOKE PLAY] Failed to start playback', err);
-                });
-              }
+              })();
             } else {
               console.warn('[KARAOKE PLAY] Controller or audio not found', { controller: !!controller, audio: controller?.audio });
             }
@@ -3632,6 +3627,21 @@ export const PageReader = ({
         // Desktop: click works fine
         const isMobileDevice = window.innerWidth <= 768;
         if (isMobileDevice) {
+          // Also listen to touchstart to set touch refs for direct taps on karaoke
+          slice.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            if (touch) {
+              touchStartRef.current = {
+                x: touch.clientX,
+                y: touch.clientY,
+                time: Date.now(),
+              };
+              touchCurrentRef.current = {
+                x: touch.clientX,
+                y: touch.clientY,
+              };
+            }
+          }, { passive: true });
           slice.addEventListener('touchend', handleInteraction, { passive: false });
         } else {
           slice.addEventListener('click', handleInteraction);

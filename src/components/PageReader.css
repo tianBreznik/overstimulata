@@ -129,6 +129,23 @@
   box-sizing: border-box;
 }
 
+/* Adjust for very small screens (iPhone SE, etc.) to prevent overflow */
+@media screen and (max-width: 400px) {
+  .page-container {
+    padding: 2rem 0.75rem 0.5rem; /* Reduce horizontal padding on very small screens */
+  }
+  
+  .page-sheet.content-page {
+    width: min(680px, calc(100vw - 1.5rem)); /* Account for reduced padding */
+    max-width: min(680px, calc(100vw - 1.5rem));
+  }
+  
+  .page-sheet {
+    width: min(640px, calc(100vw - 1.5rem));
+    max-width: min(640px, calc(100vw - 1.5rem));
+  }
+}
+
 /* Keep text content constrained even with background video - video breaks out via position: fixed */
 
 .page-header {
