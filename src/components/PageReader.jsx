@@ -483,6 +483,38 @@ export const PageReader = ({
       
       // Create measurement container that exactly matches rendered page structure
       // This ensures measurement accuracy by using the same CSS classes
+      /**
+       * Creates a measurement container that matches the real DOM structure exactly.
+       * 
+       * CRITICAL: This structure MUST match the real rendered page structure:
+       * 
+       * Real DOM structure:
+       *   .page-container (padding: 2rem 1rem 0.5rem)
+       *     .page-sheet.content-page
+       *       .page-body (padding-top: calc(3.5rem + env(safe-area-inset-top)))
+       *         .page-content (height: 90%, max-height: 95%)
+       *           .page-content-main (padding-bottom: dynamic)
+       *             [actual content]
+       * 
+       * Measurement container structure (must match):
+       *   .page-container (same padding)
+       *     .page-sheet.content-page
+       *       .page-body (same padding-top via CSS)
+       *         .page-content (same height: 90% via CSS)
+       *           [temporary measurement content]
+       * 
+       * Why this matters:
+       * - The .page-content wrapper with `height: 90%` is critical for accurate
+       *   pagination on mobile devices (especially short screens like iPhone SE).
+       * - If the measurement container doesn't include this wrapper, we'd need to
+       *   hardcode a 0.9 multiplier, which is brittle and breaks if CSS changes.
+       * - By matching the structure, CSS changes automatically propagate to measurements.
+       * 
+       * Maintenance note:
+       * - If you change the real DOM structure (e.g., add/remove wrappers, change
+       *   class names, modify CSS constraints), you MUST update this function to match.
+       * - Always verify that measurement container structure mirrors the real structure.
+       */
       const createMeasureContainer = () => {
         const container = document.createElement('div');
         container.className = 'page-container';
@@ -524,6 +556,16 @@ export const PageReader = ({
           body.style.minHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
           body.style.maxHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
         }
+        
+        // CRITICAL: Add .page-content wrapper to match real DOM structure
+        // This ensures the measurement container respects the same CSS constraints
+        // (height: 90%, max-height: 95%) as the real layout, preventing overflow on short screens
+        const pageContent = document.createElement('div');
+        pageContent.className = 'page-content';
+        pageContent.style.width = '100%';
+        pageContent.style.height = '100%';
+        body.appendChild(pageContent);
+        
         sheet.appendChild(body);
         document.body.appendChild(container);
 
@@ -531,6 +573,7 @@ export const PageReader = ({
           container,
           sheet,
           body,
+          pageContent, // Expose pageContent for content insertion
           destroy: () => container.remove(),
           setHeading: (hasHeading) => {
             sheet.classList.remove('page-with-heading', 'page-without-heading');
@@ -545,7 +588,7 @@ export const PageReader = ({
             const BOTTOM_MARGIN_NO_FOOTNOTES = isFirstPage ? 20 : 32; // first page: ~1.25rem, others: ~2rem in pixels
             
             // For desktop PDF viewer, use fixed page height (1000px) minus container padding
-            // For mobile, use actual body.clientHeight
+            // For mobile, use the actual .page-content height (which has height: 90% applied via CSS)
             let height;
             if (isDesktop && pageHeight) {
               // Desktop: pageHeight is 1000px, container has padding: 2rem 1.5rem 0.5rem
@@ -554,8 +597,13 @@ export const PageReader = ({
               const containerPaddingBottom = 8; // 0.5rem ≈ 8px
               height = pageHeight - containerPaddingTop - containerPaddingBottom;
             } else {
-              // Mobile: use actual rendered height
-              height = body.clientHeight;
+              // Mobile: Now that we have .page-content in the measurement container,
+              // we can use its actual clientHeight which automatically respects the CSS
+              // `height: 90%` and `max-height: 95%` rules. This makes the measurement
+              // match the real layout exactly, preventing overflow on short screens.
+              // Force a reflow to ensure CSS is applied
+              body.offsetHeight;
+              height = pageContent.clientHeight;
             }
             
             // When footnotes exist, they replace the bottom margin (footnotes are larger)
@@ -572,10 +620,10 @@ export const PageReader = ({
       
       // Calculate content width for measurements (accounting for padding)
       // Desktop PDF: 800px - 60px padding = 740px
-      // Mobile: use measure.body.clientWidth (dynamic based on viewport)
+      // Mobile: use measure.pageContent.clientWidth (dynamic based on viewport, matches real layout)
       const contentWidth = isDesktop && pageWidth 
         ? pageWidth - 60  // 2rem * 2 = ~60px padding
-        : measure.body.clientWidth;
+        : measure.pageContent.clientWidth;
 
       // Helper to apply base paragraph CSS to measurement containers
       // This ensures TipTap HTML (with inline text-align styles) is measured
@@ -747,7 +795,7 @@ export const PageReader = ({
           currentPageElements = [];
           pageHasHeading = initialHeading;
           currentPageFootnotes = new Set();
-          measure.body.innerHTML = '';
+          measure.pageContent.innerHTML = '';
           measure.setHeading(initialHeading);
         };
 
@@ -865,7 +913,7 @@ export const PageReader = ({
           tempContainer.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
           tempContainer.style.fontSize = isDesktop ? '1.3rem' : '1.3rem';
           tempContainer.style.lineHeight = isDesktop ? '1.35' : '1.35';
-          measure.body.appendChild(tempContainer);
+          measure.pageContent.appendChild(tempContainer);
           
           contentElements.forEach(el => {
             const temp = document.createElement('div');
@@ -881,7 +929,7 @@ export const PageReader = ({
           
           // If content alone doesn't fit, content + footnotes definitely won't
           if (contentHeight > availableHeight) {
-            measure.body.removeChild(tempContainer);
+            measure.pageContent.removeChild(tempContainer);
             return { fits: false, contentHeight, footnotesHeight: 0 };
           }
           
@@ -890,7 +938,7 @@ export const PageReader = ({
           const footnotesHeight = measureFootnotesHeight(footnoteNumbers, tempContainer);
           const totalHeight = contentHeight + footnotesHeight;
           
-          measure.body.removeChild(tempContainer);
+          measure.pageContent.removeChild(tempContainer);
           
           return {
             fits: totalHeight <= availableHeight,
@@ -941,12 +989,16 @@ export const PageReader = ({
             return false; // No more elements
           }
           
-          // CRITICAL: Rebuild current page in measure.body to get accurate height
+          // CRITICAL: Rebuild current page in measure.pageContent to get accurate height
           // Current page elements are in currentPageElements array but may not be in DOM
           // We need to measure with actual current page content + footnotes
+          // CRITICAL: Determine if this is the first page (the standalone page that appears before cover)
+          // This is a single page in the database with isFirstPage=true, not the first page of a chapter
+          const isFirstPage = chapter.isFirstPage;
+          
           const tempContainer = document.createElement('div');
           tempContainer.style.width = contentWidth + 'px';
-          measure.body.appendChild(tempContainer);
+          measure.pageContent.appendChild(tempContainer);
           
           // Add all current page elements to temp container for measurement
           // Note: In the actual page, content is wrapped in .page-content-main with padding-bottom
@@ -964,7 +1016,8 @@ export const PageReader = ({
           const footnotesHeight = measureFootnotesHeight(currentPageFootnotes, tempContainer);
           const currentHeight = tempContainer.offsetHeight;
           // Pass footnotes height so getAvailableHeight can use it instead of bottom margin when footnotes exist
-          const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight);
+          // CRITICAL: Pass isFirstPage to ensure first pages use smaller bottom margin (20px vs 32px)
+          const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight, isFirstPage);
           
           // CRITICAL: getAvailableHeight already accounts for footnotes (or bottom margin)
           // So remainingSpace = baseAvailableHeight - currentHeight
@@ -984,7 +1037,7 @@ export const PageReader = ({
 //          });
           
           // Clean up temp container
-          measure.body.removeChild(tempContainer);
+          measure.pageContent.removeChild(tempContainer);
           
           // Try to fill any gap, no matter how small
           if (remainingSpace <= 0) {
@@ -1019,10 +1072,10 @@ export const PageReader = ({
 // console.log('[tryFillRemainingSpace] Checking element at index:', lookAheadIndex, 'tagName:', nextElement?.tagName, 'isAtomic:', isAtomicElement(nextElement));
             
             // Recalculate remaining space after each addition
-            // Use contentWidth for desktop, measure.body.clientWidth for mobile
+            // Use contentWidth for desktop, measure.pageContent.clientWidth for mobile
             const tempContainer2 = document.createElement('div');
             tempContainer2.style.width = contentWidth + 'px';
-            measure.body.appendChild(tempContainer2);
+            measure.pageContent.appendChild(tempContainer2);
             
             // Add current page elements
             currentPageElements.forEach(el => {
@@ -1038,19 +1091,21 @@ export const PageReader = ({
             const footnotesHeightBefore = measureFootnotesHeight(testFootnotes, tempContainer2);
             // CRITICAL: Reserve footnote space first, then calculate remaining content space
             // getAvailableHeight uses footnotes height when provided, or bottom margin when not
-            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeightBefore);
+            // CRITICAL: Pass isFirstPage to ensure first pages use smaller bottom margin (20px vs 32px)
+            const isFirstPage = chapter.isFirstPage;
+            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeightBefore, isFirstPage);
             const remainingSpaceBefore = baseAvailableHeight - currentHeightBefore;
             
-            measure.body.removeChild(tempContainer2);
+            measure.pageContent.removeChild(tempContainer2);
             
             // Measure the next element's size
             const nextElementTemp = document.createElement('div');
-            nextElementTemp.style.width = measure.body.clientWidth + 'px';
-            measure.body.appendChild(nextElementTemp);
+            nextElementTemp.style.width = measure.pageContent.clientWidth + 'px';
+            measure.pageContent.appendChild(nextElementTemp);
             const nextElementClone = nextElement.cloneNode(true);
             nextElementTemp.appendChild(nextElementClone);
             const nextElementHeight = nextElementTemp.offsetHeight;
-            measure.body.removeChild(nextElementTemp);
+            measure.pageContent.removeChild(nextElementTemp);
             
 // console.log('[tryFillRemainingSpace] 📏 Next Element (Page B) Size:', {
 //              elementIndex: lookAheadIndex,
@@ -1071,7 +1126,7 @@ export const PageReader = ({
               
               // Check if content fits in space after reserving footnotes
               const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, measure.body);
-              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic);
+              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic, isFirstPage);
               const contentAvailableHeightForAtomic = baseAvailableHeightForAtomic;
               
               const tempCheckContainerAtomic = document.createElement('div');
@@ -1125,7 +1180,7 @@ export const PageReader = ({
               measure.body.appendChild(tempFootnotesContainerAtomic2);
               const testFootnotesHeightForAtomic = measureFootnotesHeight(testFootnotesWithNext, tempFootnotesContainerAtomic2);
               measure.body.removeChild(tempFootnotesContainerAtomic2);
-              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic);
+              const baseAvailableHeightForAtomic = measure.getAvailableHeight(testFootnotesHeightForAtomic, isFirstPage);
               const contentAvailableHeightForAtomic = baseAvailableHeightForAtomic;
               
               const tempCheckContainerAtomic = document.createElement('div');
@@ -1168,7 +1223,7 @@ export const PageReader = ({
               // getAvailableHeight already accounts for footnotes (or bottom margin)
               // So: remainingContentHeight = baseAvailableHeight - currentHeightBefore
               // This gives us the space between content and footnotes (or bottom margin) that we can fill
-              const baseAvailableHeightForSplit = measure.getAvailableHeight(footnotesHeightBefore);
+              const baseAvailableHeightForSplit = measure.getAvailableHeight(footnotesHeightBefore, isFirstPage);
               const remainingContentHeight = Math.max(0, baseAvailableHeightForSplit - currentHeightBefore);
               
 // console.log('[tryFillRemainingSpace] Entire element does NOT fit. Trying to split.', {
@@ -1223,7 +1278,8 @@ export const PageReader = ({
                   measure.body.appendChild(tempFootnotesContainerFirst);
                   const firstPartFootnotesHeight = measureFootnotesHeight(testFootnotesWithFirst, tempFootnotesContainerFirst);
                   measure.body.removeChild(tempFootnotesContainerFirst);
-                  const baseAvailableHeightForFirstPart = measure.getAvailableHeight(firstPartFootnotesHeight);
+                  const isFirstPage = chapter.isFirstPage;
+                  const baseAvailableHeightForFirstPart = measure.getAvailableHeight(firstPartFootnotesHeight, isFirstPage);
                   const firstPartContentAvailableHeight = baseAvailableHeightForFirstPart;
                   
                   const tempCheckContainerFirstPart = document.createElement('div');
@@ -1284,6 +1340,68 @@ export const PageReader = ({
         const pushPage = (blockMeta) => {
           if (!currentPageElements.length) return;
           
+          // CRITICAL: For standalone first page, remove empty paragraphs from the start BEFORE processing
+          // Declare once at the top of the function
+          const isStandaloneFirstPage = chapter.isFirstPage && chapterPageIndex === 0; // ONLY the standalone first page
+          
+          let removedFromArray = 0;
+          if (isStandaloneFirstPage) {
+            // Remove empty paragraph elements from the start of the array
+            // Adjust max removals based on actual device screen height (not viewport, which is affected by browser UI)
+            // Use screen.height which gives actual device dimensions, not affected by browser chrome
+            const deviceScreenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1000;
+            // iPhone SE: ~667px, iPhone 12 Mini: ~844px, iPhone 14 Pro: ~932px (actual device height)
+            // On smaller screens (<= 700px), allow up to 4 removals
+            // On medium screens (700-850px), allow up to 2 removals
+            // On larger screens (> 850px), allow up to 1 removal
+            const maxRemovals = deviceScreenHeight <= 700 ? 5 : deviceScreenHeight <= 850 ? 1 : 0;
+            const initialLength = currentPageElements.length;
+            
+            console.log('[pushPage] METHOD 1 (array): Device screen height detected:', deviceScreenHeight, 'px, maxRemovals:', maxRemovals);
+            
+            while (removedFromArray < maxRemovals && currentPageElements.length > 0) {
+              // Check the first element
+              const firstElement = currentPageElements[0];
+              
+              // Create a temporary DOM to check if it's an empty paragraph
+              const tempCheckDiv = document.createElement('div');
+              tempCheckDiv.innerHTML = firstElement;
+              const firstParagraph = tempCheckDiv.querySelector('p:first-child');
+              
+              // If first element is a paragraph, check if it's empty
+              if (firstParagraph || firstElement.trim().startsWith('<p')) {
+                const checkPara = firstParagraph || tempCheckDiv.querySelector('p');
+                if (checkPara) {
+                  const textContent = checkPara.textContent || '';
+                  const innerHTML = checkPara.innerHTML || '';
+                  const hasOnlyBr = checkPara.children.length === 1 && checkPara.children[0].tagName === 'BR';
+                  const hasOnlyWhitespace = /^[\s\n\r]*$/.test(innerHTML);
+                  const isEmpty = (textContent.trim().length === 0) && (checkPara.children.length === 0 || hasOnlyBr || hasOnlyWhitespace);
+                  
+                  if (isEmpty) {
+                    // Remove this element from the array
+                    currentPageElements.shift();
+                    removedFromArray++;
+                    console.log('[pushPage] METHOD 1 (array): Removed empty paragraph from standalone first page, removed:', removedFromArray, 'remaining elements:', currentPageElements.length);
+                  } else {
+                    // Found non-empty content, stop removing
+                    break;
+                  }
+                } else {
+                  // Not a paragraph element, stop removing
+                  break;
+                }
+              } else {
+                // Not a paragraph element, stop removing
+                break;
+              }
+            }
+            
+            if (removedFromArray > 0) {
+              console.log('[pushPage] METHOD 1 (array): Successfully removed', removedFromArray, 'empty paragraphs from array. Initial length:', initialLength, 'Final length:', currentPageElements.length);
+            }
+          }
+          
           // Process footnotes in content: replace ^[content] with superscript numbers
           let processedContent = currentPageElements.join('');
           
@@ -1327,7 +1445,10 @@ export const PageReader = ({
             : 0;
           
           // Standard bottom margin when there are no footnotes (for consistent page spacing)
-          const BOTTOM_MARGIN_NO_FOOTNOTES = 48; // ~4.5rem in pixels (increased to prevent unnecessary splits)
+          // CRITICAL: ONLY standalone first page (the standalone page before cover) uses smaller bottom margin (20px) to allow text to sit lower
+          // This matches the getAvailableHeight calculation which uses 20px for standalone first page
+          // isStandaloneFirstPage already declared at top of function
+          const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPage ? 20 : 48; // standalone first page: 20px, others: 48px
           
           // Bottom margin for karaoke pages (reduced to fit more content)
           const BOTTOM_MARGIN_KARAOKE = 32; // Reduced from 48px to fit one more line
@@ -1341,6 +1462,10 @@ export const PageReader = ({
           // Use larger margin for karaoke pages
           const bottomMargin = hasKaraoke ? BOTTOM_MARGIN_KARAOKE : BOTTOM_MARGIN_NO_FOOTNOTES;
           const reservedSpace = pageFootnotes.length > 0 ? footnotesHeight : bottomMargin;
+          
+          // NOTE: Empty paragraph removal is handled by METHOD 1 (array removal) above, before joining.
+          // No backup method needed - METHOD 1 removes from the array before it becomes a string.
+          
           const contentWrapper = `<div class="page-content-main" style="padding-bottom: ${reservedSpace}px;">${processedContent}</div>${footnotesHtml}`;
           
           // Check if this page should have a background video (1-indexed page number)
@@ -2128,7 +2253,12 @@ export const PageReader = ({
             
             // Get available height - it will use footnotes height if provided, or bottom margin if not
             // baseAvailableHeight already accounts for footnotes (subtracts them from page height)
-            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight);
+            // CRITICAL: Pass isFirstPage to ensure first pages (standalone page before cover) use smaller bottom margin (20px vs 32px)
+            // ONLY apply to the standalone first page (chapter.isFirstPage), NOT to regular chapter first pages
+            // CRITICAL: ONLY the standalone first page (isFirstPage=true chapter, first page) needs lenient fitting
+            const isStandaloneFirstPage = chapter.isFirstPage && chapterPageIndex === 0; // ONLY the standalone first page
+            const isFirstPage = isStandaloneFirstPage; // For getAvailableHeight call
+            const baseAvailableHeight = measure.getAvailableHeight(footnotesHeight, isFirstPage);
             const contentAvailableHeight = baseAvailableHeight;
 
             // STEP 2: Check if element fits by measuring TOTAL content (current page + element)
@@ -2155,8 +2285,9 @@ export const PageReader = ({
             // contentAvailableHeight already accounts for footnotes (baseAvailableHeight - footnotesHeight)
             // Add safety margin to prevent overflow due to rounding/measurement differences
             // Use larger margin for pages with headings (they have more complex layout)
-            const safetyMargin = pageHasHeading ? 8 : 2;
-            const elementFits = totalContentHeight <= contentAvailableHeight - safetyMargin;
+            // For standalone first page, allow up to 100px overflow to ensure all content is included
+            const safetyMargin = isStandaloneFirstPage ? -100 : (pageHasHeading ? 8 : 2); // Negative margin for standalone first page = allows overflow
+            const elementFits = isStandaloneFirstPage ? true : (totalContentHeight <= contentAvailableHeight - safetyMargin); // Always fit on standalone first page
             
             // Calculate remaining space for splitting (if needed)
             // IMPORTANT: Apply paragraph styles to get accurate measurement
@@ -2232,8 +2363,9 @@ export const PageReader = ({
                 
                 // Simulate the actual rendering with padding-bottom
                 // Calculate reserved space: footnotes height if footnotes exist, otherwise bottom margin
-                // Use a slightly smaller bottom margin for the first page so text can sit lower
-                const BOTTOM_MARGIN_NO_FOOTNOTES = block.chapter && block.chapter.isFirstPage ? 15 : 32;
+                // CRITICAL: ONLY standalone first page uses 20px to match getAvailableHeight and pushPage
+                const isStandaloneFirstPageCheck = block.chapter && block.chapter.isFirstPage && chapterPageIndex === 0;
+                const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPageCheck ? 20 : 32;
                 const finalReservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
                 const finalContentWrapper = document.createElement('div');
                 finalContentWrapper.className = 'page-content-main';
@@ -2259,8 +2391,12 @@ export const PageReader = ({
                 // This prevents paragraphs from being pushed to next page when there's a tiny bit of space left
                 // MOBILE: Use baseAvailableHeight (which already accounts for footnotes)
                 // DESKTOP: Use fullPageHeight for direct comparison
+                // CRITICAL: ONLY for standalone first page, always allow overflow to prevent content filtering
                 let overflowAmount;
-                if (isDesktop && pageHeight) {
+                if (isStandaloneFirstPage) {
+                  // Standalone first page: always allow overflow, set overflowAmount to 0 to bypass split logic
+                  overflowAmount = 0;
+                } else if (isDesktop && pageHeight) {
                   // Desktop: compare against full page height
                   const containerPaddingTop = 32; // 2rem ≈ 32px
                   const containerPaddingBottom = 8; // 0.5rem ≈ 8px
@@ -2279,12 +2415,15 @@ export const PageReader = ({
                 // 1. This is the last element in the array (no more elements to process), OR
                 // 2. Remaining space is very small (< 80px) AND overflow is small (< 30px), OR
                 // 3. Element is short (< 100 chars) and overflow is small (< 30px) - allow short elements to fit
+                // 4. This is the standalone first page - be more lenient to prevent content from being filtered out
                 // This prevents multiple elements from overflowing while allowing the last element or short elements to fit
                 const elementTextLength = element.textContent?.length || 0; // Declare early for use below
                 const isLastElement = elementIndex === elements.length - 1;
                 const isLikelyLastElement = remainingContentHeight < 80 && overflowAmount < 30;
                 const isShortElement = elementTextLength < 100 && overflowAmount < 30;
-                const allowSmallOverflow = (isLastElement || isLikelyLastElement || isShortElement) && overflowAmount < 30 && overflowAmount > 0;
+                // CRITICAL: ONLY standalone first page allows larger overflow tolerance (50px instead of 30px) to prevent content filtering
+                const overflowTolerance = isStandaloneFirstPage ? 50 : 30;
+                const allowSmallOverflow = (isLastElement || isLikelyLastElement || isShortElement || isStandaloneFirstPage) && overflowAmount < overflowTolerance && overflowAmount > 0;
                 
                 // Only attempt split if overflow is significant (>= 20px) or there's very little space left
                 // BUT: Allow small overflow (< 20px) only for the last element or when remaining space is very small
@@ -2534,7 +2673,8 @@ export const PageReader = ({
                     measure.body.removeChild(tempFootnotesContainerFirst);
                     
                     // baseAvailableHeight already accounts for footnotes, but we need to recalculate with new footnotes
-                    const baseAvailableHeightWithFirst = measure.getAvailableHeight(footnotesHeightWithFirst);
+                    const isFirstPage = chapter.isFirstPage;
+                    const baseAvailableHeightWithFirst = measure.getAvailableHeight(footnotesHeightWithFirst, isFirstPage);
                     const contentAvailableHeightWithFirst = baseAvailableHeightWithFirst;
                     
                     // Measure JUST the first part (not the entire page)

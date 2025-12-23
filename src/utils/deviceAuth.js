@@ -36,7 +36,8 @@ const EDITOR_DEVICE_WHITELIST = [
   'miiq366c-exsxgdbmp6m',
   'mj025jwg-sdmgx7121dc',
   'mj8ier44-uoqhx79db2n',
-  'mihhv6f0-5rzg6xc3zbq'
+  'mihhv6f0-5rzg6xc3zbq',
+  'mjj6uolq-7s4rcb7piji'
 ];
 
 // Check if current device is authorized as editor

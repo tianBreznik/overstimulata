@@ -132,7 +132,7 @@
 /* Adjust for very small screens (iPhone SE, etc.) to prevent overflow */
 @media screen and (max-width: 400px) {
   .page-container {
-    padding: 2rem 0.75rem 0.5rem; /* Reduce horizontal padding on very small screens */
+    padding: 1.5rem 0.75rem 0.5rem; /* Reduce top padding from 2rem to 1.5rem, and horizontal padding on very small screens */
   }
   
   .page-sheet.content-page {
@@ -143,6 +143,12 @@
   .page-sheet {
     width: min(640px, calc(100vw - 1.5rem));
     max-width: min(640px, calc(100vw - 1.5rem));
+  }
+  
+  /* Reduce top padding on page-body to fit more content on short screens */
+  .content-page.page-with-heading .page-body,
+  .content-page.page-without-heading .page-body {
+    padding-top: calc(2.5rem + env(safe-area-inset-top)); /* Reduced from 3.5rem to 2.5rem */
   }
 }
 
