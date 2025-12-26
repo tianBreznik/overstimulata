@@ -152,6 +152,55 @@
   }
 }
 
+/* iPhone SE specific: Reduce top padding and line-height to prevent overflow when karaoke starts */
+/* iPhone SE has screen height of 667px (375px × 667px in portrait) */
+/* We need to account for layout changes when karaoke word spans are added during initialization */
+@media screen and (max-height: 667px) and (max-width: 400px) {
+  /* Reduce top padding on page-body to move content up */
+  .content-page.page-with-heading .page-body,
+  .content-page.page-without-heading .page-body {
+    /* Reduce by approximately half a line height (0.8rem) */
+    padding-top: calc(1.7rem + env(safe-area-inset-top)) !important; /* Reduced from 2.5rem to 1.7rem */
+  }
+  
+  /* Reduce line-height for karaoke text to have less gap between lines */
+  .page-content .karaoke-slice,
+  .page-content .karaoke-player {
+    line-height: 1.28 !important; /* Reduced from 1.35 to 1.28 */
+  }
+  
+  /* Also reduce line-height for paragraphs containing karaoke */
+  .page-content p:has(.karaoke-slice),
+  .page-content p:has(.karaoke-player) {
+    line-height: 1.28 !important;
+  }
+  
+  /* Pull karaoke paragraphs up slightly to compensate for layout shift */
+  .page-content p:has(.karaoke-slice),
+  .page-content p:has(.karaoke-player) {
+    margin-top: -0.15rem !important;
+  }
+}
+
+/* Additional fallback for iPhone SE using exact dimensions */
+@media screen and (height: 667px) and (width: 375px) {
+  .content-page.page-with-heading .page-body,
+  .content-page.page-without-heading .page-body {
+    padding-top: calc(1.7rem + env(safe-area-inset-top)) !important;
+  }
+  
+  .page-content .karaoke-slice,
+  .page-content .karaoke-player {
+    line-height: 1.28 !important;
+  }
+  
+  .page-content p:has(.karaoke-slice),
+  .page-content p:has(.karaoke-player) {
+    line-height: 1.28 !important;
+    margin-top: -0.15rem !important;
+  }
+}
+
 /* Keep text content constrained even with background video - video breaks out via position: fixed */
 
 .page-header {
