@@ -337,7 +337,6 @@ const ensureWordSliceInitialized = async (karaokeSourcesRef, karaokeId, sliceEle
   };
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { applyInkEffectToTextMobile } from './Chapter';
 import { ReaderTopBar } from './ReaderTopBar';
 import { MobileTOC } from './MobileTOC';
 import { usePagePagination } from '../hooks/usePagePagination';
@@ -1489,11 +1488,11 @@ export const PageReader = ({
             };
             
             // Stop other karaoke instances
-            karaokeControllersRef.current.forEach((ctrl, id) => {
-              if (id !== karaokeId) {
-                ctrl.pause();
-              }
-            });
+                  karaokeControllersRef.current.forEach((ctrl, id) => {
+                    if (id !== karaokeId) {
+                      ctrl.pause();
+                    }
+                  });
             
             // CRITICAL FOR iOS: audio.play() must be called synchronously within the user gesture handler
             if (!audioUnlockedRef.current) {
@@ -1506,8 +1505,8 @@ export const PageReader = ({
                     audio.currentTime = 0;
                   }).catch(() => {});
                 }
-                audioUnlockedRef.current = true;
-                window.dispatchEvent(new CustomEvent('audioUnlocked'));
+                  audioUnlockedRef.current = true;
+                  window.dispatchEvent(new CustomEvent('audioUnlocked'));
               } catch (unlockErr) {
                 console.warn('[KARAOKE PLAY] Unlock attempt had error, but continuing', unlockErr);
                 audioUnlockedRef.current = true;
@@ -1664,7 +1663,7 @@ export const PageReader = ({
                 currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
                 } catch (playErr) {
                   console.error('[KARAOKE PLAY] Failed to start playback', playErr);
-                }
+              }
               })();
             } else {
               console.warn('[KARAOKE PLAY] Controller or audio not found', { controller: !!controller, audio: controller?.audio });
@@ -1693,7 +1692,7 @@ export const PageReader = ({
           }, { passive: true });
           slice.addEventListener('touchend', handleInteraction, { passive: false });
         } else {
-          slice.addEventListener('click', handleInteraction);
+        slice.addEventListener('click', handleInteraction);
         }
       }
     }
@@ -2488,10 +2487,10 @@ export const PageReader = ({
         .filter((p) => !p.isCover && !p.isFirstPage && p.chapterIndex === prevChapterIndex)
             .sort((a, b) => b.pageIndex - a.pageIndex)[0];
 
-      if (lastPageOfPrevChapter) {
+          if (lastPageOfPrevChapter) {
         // Q1: Pause karaoke when navigating to previous chapter (backward navigation)
         pauseAllKaraoke();
-        setIsTransitioning(true);
+            setIsTransitioning(true);
             // Wait for fade-out to complete (1s), then update content and fade in
             setTimeout(() => {
               // Update both displayPage and indices together
@@ -2807,8 +2806,8 @@ export const PageReader = ({
   // Must be defined before any conditional returns (Rules of Hooks)
   const pageContentRef = useRef(null);
   const isTransitioningRef = useRef(false);
-  const preservedInkHTMLRef = useRef(null); // Store HTML with ink effect before transition
-  const preservedPageKeyRef = useRef(null); // Track which page the preserved HTML belongs to
+  // Store HTML with ink effect for each page (keyed by pageKey)
+  const preservedHTMLMapRef = useRef(new Map()); // Map<pageKey, htmlString>
   
   // Calculate chapter progress for progress bar (must be at top level for Rules of Hooks)
   const chapterProgress = useMemo(() => {
@@ -3081,8 +3080,7 @@ export const PageReader = ({
    */
   const preservePageContent = useCallback((node, pageKey) => {
     if (!node || !node.isConnected || !pageKey) return;
-    preservedInkHTMLRef.current = node.innerHTML;
-    preservedPageKeyRef.current = pageKey;
+    preservedHTMLMapRef.current.set(pageKey, node.innerHTML);
   }, []);
   
   /**
@@ -3091,8 +3089,9 @@ export const PageReader = ({
   const restorePageContent = useCallback((node, pageKey) => {
     if (!node || !node.isConnected || !pageKey) return false;
     
-    if (preservedInkHTMLRef.current && preservedPageKeyRef.current === pageKey) {
-      node.innerHTML = preservedInkHTMLRef.current;
+    const preservedHTML = preservedHTMLMapRef.current.get(pageKey);
+    if (preservedHTML) {
+      node.innerHTML = preservedHTML;
       return true;
     }
     return false;
@@ -3120,30 +3119,13 @@ export const PageReader = ({
   }, [initializeKaraokeSlices, hasInitializedKaraoke]);
   
   /**
-   * Process normal text content: apply ink effect
+   * Process normal text content: no-op (ink effect removed)
    * This only handles normal text processing (excludes karaoke)
    */
   const processNormalTextContent = useCallback((node) => {
-    if (!node || !node.isConnected) return false;
-    
-    // Don't apply ink effect if already applied
-    if (hasInkEffect(node)) {
-      return true; // Already processed
-    }
-    
-    // Don't apply ink effect to karaoke text (see polish note in code)
-    if (hasInitializedKaraoke(node)) {
-      return false; // Skip - karaoke text doesn't use ink effect
-    }
-    
-    try {
-      applyInkEffectToTextMobile(node, { probability: 0.25 });
-      return true;
-    } catch (error) {
-      console.error('[PAGE CONTENT] Error applying ink effect:', error);
-      return false;
-    }
-  }, [hasInkEffect, hasInitializedKaraoke]);
+    // Ink effect removed - this is now a no-op
+    return true;
+  }, []);
   
   /**
    * Ensure content is set from pageToDisplay if node is empty
@@ -3190,15 +3172,14 @@ export const PageReader = ({
       if (restored) {
         console.log('[PAGE CONTENT] Restored preserved HTML during transition', {
           currentPageKey,
-          preservedPageKey: preservedPageKeyRef.current
+          hasPreservedHTML: preservedHTMLMapRef.current.has(currentPageKey)
         });
         return; // Content restored, wait for transition to complete
       }
       
-      // No preserved HTML available - ensure content is set and preserve raw content
-      if (ensureContentSet(node, pageToDisplay)) {
-        preservePageContent(node, currentPageKey);
-      }
+      // No preserved HTML available - just ensure content is set
+      // Don't preserve raw content here - it will be preserved after processing completes
+      ensureContentSet(node, pageToDisplay);
       return; // Skip processing during transitions
     }
       
@@ -3250,10 +3231,9 @@ export const PageReader = ({
         return;
       }
       
-      // Process in order: Karaoke first, then normal text
-      // This ensures karaoke structure is ready before normal text processing
+      // Process karaoke content
       await processKaraokeContent(node);
-      processNormalTextContent(node);
+      // Normal text processing removed (ink effect disabled)
       
       // Preserve the final processed HTML
       preservePageContent(node, currentPageKey);
@@ -3273,7 +3253,7 @@ export const PageReader = ({
     // applying ink effect.
     // -------------------------------
     
-  }, [pageToDisplay, isTransitioningRef, hasInitializedKaraoke, hasInkEffect, preservePageContent, restorePageContent, processKaraokeContent, processNormalTextContent, ensureContentSet, initializeKaraokeSlices]);
+  }, [pageToDisplay, isTransitioningRef, hasInitializedKaraoke, preservePageContent, restorePageContent, processKaraokeContent, processNormalTextContent, ensureContentSet, initializeKaraokeSlices]);
 
   // Q5: Pause karaoke when tab goes to background
   useEffect(() => {
@@ -3424,41 +3404,7 @@ export const PageReader = ({
   // Check if we're on desktop
   const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
 
-  // Apply ink effect to desktop PDF pages after render and fix font sizes
-  useEffect(() => {
-    if (!isDesktop || pages.length === 0) return;
-    
-    const applyInkAndFixFonts = () => {
-      const pageContents = document.querySelectorAll('.pdf-page-wrapper .page-content');
-      pageContents.forEach((pageContent) => {
-        // Remove inline font-size styles that might override CSS
-        const allElements = pageContent.querySelectorAll('*');
-        allElements.forEach((el) => {
-          if (el.style && el.style.fontSize) {
-            // Remove inline font-size to let CSS take over
-            el.style.removeProperty('font-size');
-          }
-        });
-        // Also remove from the container itself
-        if (pageContent.style && pageContent.style.fontSize) {
-          pageContent.style.removeProperty('font-size');
-        }
-        
-        // Apply ink effect
-        // Skip if already processed
-        if (pageContent.querySelectorAll('.ink-char-mobile').length > 0) return;
-        // Skip karaoke players
-        if (pageContent.closest('.karaoke-player')) return;
-        // Apply ink effect with skipMobileCheck to allow desktop usage
-        applyInkEffectToTextMobile(pageContent, { probability: 0.45, skipMobileCheck: true });
-      });
-    };
-    
-    // Apply after a short delay to ensure DOM is ready
-    const timeoutId = setTimeout(applyInkAndFixFonts, 100);
-    
-    return () => clearTimeout(timeoutId);
-  }, [pages, isDesktop]);
+  // Ink effect removed - no longer applying to desktop or mobile
 
   // Preload adjacent page backgrounds for smoother swiping
   useEffect(() => {
@@ -3948,8 +3894,7 @@ export const PageReader = ({
             const hasInkChars = pageContent.querySelectorAll('.ink-char-mobile').length > 0;
             if (hasInkChars && currentPageKey) {
               // Preserve the HTML with ink effects before React resets it
-              preservedInkHTMLRef.current = pageContent.innerHTML;
-              preservedPageKeyRef.current = currentPageKey;
+              preservedHTMLMapRef.current.set(currentPageKey, pageContent.innerHTML);
             }
           }
           
@@ -3967,8 +3912,11 @@ export const PageReader = ({
                   const currentPageKey = pageToDisplay 
                     ? `page-${pageToDisplay.chapterIndex}-${pageToDisplay.pageIndex}`
                     : null;
-                  if (currentPageKey && preservedInkHTMLRef.current && preservedPageKeyRef.current === currentPageKey) {
-                    pageContentAfter.innerHTML = preservedInkHTMLRef.current;
+                  if (currentPageKey) {
+                    const preservedHTML = preservedHTMLMapRef.current.get(currentPageKey);
+                    if (preservedHTML) {
+                      pageContentAfter.innerHTML = preservedHTML;
+                    }
                   }
                 }
               });
