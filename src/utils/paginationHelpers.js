@@ -197,7 +197,9 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
   container.style.top = '0';
   container.style.width = isDesktop ? `${pageWidth}px` : '100%';
   container.style.height = pageHeight + 'px';
-  container.style.padding = '2rem 1.5rem 0.5rem';
+  // Desktop: no container padding (page-sheet is direct child, matches PDFViewer.css structure)
+  // Mobile: container has padding for centering
+  container.style.padding = isDesktop ? '0' : '2rem 1.5rem 0.5rem';
   container.style.boxSizing = 'border-box';
   container.style.display = 'flex';
   container.style.alignItems = 'center';
@@ -207,7 +209,9 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
   const sheet = document.createElement('div');
   sheet.className = 'page-sheet content-page';
   sheet.style.width = isDesktop ? `${pageWidth}px` : 'min(680px, 96vw)';
-  sheet.style.height = '100%';
+  // Desktop: sheet has fixed height matching pageHeight (matches PDFViewer.css)
+  // Mobile: sheet is 100% of container
+  sheet.style.height = isDesktop ? `${pageHeight}px` : '100%';
   sheet.style.display = 'flex';
   sheet.style.flexDirection = 'column';
   sheet.style.alignItems = 'flex-start';
@@ -217,26 +221,44 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
   body.className = 'page-body';
   body.style.width = '100%';
   body.style.flex = '1';
-  body.style.overflow = 'hidden';
-  // For desktop, ensure body has explicit height for accurate measurement
-  if (isDesktop && pageHeight) {
-    // Container is pageHeight (1000px), padding is 2rem top + 0.5rem bottom
-    // Sheet is 100% height, body fills remaining space
-    // Calculate: pageHeight - container padding top - container padding bottom
-    const containerPaddingTop = 32; // 2rem ≈ 32px
-    const containerPaddingBottom = 8; // 0.5rem ≈ 8px
-    body.style.height = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
-    body.style.minHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
-    body.style.maxHeight = (pageHeight - containerPaddingTop - containerPaddingBottom) + 'px';
+  // Desktop: page-body uses overflow: visible (matches PDFViewer.css)
+  // Mobile: page-body uses overflow: hidden
+  body.style.overflow = isDesktop ? 'visible' : 'hidden';
+  // Desktop: page-body has padding: 3rem 2.5rem (48px top/bottom) - matches PDFViewer.css
+  // Mobile: no explicit padding on body (handled by container)
+  if (isDesktop) {
+    body.style.padding = '3rem 2.5rem';
+    body.style.boxSizing = 'border-box';
+    body.style.display = 'flex';
+    body.style.flexDirection = 'column';
+    // Body height = pageHeight (636px) - padding top (48px) - padding bottom (48px) = 540px
+    body.style.height = (pageHeight - 48 - 48) + 'px';
+    body.style.minHeight = (pageHeight - 48 - 48) + 'px';
+    body.style.maxHeight = (pageHeight - 48 - 48) + 'px';
   }
   
   // CRITICAL: Add .page-content wrapper to match real DOM structure
-  // This ensures the measurement container respects the same CSS constraints
-  // (height: 90%, max-height: 95%) as the real layout, preventing overflow on short screens
+  // Desktop: .page-content uses height: auto and flex: 1 1 auto (matches PDFViewer.css)
+  //   BUT for measurement, we need to constrain it to available height to accurately measure
+  // Mobile: .page-content uses height: 90%, max-height: 95% (matches PageReader.css)
   const pageContent = document.createElement('div');
   pageContent.className = 'page-content';
   pageContent.style.width = '100%';
-  pageContent.style.height = '100%';
+  if (isDesktop) {
+    // Desktop: In actual rendering, height: auto and flex: 1 1 auto allows growth
+    // But for measurement, we need max-height constraint to match available space
+    // Calculate available height: body height (540px) - bottom margin (48px) = 492px
+    const availableHeight = pageHeight - 48 - 48 - 48; // pageHeight - top padding - bottom padding - bottom margin
+    pageContent.style.height = 'auto';
+    pageContent.style.flex = '1 1 auto';
+    pageContent.style.minHeight = '0';
+    pageContent.style.maxHeight = availableHeight + 'px'; // Constrain to available height for accurate measurement
+    pageContent.style.overflow = 'hidden'; // Clip overflow during measurement
+  } else {
+    // Mobile: match PageReader.css - height: 90%, max-height: 95%
+    pageContent.style.height = '90%';
+    pageContent.style.maxHeight = '95%';
+  }
   body.appendChild(pageContent);
   
   sheet.appendChild(body);
@@ -259,20 +281,21 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
       // IMPORTANT: Reserve bottom margin even when there are no footnotes (like a real book)
       // Allow the first page a slightly smaller bottom margin so text can sit lower
       // 
-      // NOTE: This uses 32px for calculation, but calculatePagePadding() uses 48px for actual padding.
-      // This mismatch was present in the original code and is preserved to maintain exact pagination behavior.
-      // The algorithm calculates with 32px (more conservative), but pages use 48px padding (more space).
-      const BOTTOM_MARGIN_NO_FOOTNOTES = isFirstPage ? 20 : 32; // first page: ~1.25rem, others: ~2rem in pixels (32px)
+      // For desktop: .page-body has padding: 3rem 2.5rem (48px bottom), so reserve 48px
+      // For mobile: calculatePagePadding() adds padding-bottom, so reserve 32px (more conservative)
+      const BOTTOM_MARGIN_NO_FOOTNOTES = isDesktop 
+        ? (isFirstPage ? 20 : 48) // Desktop: match body padding (48px) or 20px for first page
+        : (isFirstPage ? 20 : 32); // Mobile: 32px (calculatePagePadding adds padding-bottom)
       
-      // For desktop PDF viewer, use fixed page height (1000px) minus container padding
+      // For desktop PDF viewer, use fixed page height minus page-body padding
       // For mobile, use body.clientHeight (matching original behavior)
       let height;
       if (isDesktop && pageHeight) {
-        // Desktop: pageHeight is 1000px, container has padding: 2rem 1.5rem 0.5rem
-        // So body height = 1000px - (2rem top + 0.5rem bottom) = 1000px - ~40px = ~960px
-        const containerPaddingTop = 32; // 2rem ≈ 32px
-        const containerPaddingBottom = 8; // 0.5rem ≈ 8px
-        height = pageHeight - containerPaddingTop - containerPaddingBottom;
+        // Desktop: pageHeight is 636px, page-body has padding: 3rem 2.5rem (48px top/bottom)
+        // So body content height = 636px - 48px (top) - 48px (bottom) = 540px
+        const bodyPaddingTop = 48; // 3rem ≈ 48px
+        const bodyPaddingBottom = 48; // 3rem ≈ 48px
+        height = pageHeight - bodyPaddingTop - bodyPaddingBottom;
       } else {
         // Mobile: use body.clientHeight (original behavior)
         // NOTE: The real DOM has .page-content with height: 90% of body, but we measure
@@ -296,8 +319,10 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
  * with the same base font/line-height/margin as .page-content p
  */
 export const applyParagraphStylesToContainer = (container, isDesktop) => {
-  const desktopFontSize = isDesktop ? '1.3rem' : '1.3rem';
-  const desktopLineHeight = isDesktop ? '1.35' : '1.35';
+  // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
+  const desktopFontSize = isDesktop ? '1.18rem' : '1.3rem';
+  // Desktop PDF uses 1.62 line-height (matches PDFViewer.css), mobile uses 1.35
+  const desktopLineHeight = isDesktop ? '1.62' : '1.35';
   
   const paragraphs = container.querySelectorAll('p');
   paragraphs.forEach(p => {
@@ -446,15 +471,16 @@ export const measureFootnotesHeight = (footnoteNumbers, container, allFootnotes,
  */
 export const checkContentWithFootnotesFits = (contentElements, footnoteNumbers, availableHeight, contentWidth, isDesktop, measure, applyParagraphStylesToContainer, measureFootnotesHeight, allFootnotes, pageWidth) => {
   // First, try to add all content
-  // Apply base paragraph styles to match actual rendering (without .page-content container rules)
+  // CRITICAL: Insert into measure.pageContent (not measure.body) to match actual DOM structure
+  // Actual structure: .page-body > .page-content > content
   const tempContainer = document.createElement('div');
   tempContainer.style.width = contentWidth + 'px';
   // Apply the same font/line-height/margin rules that .page-content p uses
-  // Desktop PDF uses 1.3rem, mobile uses 1.3rem (updated)
+  // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
   tempContainer.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
-  tempContainer.style.fontSize = isDesktop ? '1.3rem' : '1.3rem';
-  tempContainer.style.lineHeight = isDesktop ? '1.35' : '1.35';
-  measure.body.appendChild(tempContainer);
+  tempContainer.style.fontSize = isDesktop ? '1.18rem' : '1.3rem';
+  tempContainer.style.lineHeight = isDesktop ? '1.62' : '1.35';
+  measure.pageContent.appendChild(tempContainer);
   
   contentElements.forEach(el => {
     const temp = document.createElement('div');
@@ -470,7 +496,7 @@ export const checkContentWithFootnotesFits = (contentElements, footnoteNumbers, 
   
   // If content alone doesn't fit, content + footnotes definitely won't
   if (contentHeight > availableHeight) {
-    measure.body.removeChild(tempContainer);
+    measure.pageContent.removeChild(tempContainer);
     return { fits: false, contentHeight, footnotesHeight: 0 };
   }
   
@@ -479,7 +505,7 @@ export const checkContentWithFootnotesFits = (contentElements, footnoteNumbers, 
   const footnotesHeight = measureFootnotesHeight(footnoteNumbers, tempContainer, allFootnotes, isDesktop, pageWidth);
   const totalHeight = contentHeight + footnotesHeight;
   
-  measure.body.removeChild(tempContainer);
+  measure.pageContent.removeChild(tempContainer);
   
   return {
     fits: totalHeight <= availableHeight,
@@ -521,7 +547,7 @@ export const isAtomicElement = (element) => {
  * Uses Range API to find the split point that preserves formatting
  */
 export const splitTextAtWordBoundary = (element, maxHeight, measure, options = {}) => {
-  const { returnCharCount = false } = options;
+  const { returnCharCount = false, contentWidth, isDesktop } = options;
   const fullText = element.textContent || '';
   if (!fullText.trim()) {
     return {
@@ -649,17 +675,19 @@ export const splitTextAtWordBoundary = (element, maxHeight, measure, options = {
     };
   }
   
-  // Check if entire element fits
+  // Check if entire element fits (for returnCharCount calculation)
   const fullClone = element.cloneNode(true);
   // Create a temporary container to measure just the clone
   const tempMeasureContainer2 = document.createElement('div');
-  tempMeasureContainer2.style.width = measure.body.clientWidth + 'px';
+  const measureWidth2 = (isDesktop && contentWidth) ? contentWidth : measure.body.clientWidth;
+  tempMeasureContainer2.style.width = measureWidth2 + 'px';
   tempMeasureContainer2.style.position = 'absolute';
   tempMeasureContainer2.style.visibility = 'hidden';
-  measure.body.appendChild(tempMeasureContainer2);
+  const measureParent2 = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+  measureParent2.appendChild(tempMeasureContainer2);
   tempMeasureContainer2.appendChild(fullClone);
   const fullHeight = fullClone.offsetHeight; // Measure the clone itself, not the body
-  measure.body.removeChild(tempMeasureContainer2);
+  measureParent2.removeChild(tempMeasureContainer2);
   
   if (fullHeight <= maxHeight + 2) {
     return {
@@ -781,7 +809,7 @@ export const splitTextAtWordBoundary = (element, maxHeight, measure, options = {
  * Tries to split at sentence ends (. ! ?) followed by space/capital letter
  */
 export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTextAtWordBoundary, options = {}) => {
-  const { returnCharCount = false } = options;
+  const { returnCharCount = false, contentWidth, isDesktop } = options;
   const fullText = element.textContent || '';
   if (!fullText.trim()) {
     return {
@@ -864,14 +892,18 @@ export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTe
     clone.appendChild(cloneRange);
     
     // Create a temporary container to measure just the clone
+    // Use contentWidth for desktop (accounts for padding), body.clientWidth for mobile
     const tempMeasureContainer = document.createElement('div');
-    tempMeasureContainer.style.width = measure.body.clientWidth + 'px';
+    const measureWidth = (isDesktop && contentWidth) ? contentWidth : measure.body.clientWidth;
+    tempMeasureContainer.style.width = measureWidth + 'px';
     tempMeasureContainer.style.position = 'absolute';
     tempMeasureContainer.style.visibility = 'hidden';
-    measure.body.appendChild(tempMeasureContainer);
+    // For desktop, append to pageContent to match structure; for mobile, body is fine
+    const measureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+    measureParent.appendChild(tempMeasureContainer);
     tempMeasureContainer.appendChild(clone);
     const height = clone.offsetHeight; // Measure the clone itself, not the body
-    measure.body.removeChild(tempMeasureContainer);
+    measureParent.removeChild(tempMeasureContainer);
     
     if (height <= maxHeight + 2) {
       bestFit = i + 1;
@@ -882,7 +914,7 @@ export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTe
 
   if (bestFit === 0) {
     // Can't fit even one sentence, fall back to word boundary
-    return splitTextAtWordBoundary(element, maxHeight, measure, options);
+    return splitTextAtWordBoundary(element, maxHeight, measure, { ...options, contentWidth, isDesktop });
   }
 
   if (bestFit === sentenceBoundaries.length) {

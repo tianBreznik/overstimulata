@@ -338,6 +338,7 @@ const ensureWordSliceInitialized = async (karaokeSourcesRef, karaokeId, sliceEle
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { ReaderTopBar } from './ReaderTopBar';
+import { DesktopPageReader } from './DesktopPageReader';
 import { MobileTOC } from './MobileTOC';
 import { usePagePagination } from '../hooks/usePagePagination';
 import './PageReader.css';
@@ -3403,6 +3404,12 @@ export const PageReader = ({
 
   // Check if we're on desktop
   const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
+  console.log('[PageReader] isDesktop check:', {
+    hasWindow: typeof window !== 'undefined',
+    innerWidth: typeof window !== 'undefined' ? window.innerWidth : 'N/A',
+    isDesktop: isDesktop,
+    pagesLength: pages.length
+  });
 
   // Ink effect removed - no longer applying to desktop or mobile
 
@@ -3450,166 +3457,27 @@ export const PageReader = ({
   }, [displayPage?.backgroundImageUrl, displayPage?.chapterIndex, displayPage?.pageIndex]);
 
   // On desktop, render all pages in a PDF reader style (early return)
-  // Show loading if pages aren't calculated yet
   if (isDesktop) {
-    if (pages.length === 0) {
-      return (
-        <div className="page-reader-loading" />
-      );
-    }
-    // Always start at page 1 (cover page)
-    // The cover page should always be first in the pages array
-    // Verify the first page is the cover page
-    console.log('[PDFViewer] Rendering PDF viewer with', pages.length, 'pages');
-    const firstPage = pages.find(p => p.isFirstPage) || pages[0];
-    if (firstPage && !firstPage.isFirstPage && !firstPage.isCover) {
-      console.error('[PageOrder] First page is not first page or cover page!', {
-        firstPageType: firstPage.isVideo ? 'video' : firstPage.isEpigraph ? 'epigraph' : 'content',
-        firstPageChapterIndex: firstPage.chapterIndex,
-        firstPagePageIndex: firstPage.pageIndex,
-        totalPages: pages.length,
-        firstFewPages: pages.slice(0, 5).map(p => ({
-          isCover: p.isCover,
-          isVideo: p.isVideo,
-          isEpigraph: p.isEpigraph,
-          chapterIndex: p.chapterIndex,
-          pageIndex: p.pageIndex
-        }))
-      });
-    }
-    
-    // Check for duplicate pages
-    const pageKeys = new Set();
-    const duplicates = [];
-    pages.forEach((page, index) => {
-      const key = `chapter-${page.chapterIndex}-page-${page.pageIndex}`;
-      if (pageKeys.has(key)) {
-        duplicates.push({ index, key, page });
-      }
-      pageKeys.add(key);
-    });
-    if (duplicates.length > 0) {
-      console.error('[PDFViewer] Found duplicate pages!', duplicates);
-    }
-    
-    const initialPage = 1;
-    
+    console.log('[PageReader] Desktop detected, rendering DesktopPageReader with', pages.length, 'pages');
+    const currentPage = pages.find(
+      (p) => p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex
+    );
     return (
-      <PDFViewer
-        currentPage={initialPage}
-        totalPages={pages.length}
-        onPageChange={(pageNum) => {
-          // Scroll to the page
-          const pageElement = document.getElementById(`pdf-page-${pageNum - 1}`);
-          if (pageElement) {
-            pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }
-        }}
-        filename="weird-attachments.pdf"
-      >
-        <div className="pdf-pages-container">
-          {pages.map((page, index) => {
-            if (!page) return null;
-            
-            // Debug: Log first few pages to verify order
-            if (index < 5) {
-              console.log(`[PDFViewer] Rendering page ${index + 1}:`, {
-                isCover: page.isCover,
-                isVideo: page.isVideo,
-                isEpigraph: page.isEpigraph,
-                chapterIndex: page.chapterIndex,
-                pageIndex: page.pageIndex,
-                chapterTitle: page.chapterTitle
-              });
-            }
-            
-            // Use index as key to ensure unique keys and prevent React from reusing components incorrectly
-            // Also include page properties to help React identify changes
-            const pageKey = `pdf-page-${index}-${page.chapterIndex}-${page.pageIndex}`;
-            const pageNumber = index + 1;
-            // Calculate page number excluding first page and cover (for display)
-            // Page numbers start at 1 after the cover page
-            const regularPages = pages.filter(p => !p.isFirstPage && !p.isCover);
-            const displayPageNumber = (page.isFirstPage || page.isCover) ? 0 : regularPages.findIndex(
-              (p) => p.chapterIndex === page.chapterIndex && p.pageIndex === page.pageIndex
-            ) + 1;
-            const shouldShowTopBar = page && !page.hasHeading && !page.isEpigraph && !page.isCover && !page.isFirstPage && !page.hasFieldNotes && page.pageIndex > 0;
-
-  return (
-    <div
-                key={pageKey}
-                id={`pdf-page-${index}`}
-                className="pdf-page-wrapper"
-                style={{
-                  // Ensure each page is in normal document flow
-                  position: 'relative',
-                  display: 'block',
-                  width: '100%'
-                }}
-              >
-                <article className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''} ${page?.hasFieldNotes ? 'field-notes-page' : ''}`}>
-                  {/* Background videos disabled in desktop PDF viewer for now */}
-          <section className="page-body content-body">
-                    {page?.isCover ? (
-                      <div 
-                        className="page-content"
-                        dangerouslySetInnerHTML={{ __html: page.content || '' }}
-                      />
-                    ) : page?.isFirstPage ? (
-                      <div 
-                        className="page-content"
-                        dangerouslySetInnerHTML={{ __html: page.content || '' }}
-                      />
-                    ) : page?.isEpigraph ? (
-                      <div className="page-content epigraph-content">
-                        <div className={`epigraph-text epigraph-align-${page?.epigraphAlign || 'center'}`}>
-                          <div>{page?.epigraphText || ''}</div>
-                          {page?.epigraphAuthor && (
-                            <div className="epigraph-author">– {page.epigraphAuthor}</div>
-                          )}
-                        </div>
-                      </div>
-                    ) : page?.isVideo ? (
-                      <div className="page-content video-content">
-                        <video
-                          src={page?.videoSrc}
-                          loop
-                          muted
-                          playsInline
-                          preload="auto"
-                          className="fullscreen-video"
-                        />
-                      </div>
-                    ) : page?.hasFieldNotes ? (
-                      <div 
-                        className="page-content field-notes-content"
-                        dangerouslySetInnerHTML={{ __html: page?.content || '' }} 
-                      />
-                    ) : (
-                      <div 
-                        className="page-content"
-                        dangerouslySetInnerHTML={{ __html: page?.content || '' }} 
-                      />
-                    )}
-                  </section>
-                  {!page?.isFirstPage && !page?.isCover && (
-                    <div className="page-number">
-                      {displayPageNumber}
-                    </div>
-                  )}
-                  {shouldShowTopBar && !page.hasFieldNotes && (
-                    <ReaderTopBar
-                      chapterTitle={page.chapterTitle}
-                      subchapterTitle={page.subchapterTitle}
-                      pageKey={pageKey}
-                    />
-                  )}
-                </article>
-              </div>
-            );
-          })}
-        </div>
-      </PDFViewer>
+      <DesktopPageReader 
+        pages={pages} 
+        karaokeSources={karaokeSources}
+        chapters={chapters}
+        currentChapterIndex={currentChapterIndex}
+        currentPageIndex={currentPageIndex}
+        currentSubchapterId={currentPage?.subchapterId || null}
+        onJumpToPage={jumpToPage}
+        onEditChapter={onEditChapter}
+        onAddSubchapter={onAddSubchapter}
+        onDeleteChapter={onDeleteChapter}
+        onEditSubchapter={onEditSubchapter}
+        onDeleteSubchapter={onDeleteSubchapter}
+        onReorderChapters={onReorderChapters}
+      />
     );
   }
 
@@ -3765,17 +3633,17 @@ export const PageReader = ({
           }}
         />
       )}
+    <div
+      ref={containerRef}
+      className="page-reader"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+    >
       <div
-        ref={containerRef}
-        className="page-reader"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
+        ref={pageContainerRef}
+        className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
       >
-        <div
-          ref={pageContainerRef}
-          className={`page-container ${isTransitioning ? 'transitioning' : ''}`}
-        >
         <article className={`page-sheet content-page ${pageToDisplay?.isEpigraph ? 'epigraph-page' : ''} ${pageToDisplay?.isVideo ? 'video-page' : ''} ${pageToDisplay?.backgroundVideo ? 'background-video-page' : ''} ${pageToDisplay?.isCover ? 'cover-page' : ''} ${pageToDisplay?.isFirstPage ? 'first-page' : ''} ${pageToDisplay?.hasFieldNotes ? 'field-notes-page' : ''}`}>
           <section className="page-body content-body">
             {pageToDisplay?.isCover ? (
@@ -3938,20 +3806,7 @@ export const PageReader = ({
     </>
   );
 
-  // On desktop, wrap with PDFViewer; on mobile, return page content directly
-  if (isDesktop) {
-    return (
-      <PDFViewer
-        currentPage={pdfPageNumber}
-        totalPages={pdfTotalPages}
-        onPageChange={handlePDFPageChange}
-        filename="weird-attachments.pdf"
-      >
-        {pageContent}
-      </PDFViewer>
-    );
-  }
-
+  // Mobile: return page content directly
   return pageContent;
 };
 

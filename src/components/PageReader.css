@@ -1289,6 +1289,8 @@
   display: inline-block;
   animation: karaoke-breathe 2s ease-in-out infinite;
   will-change: opacity;
+  /* Smooth transition when data-playing is set to avoid visual glitch */
+  transition: opacity 0.15s ease-out;
   /* Match normal paragraph font metrics exactly */
   font-size: 1.3rem;
   line-height: 1.35;
@@ -1362,6 +1364,8 @@
 .karaoke-slice[data-playing="true"] {
   animation: none !important;
   opacity: 1 !important;
+  /* Smooth transition when stopping animation to avoid visual glitch */
+  transition: opacity 0.1s ease-out;
 }
 
 .karaoke-slice .karaoke-char {

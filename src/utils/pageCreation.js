@@ -5,15 +5,23 @@ import { measureFootnotesHeight } from './paginationHelpers';
  * Remove empty paragraphs from the start of elements array
  * Used for standalone first page to fit more content on small screens
  */
-export const removeEmptyParagraphs = (elements, isStandaloneFirstPage) => {
+export const removeEmptyParagraphs = (elements, isStandaloneFirstPage, isDesktop = false) => {
   if (!isStandaloneFirstPage) return elements;
   
-  const deviceScreenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1000;
-  const maxRemovals = deviceScreenHeight <= 700 ? 5 : deviceScreenHeight <= 850 ? 1 : 0;
+  // For desktop, remove more empty paragraphs to fit content better
+  // For mobile, use screen height-based logic
+  let maxRemovals;
+  if (isDesktop) {
+    maxRemovals = 3; // Remove up to 6 empty paragraphs on desktop
+  } else {
+    const deviceScreenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1000;
+    maxRemovals = deviceScreenHeight <= 700 ? 5 : deviceScreenHeight <= 850 ? 1 : 0;
+  }
+  
   const initialLength = elements.length;
   let removedFromArray = 0;
   
-  console.log('[removeEmptyParagraphs] Device screen height detected:', deviceScreenHeight, 'px, maxRemovals:', maxRemovals);
+  console.log('[removeEmptyParagraphs] isDesktop:', isDesktop, 'maxRemovals:', maxRemovals);
   
   const filteredElements = [...elements];
   
@@ -141,7 +149,7 @@ export const createPageFromElements = ({
   
   // CRITICAL: For standalone first page, remove empty paragraphs from the start BEFORE processing
   const isStandaloneFirstPage = chapter.isFirstPage && chapterPageIndex === 0;
-  const filteredElements = removeEmptyParagraphs(elements, isStandaloneFirstPage);
+  const filteredElements = removeEmptyParagraphs(elements, isStandaloneFirstPage, isDesktop);
   
   // Process footnotes in content: replace ^[content] with superscript numbers
   let processedContent = filteredElements.join('');
@@ -175,7 +183,11 @@ export const createPageFromElements = ({
     pageWidth
   );
   
-  const contentWrapper = `<div class="page-content-main" style="padding-bottom: ${reservedSpace}px;">${processedContent}</div>${footnotesHtml}`;
+  // For desktop, .page-body already has padding: 3rem 2.5rem (48px bottom),
+  // so we don't need to add extra padding-bottom to content.
+  // For mobile, we add padding-bottom to reserve space for footnotes/margin.
+  const paddingBottom = isDesktop ? 0 : reservedSpace;
+  const contentWrapper = `<div class="page-content-main" style="${paddingBottom > 0 ? `padding-bottom: ${paddingBottom}px;` : ''}">${processedContent}</div>${footnotesHtml}`;
   
   // Check if this page should have a background video (1-indexed page number)
   const pageNumber = chapterPageIndex + 1; // Convert 0-indexed to 1-indexed

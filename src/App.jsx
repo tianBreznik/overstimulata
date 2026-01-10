@@ -260,14 +260,12 @@ function App() {
   return (
     <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
       <FeatherCursor />
-      {/* Mobile: Always show PageReader view - the old chapter list view is gone on mobile */}
-      {isMobile && (
-        <>
-          {(loading || !backgroundsReady || chapters.length === 0) ? (
-            <div className="page-reader-loading">
-              <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
-            </div>
-          ) : (
+      {/* PageReader: Rendered on both mobile and desktop (desktop shows PDF viewer) */}
+      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0) ? (
+        <div className="page-reader-loading">
+          <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
+        </div>
+      ) : (
           <PageReader
             chapters={chapters}
             onPageChange={handlePageChange}
@@ -294,35 +292,36 @@ function App() {
             onAddChapter={() => setShowNewChapterEditor(true)}
             onToggleEditorReader={togglePreviewMode}
           />
-          )}
-        </>
       )}
 
-      {/* Desktop: Scroll-based layout - mobile always uses PageReader now */}
-      {!isMobile && (
+      {/* Desktop: Old scroll-based layout - hidden (replaced by PageReader PDF viewer) */}
+      {false && !isMobile && (
         <>
           <header className="app-header">
         <div className="header-content">
-          <p ref={bookConceptRef} className="book-concept">
+          <div ref={bookConceptRef} className="book-concept">
+          <p>
           Welcome. You are now entering Dwellings in machinic passage[1] s, a short journey conceived 
-          by Ema Maznik and Maks Bricelj for the 5th Industrial Art Biennial. If you’re already near 
-          the Prvomajska building in Raša today , you’re free to roam, explore, and listen. But you can 
+          by Ema Maznik and Maks Bricelj for the 5th Industrial Art Biennial. If you're already near 
+          the Prvomajska building in Raša today , you're free to roam, explore, and listen. But you can 
           also experience these recordings independently, wherever you are; just remember that some of 
-          what you’ll hear refers to the specific architecture and atmosphere of Prvomajska.
-          <br /><br />
+          what you'll hear refers to the specific architecture and atmosphere of Prvomajska.
+          </p>
+          <p>
           <b>A few hints before you begin:</b>
+          </p>
           <ul>
             <li>Download the files in advance or make sure you have a stable connection —
             concrete walls might prevent you from downloading.</li>
             <li>Every chapter corresponds to a marked spot. When you reach a mark, open the file
             with the same name and press play.</li>
-            <li>Use headphones if you can; they keep the sound clear and let the factory’s
+            <li>Use headphones if you can; they keep the sound clear and let the factory's
             acoustics work with you.</li>
             <li>Be aware of where you step and your surroundings in general: the factory is a 
-              pretty safe environment, but it’s still a ruin. Be careful with uneven ground and 
+              pretty safe environment, but it's still a ruin. Be careful with uneven ground and 
               dripping water.</li>
           </ul>
-          </p>
+          </div>
         </div>
       </header>
 

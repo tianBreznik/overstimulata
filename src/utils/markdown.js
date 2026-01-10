@@ -3,7 +3,7 @@
 export function renderMarkdownWithParagraphs(text) {
   if (!text) return '';
   
-  const trimmed = text.trim();
+    const trimmed = text.trim();
   if (!trimmed) return '';
   
   // Check if content already starts with a block tag

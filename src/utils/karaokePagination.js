@@ -23,6 +23,7 @@ export const handleKaraokeElement = ({
   isDesktop,
   pageWidth,
   pageHeight,
+  contentWidth,
   pushPage,
   startNewPage
 }) => {
@@ -154,10 +155,11 @@ export const handleKaraokeElement = ({
     // This ensures karaoke uses its specific bottom margin
     let height;
     if (isDesktop && pageHeight) {
-      // Desktop: use fixed page height
-      const containerPaddingTop = 32;
-      const containerPaddingBottom = 8;
-      height = pageHeight - containerPaddingTop - containerPaddingBottom;
+      // Desktop: pageHeight is 636px, page-body has padding: 3rem 2.5rem (48px top/bottom)
+      // So body content height = 636px - 48px (top) - 48px (bottom) = 540px
+      const bodyPaddingTop = 48; // 3rem ≈ 48px
+      const bodyPaddingBottom = 48; // 3rem ≈ 48px
+      height = pageHeight - bodyPaddingTop - bodyPaddingBottom;
     } else {
       // Mobile: use actual rendered height (matching original behavior)
       height = measure.body.clientHeight;
@@ -174,6 +176,8 @@ export const handleKaraokeElement = ({
 
     const { firstCharCount } = splitTextAtWordBoundary(tempElement, availableHeight, measure, {
       returnCharCount: true,
+      contentWidth,
+      isDesktop
     });
 
     let charsToUse = firstCharCount || 0;

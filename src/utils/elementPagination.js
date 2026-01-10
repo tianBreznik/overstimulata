@@ -250,8 +250,12 @@ export const processSplitResult = ({
   
   // Measure how much space the first part would actually use
   const firstPartTestContainer = document.createElement('div');
-  firstPartTestContainer.style.width = measure.body.clientWidth + 'px';
-  measure.body.appendChild(firstPartTestContainer);
+  // Use contentWidth for desktop (accounts for padding), body.clientWidth for mobile
+  const measureWidth = (isDesktop && contentWidth) ? contentWidth : measure.body.clientWidth;
+  firstPartTestContainer.style.width = measureWidth + 'px';
+  // For desktop, append to pageContent to match structure; for mobile, body is fine
+  const measureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+  measureParent.appendChild(firstPartTestContainer);
   
   const firstPartTestElements = [...currentPageElements, first];
   const firstPartContentWrapper = document.createElement('div');
@@ -267,7 +271,7 @@ export const processSplitResult = ({
   applyParagraphStylesToContainer(firstPartContentWrapper, isDesktop);
   firstPartTestContainer.appendChild(firstPartContentWrapper);
   const firstPartHeight = firstPartTestContainer.offsetHeight;
-  measure.body.removeChild(firstPartTestContainer);
+  measureParent.removeChild(firstPartTestContainer);
   
   const firstPartRemainingSpace = baseAvailableHeight - firstPartHeight;
   
@@ -471,9 +475,15 @@ export const paginateElement = ({
       
       if (shouldSplit) {
         // Try to split it
-        let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary);
+        let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary, {
+          contentWidth,
+          isDesktop
+        });
         if (!splitResult.first && !splitResult.second) {
-          splitResult = splitTextAtWordBoundary(element, remainingContentHeight, measure);
+          splitResult = splitTextAtWordBoundary(element, remainingContentHeight, measure, {
+            contentWidth,
+            isDesktop
+          });
         }
         
         processSplitResult({
@@ -528,9 +538,15 @@ export const paginateElement = ({
       
       if (remainingContentHeight > 0) {
         // Try sentence-level splitting first, then word boundary
-        let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary);
+        let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary, {
+          contentWidth,
+          isDesktop
+        });
         if (!splitResult.first && !splitResult.second) {
-          splitResult = splitTextAtWordBoundary(element, remainingContentHeight, measure);
+          splitResult = splitTextAtWordBoundary(element, remainingContentHeight, measure, {
+            contentWidth,
+            isDesktop
+          });
         }
         
         const { first, second } = splitResult;
@@ -552,8 +568,9 @@ export const paginateElement = ({
           
           // Measure JUST the first part
           const tempFirstPartOnly = document.createElement('div');
-          tempFirstPartOnly.style.width = measure.body.clientWidth + 'px';
-          measure.body.appendChild(tempFirstPartOnly);
+          tempFirstPartOnly.style.width = contentWidth + 'px';
+          const measureParentFirst = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+          measureParentFirst.appendChild(tempFirstPartOnly);
           
           const tempFirst = document.createElement('div');
           tempFirst.innerHTML = first;
@@ -561,7 +578,7 @@ export const paginateElement = ({
           
           applyParagraphStylesToContainer(tempFirstPartOnly, isDesktop);
           const firstPartHeight = tempFirstPartOnly.offsetHeight;
-          measure.body.removeChild(tempFirstPartOnly);
+          measureParentFirst.removeChild(tempFirstPartOnly);
           
           const firstPartFits = firstPartHeight <= remainingContentHeight;
           

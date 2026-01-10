@@ -54,18 +54,28 @@ export const usePagePagination = ({
     // Determine if we're calculating for desktop PDF or mobile
     const isDesktop = typeof window !== 'undefined' && window.innerWidth > 768;
     
-    // Desktop PDF page dimensions: 800px width, 1000px min-height
+    // Desktop PDF page dimensions: 
+    // - Width: 450px (max-width for two-page spreads, matches CSS max-width: 450px)
+    // - Height: 636px (max-height for two-page spreads, matches CSS max-height: 636px)
+    //   Note: Single-page spreads use 848px height, but we use the smaller height (636px) 
+    //   for safety to ensure content fits in all pages. Padding (3rem top/bottom = 48px each)
+    //   is handled by createMeasureContainer which mirrors the actual page structure.
     // Mobile uses viewport dimensions
-    const pageWidth = isDesktop ? 800 : undefined; // undefined = use CSS min(680px, 96vw)
-    const pageHeight = isDesktop ? 1000 : viewportHeight;
+    const pageWidth = isDesktop ? 450 : undefined; // undefined = use CSS min(680px, 96vw)
+    const pageHeight = isDesktop ? 636 : viewportHeight; // Match CSS max-height: 636px
     
     // Create measurement container that exactly matches rendered page structure
     const measure = createMeasureContainer(isDesktop, pageWidth, pageHeight);
 
     // Desktop font size and line height (used in applyParagraphStylesToContainer)
-    const desktopFontSize = isDesktop ? '1.3rem' : '1.3rem';
-    const desktopLineHeight = isDesktop ? '1.35' : '1.35';
-    const contentWidth = isDesktop ? pageWidth : undefined;
+    // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
+    const desktopFontSize = isDesktop ? '1.18rem' : '1.3rem';
+    // Desktop PDF uses 1.62 line-height (matches PDFViewer.css), mobile uses 1.35
+    const desktopLineHeight = isDesktop ? '1.62' : '1.35';
+    // Desktop: content width = page width - left padding - right padding
+    // .page-body has padding: 3rem 2.5rem, so 2.5rem ≈ 40px per side
+    // Content width = 450px - 40px - 40px = 370px
+    const contentWidth = isDesktop ? (pageWidth - 40 - 40) : undefined;
 
     // Process chapters sequentially (now sorted: first page, cover, then regular)
     console.log('[PageOrder] Processing chapters:', sortedChapters.map(ch => ({
@@ -280,6 +290,7 @@ export const usePagePagination = ({
               isDesktop,
               pageWidth,
               pageHeight,
+              contentWidth,
               pushPage,
               startNewPage
             });

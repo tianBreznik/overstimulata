@@ -99,6 +99,15 @@
   z-index: 100;
 }
 
+/* Desktop only: Add more space around close button */
+@media (min-width: 769px) {
+  .close-top {
+    top: 12px;
+    right: 12px;
+    padding: 4px;
+  }
+}
+
 .editor-header h2 {
   margin: 0;
   color: #111;
@@ -1134,10 +1143,34 @@
   margin: 0;
   display: flex;
   align-items: flex-end; /* Align buttons to bottom of toolbar */
-  justify-content: space-between;
-  box-shadow: 0 1px 0 rgba(0,0,0,0.02); /* minimal handoff */
-  flex-shrink: 0; /* Don't allow toolbar to shrink */
-  min-height: 60px; /* Ensure minimum height for close button (16px top + 28px button + 16px bottom = 60px) */
+}
+
+/* Desktop only: Add more top padding to make room for close button */
+@media (min-width: 769px) {
+  .editor-toolbar {
+    padding-top: 50px; /* Make room for close button (28px button + 12px position + 10px buffer) */
+  }
+}
+
+/* Desktop only: Make toolbar horizontally scrollable */
+@media (min-width: 769px) {
+  .editor-toolbar {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; /* Hide scrollbar in Firefox */
+    -ms-overflow-style: none; /* Hide scrollbar in IE and Edge */
+    flex-wrap: nowrap;
+  }
+  
+  .editor-toolbar::-webkit-scrollbar {
+    display: none; /* Hide scrollbar in Chrome, Safari, Opera */
+  }
+  
+  .toolbar-buttons,
+  .toolbar-actions {
+    flex-shrink: 0;
+  }
 }
 
 .toolbar-buttons {

@@ -11,6 +11,9 @@ export const getDeviceId = () => {
     localStorage.setItem(DEVICE_ID_KEY, deviceId);
   }
   
+  // Log device ID to console for whitelist setup
+  console.log('Device ID:', deviceId);
+  
   return deviceId;
 };
 
@@ -37,7 +40,8 @@ const EDITOR_DEVICE_WHITELIST = [
   'mj025jwg-sdmgx7121dc',
   'mj8ier44-uoqhx79db2n',
   'mihhv6f0-5rzg6xc3zbq',
-  'mjj6uolq-7s4rcb7piji'
+  'mk753qdp-b3p5uladgdu',
+  'mk605c8n-bjks6xno7g'
 ];
 
 // Check if current device is authorized as editor

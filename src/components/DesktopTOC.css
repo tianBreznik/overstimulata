@@ -1,0 +1,223 @@
+/* Desktop TOC Page Styling */
+.desktop-toc-page {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  padding: 3rem 2.5rem;
+  box-sizing: border-box;
+}
+
+.desktop-toc-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Chapter Row */
+.desktop-toc-chapter-row {
+  margin-bottom: 0;
+}
+
+/* Chapter Item */
+.desktop-toc-chapter-item {
+  display: flex;
+  align-items: center;
+  padding: 0 0.25rem;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 2px;
+  transition: border-color 0.2s ease;
+  position: relative;
+  border-bottom: 1px solid transparent;
+  gap: 0.5rem;
+}
+
+.desktop-toc-chapter-item:hover {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-chapter-item:active {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-chapter-item.desktop-toc-current {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-chapter-item.desktop-toc-current::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #000;
+}
+
+/* Expand Icon */
+.desktop-toc-expand-icon {
+  display: inline-block;
+  width: 1rem;
+  margin-right: 0.5rem;
+  font-size: 0.75rem;
+  text-align: center;
+  font-weight: bold;
+  text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
+}
+
+/* Page Number */
+.desktop-toc-page-number {
+  font-variant-numeric: tabular-nums;
+  color: #000;
+  font-weight: bold;
+  margin-left: auto;
+  padding-left: 3rem;
+  text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
+  flex-shrink: 0;
+}
+
+.desktop-toc-chapter-item.desktop-toc-current .desktop-toc-page-number,
+.desktop-toc-subchapter-item.desktop-toc-current .desktop-toc-page-number {
+  color: #000;
+  font-weight: bold;
+}
+
+/* Chapter Title */
+.desktop-toc-chapter-title {
+  font-family: 'Times New Roman', serif;
+  font-size: 1.18rem;
+  line-height: 1.1;
+  font-weight: bold;
+  text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
+}
+
+/* Subchapters Container */
+.desktop-toc-subchapters {
+  margin-left: 2rem;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+/* Subchapter Item */
+.desktop-toc-subchapter-item {
+  display: flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  border-radius: 2px;
+  transition: border-color 0.2s ease;
+  position: relative;
+  margin-bottom: 0;
+  border-bottom: 1px solid transparent;
+  gap: 0.5rem;
+}
+
+.desktop-toc-subchapter-item:hover {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-subchapter-item:active {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-subchapter-item.desktop-toc-current {
+  border-bottom: 1px solid #000;
+}
+
+.desktop-toc-subchapter-item.desktop-toc-current::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background-color: #000;
+}
+
+/* Subchapter Title */
+.desktop-toc-subchapter-title {
+  font-family: 'Times New Roman', serif;
+  font-size: 1rem;
+  line-height: 1.1;
+  font-weight: bold;
+  text-shadow: 0 0.6px 1.2px rgba(0, 0, 0, 0.15), 0 0.4px 0.8px rgba(0, 0, 0, 0.12);
+}
+
+/* Editor Controls */
+.desktop-toc-editor-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+  flex-shrink: 0;
+}
+
+.desktop-toc-chapter-item:hover .desktop-toc-editor-controls,
+.desktop-toc-subchapter-item:hover .desktop-toc-editor-controls {
+  opacity: 1;
+}
+
+.desktop-toc-btn {
+  background: #ffffff;
+  border: 1px solid #000;
+  border-top-color: #fff;
+  border-left-color: #fff;
+  border-right-color: #666;
+  border-bottom-color: #666;
+  padding: 0.1rem 0.3rem;
+  cursor: pointer;
+  font-family: 'Times New Roman', serif;
+  font-size: 0.7rem;
+  transition: all 0.1s ease;
+  border-radius: 0;
+  line-height: 1;
+  min-width: auto;
+  height: auto;
+  box-shadow: 
+    inset -1px -1px 0 rgba(0, 0, 0, 0.3),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.8),
+    1px 1px 2px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.desktop-toc-btn:hover {
+  background: #f0f0f0;
+  box-shadow: 
+    inset -1px -1px 0 rgba(0, 0, 0, 0.4),
+    inset 1px 1px 0 rgba(255, 255, 255, 0.9),
+    1px 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.desktop-toc-btn:active {
+  background: #e0e0e0;
+  border-top-color: #666;
+  border-left-color: #666;
+  border-right-color: #fff;
+  border-bottom-color: #fff;
+  box-shadow: 
+    inset 1px 1px 2px rgba(0, 0, 0, 0.4),
+    inset -1px -1px 0 rgba(255, 255, 255, 0.5);
+  transform: translate(1px, 1px);
+}
+
+.desktop-toc-drag-handle {
+  cursor: grab;
+  user-select: none;
+  padding: 0.1rem 0.3rem;
+  font-size: 0.7rem;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+  line-height: 1;
+}
+
+.desktop-toc-drag-handle:hover {
+  opacity: 1;
+}
+
+.desktop-toc-drag-handle:active {
+  cursor: grabbing;
+}
+

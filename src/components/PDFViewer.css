@@ -1,0 +1,210 @@
+/* PDF Viewer - Desktop scrollable page container */
+.pdf-viewer {
+  width: 100vw;
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #f5f5f5;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+  transition: right 0.3s ease, width 0.3s ease;
+}
+
+/* Desktop only: Push PDF viewer left when editor is open */
+@media (min-width: 769px) {
+  .app.with-editor .pdf-viewer {
+    right: 620px; /* Editor panel width - push viewer left */
+    width: calc(100vw - 620px); /* Reduce width to make room for editor */
+  }
+}
+
+.pdf-viewer-container {
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 6.5rem 1rem 3rem; /* Increased top padding so first pages sit lower */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.pdf-pages-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2rem;
+}
+
+/* PDF Page Wrapper - Creates distinct page-like appearance */
+.pdf-page-wrapper {
+  position: relative;
+  display: flex !important;
+  justify-content: center;
+  flex: 0 0 auto;
+  padding: 0;
+  width: 100%;
+  margin-bottom: 2rem;
+}
+
+/* Override mobile styles for desktop PDF pages */
+.pdf-viewer .page-sheet {
+  width: 210mm !important; /* A4 width */
+  max-width: 450px !important; /* Original width for two-page layout */
+  height: 297mm !important; /* A4 height - fixed page height */
+  max-height: 636px !important; /* Proportional to max-width (450px * 1.414) */
+  min-height: 636px !important; /* Ensure minimum height */
+  position: relative !important;
+  transform: none !important;
+  -webkit-transform: none !important;
+  contain: none !important;
+  background: #ffffff !important; /* Default white background */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15), 0 0 1px rgba(0, 0, 0, 0.1) !important;
+  margin: 0 auto !important; /* Center the page */
+  display: flex !important;
+  flex-direction: column !important;
+  page-break-after: always;
+  border-radius: 2px;
+  overflow: hidden !important; /* Prevent content from overflowing fixed height */
+}
+
+/* When background image is set, make background transparent so image shows through */
+.pdf-viewer .page-sheet.has-background-image,
+.pdf-viewer .page-sheet.has-background-image.content-page,
+.pdf-viewer .page-sheet[style*="background-image"],
+.pdf-viewer .page-sheet[style*="background-image"].content-page {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.pdf-viewer .page-sheet.content-page {
+  width: 210mm !important;
+  max-width: 450px !important; /* Original width */
+  align-items: flex-start !important;
+  text-align: left !important;
+}
+
+.pdf-viewer .page-body {
+  width: 100% !important;
+  height: 100% !important; /* Fill the fixed page height */
+  min-height: 100% !important;
+  flex: 1 !important;
+  position: relative !important;
+  overflow: visible !important; /* Allow content to be visible, don't clip at bottom */
+  padding: 3rem 2.5rem !important;
+  touch-action: auto !important;
+  box-sizing: border-box !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: transparent !important; /* Allow parent background image to show through */
+}
+
+/* Field notes pages: restore overflow hidden to prevent background image overflow */
+.pdf-viewer .page-sheet.field-notes-page .page-body {
+  overflow: hidden !important;
+  padding: 0 !important; /* Field notes don't need padding */
+}
+
+.pdf-viewer .page-sheet.field-notes-page .page-content {
+  overflow: hidden !important;
+  height: 100% !important;
+  max-height: 100% !important;
+}
+
+/* Field notes page div: override mobile fixed positioning for desktop page constraints */
+.pdf-viewer .page-sheet.field-notes-page .field-notes-page {
+  position: absolute !important; /* Override mobile's position: fixed */
+  inset: 0 !important; /* Fill the page-sheet (450px x 636px) */
+  width: 100% !important; /* Fill page width */
+  height: 100% !important; /* Fill page height */
+  background-size: cover !important; /* Cover and fill the whole page */
+  background-position: center center !important; /* Center the image */
+  background-repeat: no-repeat !important;
+}
+
+.pdf-viewer .page-content {
+  width: 100% !important;
+  height: auto !important;
+  min-height: 0 !important; /* Allow flex to shrink if needed */
+  max-height: none !important; /* Override mobile max-height: 95% */
+  position: relative !important;
+  max-width: 100% !important;
+  overflow: visible !important; /* Allow content to be visible, don't clip */
+  flex: 1 1 auto !important; /* Grow to fit content */
+  background: transparent !important; /* Allow parent background image to show through */
+}
+
+/* Desktop: Position page number relative to page-sheet, not viewport */
+.pdf-viewer .page-sheet .page-number {
+  position: absolute !important; /* Override mobile's fixed positioning */
+  bottom: 1rem !important;
+  right: 1rem !important;
+  z-index: 10 !important; /* Lower z-index than mobile (99999) since it's within page context */
+}
+
+/* Desktop: Reduce font size slightly for better readability in PDF-style layout */
+.pdf-viewer .page-content {
+  font-size: 1.18rem !important; /* Reduced from 1.18rem (mobile) */
+}
+
+.pdf-viewer .page-content * {
+  font-size: inherit !important; /* Ensure all child elements inherit the reduced size */
+}
+
+/* Ensure karaoke text has the same shadow as mobile (not stronger) */
+.pdf-viewer .karaoke-slice,
+.pdf-viewer .karaoke-player,
+.pdf-viewer .karaoke-word {
+  text-shadow: inherit !important; /* Inherit from parent, don't add extra shadow */
+}
+
+/* TOC page styling */
+.pdf-viewer .page-sheet.toc-page {
+  background: transparent !important;
+  background-color: transparent !important;
+}
+
+.pdf-viewer .page-sheet.toc-page .page-body {
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 3rem 2.5rem !important;
+  line-height: 1.1 !important;
+  background: transparent !important;
+}
+
+/* Desktop Progress Bar - stops at editor's left edge when editor is open */
+@media (min-width: 769px) {
+  .chapter-progress-bar.desktop-progress-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 620px; /* Stop at editor's left edge (editor width) */
+    height: 5px; /* Thicker on desktop */
+    background-color: rgba(0, 0, 0, 0.1);
+    z-index: 100000;
+    pointer-events: none;
+    transition: right 0.3s ease; /* Smooth transition when editor opens/closes */
+  }
+  
+  /* When editor is open, progress bar stops at editor's left edge */
+  .app.with-editor .chapter-progress-bar.desktop-progress-bar {
+    right: 620px;
+  }
+  
+  /* When editor is closed, progress bar spans full width */
+  .app:not(.with-editor) .chapter-progress-bar.desktop-progress-bar {
+    right: 0;
+  }
+  
+  .chapter-progress-bar.desktop-progress-bar .chapter-progress-fill {
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.3);
+    transition: width 0.3s ease;
+    width: 0%;
+  }
+}
+
