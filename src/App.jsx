@@ -32,6 +32,7 @@ function App() {
   });
   const { position: readingPosition, savePosition } = useReadingPosition();
   const bookConceptRef = useRef(null);
+  const settingsButtonRef = useRef(null);
 
   // Add/remove body class when editor opens/closes to hide flower image
   useEffect(() => {
@@ -95,6 +96,38 @@ function App() {
 
   useEffect(() => {
     load();
+  }, []);
+
+  // Keyboard shortcut to toggle settings button visibility (Ctrl+Shift+E or Cmd+Shift+E)
+  // This allows potential editors to reveal the hidden settings button to log in
+  // Uses ref and DOM manipulation to avoid React re-renders
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      // Use Ctrl+Shift+E / Cmd+Shift+E to avoid browser conflicts
+      const isModifier = (e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey;
+      const isEKey = e.key === 'e' || e.key === 'E';
+      
+      if (isModifier && isEKey) {
+        // Only trigger if not typing in an input field or editor
+        const target = e.target;
+        const isInput = target.tagName === 'INPUT' || 
+                       target.tagName === 'TEXTAREA' || 
+                       (target.isContentEditable && target.closest('.editor-modal'));
+        
+        if (!isInput && settingsButtonRef.current) {
+          e.preventDefault();
+          e.stopPropagation();
+          // Toggle visibility using DOM manipulation instead of state
+          const button = settingsButtonRef.current;
+          const isHidden = button.style.display === 'none';
+          button.style.display = isHidden ? '' : 'none';
+        }
+      }
+    };
+    
+    // Attach to document in capture phase to catch before browser handlers
+    document.addEventListener('keydown', handleKeyDown, true);
+    return () => document.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
   const refresh = async () => {
@@ -389,9 +422,11 @@ function App() {
             </button>
           )}
           <button 
+            ref={settingsButtonRef}
             className="setup-link" 
             onClick={() => setShowSetup(true)}
             tabIndex={window.innerWidth <= 768 ? -1 : 0}
+            style={{ display: 'none' }}
           >
             ⚙ Nastavitve
           </button>

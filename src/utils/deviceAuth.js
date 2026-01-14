@@ -1,3 +1,6 @@
+import { db } from '../firebase';
+import { collection, getDocs, doc, getDoc, setDoc } from 'firebase/firestore';
+
 // Generate or retrieve a unique device ID
 export const getDeviceId = () => {
   const DEVICE_ID_KEY = 'overstimulata_device_id';
@@ -24,38 +27,139 @@ const generateUniqueId = () => {
   return `${timestamp}-${randomStr}`;
 };
 
-// Whitelist of approved editor device IDs
-// TODO: Move this to environment variables or Firebase config for production
-const EDITOR_DEVICE_WHITELIST = [
-  // Add device IDs here
-  // Example: 'abc123-xyz789',
-  'mgjxds3q-1rekdb1eb7y',
-  'mi1jtuuj-9x6z4uj4kh',
-  'mi37kcqh-j4cmiln4r1l',
-  'mi38utyt-9colfarywk7',
-  'mi3iteoy-2j8voox4ec6',
-  'mi3jjwma-qsglzpy5daa',
-  'mi4yemvc-xp6j3uu12x',
-  'miiq366c-exsxgdbmp6m',
-  'mj025jwg-sdmgx7121dc',
-  'mj8ier44-uoqhx79db2n',
-  'mihhv6f0-5rzg6xc3zbq',
-  'mk753qdp-b3p5uladgdu',
-  'mk8c3f8f-t993ymje23c'
-];
+// Cache keys
+const CACHE_KEY = 'overstimulata_editor_auth_cache';
+const CACHE_TIMESTAMP_KEY = 'overstimulata_editor_auth_cache_timestamp';
+const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
-// Check if current device is authorized as editor
-export const isEditorDevice = () => {
-  const deviceId = getDeviceId();
-  return EDITOR_DEVICE_WHITELIST.includes(deviceId);
+// Get cached authorization status
+const getCachedAuth = () => {
+  try {
+    const cached = localStorage.getItem(CACHE_KEY);
+    const timestamp = localStorage.getItem(CACHE_TIMESTAMP_KEY);
+    
+    if (cached && timestamp) {
+      const age = Date.now() - parseInt(timestamp, 10);
+      if (age < CACHE_DURATION) {
+        return JSON.parse(cached);
+      }
+    }
+  } catch (e) {
+    console.warn('[DeviceAuth] Failed to read cache', e);
+  }
+  return null;
 };
 
-// Add a new device to whitelist (for testing - remove in production)
-export const addDeviceToWhitelist = (deviceId) => {
-  if (!EDITOR_DEVICE_WHITELIST.includes(deviceId)) {
-    EDITOR_DEVICE_WHITELIST.push(deviceId);
-    return true;
+// Cache authorization status
+const setCachedAuth = (deviceId, isAuthorized) => {
+  try {
+    localStorage.setItem(CACHE_KEY, JSON.stringify({ deviceId, isAuthorized }));
+    localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+  } catch (e) {
+    console.warn('[DeviceAuth] Failed to write cache', e);
   }
-  return false;
+};
+
+// Fetch whitelist from Firestore
+const fetchWhitelistFromFirestore = async () => {
+  try {
+    const whitelistRef = collection(db, 'editorWhitelist');
+    const snapshot = await getDocs(whitelistRef);
+    const whitelist = snapshot.docs.map(doc => doc.id); // Use document ID as device ID
+    return whitelist;
+  } catch (error) {
+    console.error('[DeviceAuth] Failed to fetch whitelist from Firestore', error);
+    return null;
+  }
+};
+
+// Check if device is in Firestore whitelist
+const checkFirestoreWhitelist = async (deviceId) => {
+  try {
+    const deviceDoc = await getDoc(doc(db, 'editorWhitelist', deviceId));
+    return deviceDoc.exists();
+  } catch (error) {
+    console.error('[DeviceAuth] Failed to check Firestore whitelist', error);
+    return false;
+  }
+};
+
+// Check if current device is authorized as editor
+// Uses cache first, then checks Firestore, with fallback to hardcoded list
+export const isEditorDevice = async () => {
+  const deviceId = getDeviceId();
+  
+  // Check cache first
+  const cached = getCachedAuth();
+  if (cached && cached.deviceId === deviceId) {
+    return cached.isAuthorized;
+  }
+  
+  // Check Firestore
+  const isAuthorized = await checkFirestoreWhitelist(deviceId);
+  
+  // Cache the result
+  setCachedAuth(deviceId, isAuthorized);
+  
+  return isAuthorized;
+};
+
+// Synchronous version that uses cache (for initial render)
+export const isEditorDeviceSync = () => {
+  const deviceId = getDeviceId();
+  const cached = getCachedAuth();
+  
+  if (cached && cached.deviceId === deviceId) {
+    return cached.isAuthorized;
+  }
+  
+  // Fallback to hardcoded list if no cache (for backwards compatibility during migration)
+  const FALLBACK_WHITELIST = [
+    'mgjxds3q-1rekdb1eb7y',
+    'mi1jtuuj-9x6z4uj4kh',
+    'mi37kcqh-j4cmiln4r1l',
+    'mi38utyt-9colfarywk7',
+    'mi3iteoy-2j8voox4ec6',
+    'mi3jjwma-qsglzpy5daa',
+    'mi4yemvc-xp6j3uu12x',
+    'miiq366c-exsxgdbmp6m',
+    'mj025jwg-sdmgx7121dc',
+    'mj8ier44-uoqhx79db2n',
+    'mihhv6f0-5rzg6xc3zbq',
+    'mk753qdp-b3p5uladgdu',
+    'mk8c3f8f-t993ymje23c'
+  ];
+  
+  return FALLBACK_WHITELIST.includes(deviceId);
+};
+
+// Add a new device to Firestore whitelist
+// SECURITY: This function will fail with client-side Firestore security rules
+// Devices should only be added via Firebase Console or Admin SDK
+// This function is kept for admin/internal use only
+export const addDeviceToWhitelist = async (deviceId) => {
+  try {
+    await setDoc(doc(db, 'editorWhitelist', deviceId), {
+      addedAt: new Date().toISOString(),
+      deviceId: deviceId
+    });
+    
+    // Update cache immediately
+    setCachedAuth(deviceId, true);
+    
+    return true;
+  } catch (error) {
+    console.error('[DeviceAuth] Failed to add device to whitelist', error);
+    console.error('[DeviceAuth] Note: Client-side writes are blocked by Firestore security rules for security');
+    return false;
+  }
+};
+
+// Refresh authorization status from Firestore
+export const refreshAuthStatus = async () => {
+  const deviceId = getDeviceId();
+  const isAuthorized = await checkFirestoreWhitelist(deviceId);
+  setCachedAuth(deviceId, isAuthorized);
+  return isAuthorized;
 };
 

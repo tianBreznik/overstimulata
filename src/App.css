@@ -284,6 +284,7 @@ html.with-page-reader {
   flex-direction: row; /* place side by side */
   gap: 0.75rem;
   align-items: center;
+  z-index: 1000; /* Above PDF viewer (z-index: 1) */
 }
 
 .reader-preview .chapter-actions-container,

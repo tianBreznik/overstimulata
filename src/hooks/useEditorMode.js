@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getDeviceId, isEditorDevice } from '../utils/deviceAuth';
+import { getDeviceId, isEditorDevice, isEditorDeviceSync, refreshAuthStatus } from '../utils/deviceAuth';
+import { onAuthStateChange, getCurrentUser } from '../services/auth';
 
 const OVERRIDE_KEY = 'overstimulata_reader_preview';
 
@@ -8,19 +9,48 @@ const sharedState = {
   baseEditor: null,
   forceReaderPreview: false,
   subscribers: new Set(),
+  authChecked: false,
 };
 
+let authListenerInitialized = false;
+
 const ensureInitialised = () => {
-  if (sharedState.baseEditor !== null) return;
+  if (sharedState.deviceId !== null) return;
 
   const deviceId = getDeviceId();
-  const baseEditor = isEditorDevice();
+  // Use sync version for initial render (uses cache or fallback)
+  const baseEditor = isEditorDeviceSync();
   const stored = localStorage.getItem(OVERRIDE_KEY);
   const forceReaderPreview = baseEditor ? stored === 'reader' : false;
 
   sharedState.deviceId = deviceId;
   sharedState.baseEditor = baseEditor;
   sharedState.forceReaderPreview = forceReaderPreview;
+  
+  // Refresh from Firestore asynchronously (won't block initial render)
+  refreshAuthStatus().then((isAuthorized) => {
+    if (sharedState.baseEditor !== isAuthorized) {
+      sharedState.baseEditor = isAuthorized;
+      sharedState.authChecked = true;
+      notify();
+    }
+  });
+
+  // Set up auth state listener to refresh device whitelist on login (only once)
+  if (!authListenerInitialized) {
+    authListenerInitialized = true;
+    onAuthStateChange(async (user) => {
+      if (user) {
+        // When user logs in, refresh device whitelist status
+        await refreshAuthStatus();
+        const isAuthorized = await isEditorDevice();
+        if (sharedState.baseEditor !== isAuthorized) {
+          sharedState.baseEditor = isAuthorized;
+          notify();
+        }
+      }
+    });
+  }
 };
 
 const computePreviewing = () =>

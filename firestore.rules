@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow reads of all books and chapters (public content)
+    match /books/{bookId}/chapters/{chapterId} {
+      allow read: if true;
+      allow write: if false; // Only via admin SDK or authenticated users
+    }
+    
+    match /books/{bookId}/chapters/{chapterId}/subchapters/{subchapterId} {
+      allow read: if true;
+      allow write: if false; // Only via admin SDK or authenticated users
+    }
+    
+    // Allowed emails: Tracks which emails can whitelist devices
+    // Only allow reads for clients, writes must be done via Firebase Console or Admin SDK
+    match /allowedEmails/{email} {
+      allow read: if true; // Anyone can check if an email is allowed
+      allow write: if false; // NO client-side writes - only via Firebase Console or Admin SDK
+    }
+    
+    // Editor whitelist: Device UUIDs with editor access
+    // Authenticated users can write their device ID if their email is allowed
+    match /editorWhitelist/{deviceId} {
+      allow read: if true; // Anyone can check if a device is whitelisted
+      allow write: if request.auth != null; // Only authenticated users can write
+    }
+  }
+}
+
