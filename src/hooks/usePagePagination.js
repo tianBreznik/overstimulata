@@ -25,9 +25,7 @@ export const usePagePagination = ({
   setIsInitializing
 }) => {
   const calculatePages = useCallback(async () => {
-    console.log('[PagePagination] Starting page calculation', { chaptersCount: chapters?.length });
     if (!chapters || chapters.length === 0) {
-      console.warn('[PagePagination] No chapters provided');
       return;
     }
 
@@ -68,8 +66,8 @@ export const usePagePagination = ({
     const measure = createMeasureContainer(isDesktop, pageWidth, pageHeight);
 
     // Desktop font size and line height (used in applyParagraphStylesToContainer)
-    // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
-    const desktopFontSize = isDesktop ? '1.18rem' : '1.3rem';
+    // Desktop PDF uses 1.35rem (matches PDFViewer.css), mobile uses 1.3rem
+    const desktopFontSize = isDesktop ? '1.35rem' : '1.3rem';
     // Desktop PDF uses 1.62 line-height (matches PDFViewer.css), mobile uses 1.35
     const desktopLineHeight = isDesktop ? '1.62' : '1.35';
     // Desktop: content width = page width - left padding - right padding
@@ -78,28 +76,12 @@ export const usePagePagination = ({
     const contentWidth = isDesktop ? (pageWidth - 40 - 40) : undefined;
 
     // Process chapters sequentially (now sorted: first page, cover, then regular)
-    console.log('[PageOrder] Processing chapters:', sortedChapters.map(ch => ({
-      id: ch.id,
-      title: ch.title,
-      isFirstPage: ch.isFirstPage,
-      isCover: ch.isCover,
-      hasContent: !!(ch.contentHtml || ch.content)
-    })));
     
     for (let chapterIdx = 0; chapterIdx < sortedChapters.length; chapterIdx++) {
       const chapter = sortedChapters[chapterIdx];
       
       // Determine chapterIndex: use order field, or special indices for first page/cover
       const chapterIndex = determineChapterIndex(chapter, chapterIdx);
-      
-      console.log('[PageOrder] Processing chapter:', {
-        chapterId: chapter.id,
-        title: chapter.title,
-        isFirstPage: chapter.isFirstPage,
-        isCover: chapter.isCover,
-        chapterIndex: chapterIndex,
-        hasContent: !!(chapter.contentHtml || chapter.content)
-      });
       
       // Build content array: chapter content + all subchapter content
       const contentBlocks = buildChapterContentBlocks(chapter);
@@ -114,22 +96,8 @@ export const usePagePagination = ({
       if (contentBlocks.length === 0) {
         if (chapter.isFirstPage || chapter.isCover) {
           // Create an empty page for special pages
-          console.log('[PageOrder] Creating empty page for special chapter:', {
-            chapterId: chapter.id,
-            title: chapter.title,
-            isFirstPage: chapter.isFirstPage,
-            isCover: chapter.isCover,
-            chapterIndex: chapterIndex
-          });
           const emptyPage = createEmptyPage(chapter, chapterIndex, 0, chapterHasFieldNotes);
           newPages.push(emptyPage);
-        } else {
-          console.log('[PageOrder] Skipping chapter with no content:', {
-            chapterId: chapter.id,
-            title: chapter.title,
-            isFirstPage: chapter.isFirstPage,
-            isCover: chapter.isCover
-          });
         }
         continue;
       }
@@ -143,9 +111,10 @@ export const usePagePagination = ({
       let currentPageFootnotes = new Set(); // Track footnote numbers on current page
 
       const startNewPage = (initialHeading = false) => {
-        currentPageElements = [];
+        // Clear array in place instead of reassigning to preserve reference
+        currentPageElements.length = 0;
         pageHasHeading = initialHeading;
-        currentPageFootnotes = new Set();
+        currentPageFootnotes.clear();
         measure.pageContent.innerHTML = '';
         measure.setHeading(initialHeading);
       };
@@ -213,16 +182,6 @@ export const usePagePagination = ({
           const videoPage = createVideoPage(video, chapter, chapterIndex, chapterPageIndex, block);
           newPages.push(videoPage);
           chapterPageIndex += 1;
-        });
-        
-        console.log('[PageOrder] Processing block content:', {
-          blockType: block.type,
-          chapterId: block.chapterId,
-          subchapterId: block.subchapterId,
-          elementsCount: elements.length,
-          elementTags: elements.map(el => el.tagName),
-          isCover: chapter.isCover,
-          isFirstPage: chapter.isFirstPage
         });
 
         // Main pagination loop: process each element
@@ -323,7 +282,7 @@ export const usePagePagination = ({
               // handleFieldNotesElement already called startNewPage, which cleared currentPageElements
               // CRITICAL: Ensure it stays empty to prevent empty page at end
               // Also ensure pageHasHeading is reset since field notes pages don't have headings
-              currentPageElements = [];
+              currentPageElements.length = 0;
               currentPageFootnotes.clear();
               pageHasHeading = false; // Reset heading state
               lastElementWasFieldNotes = true; // Mark that last element was field notes
@@ -371,7 +330,7 @@ export const usePagePagination = ({
         // CRITICAL: If chapter has field notes and last element was field notes, NEVER push a final page
         if (lastElementWasFieldNotes) {
           // Field notes element already created its page, ensure no leftover content
-          currentPageElements = [];
+          currentPageElements.length = 0;
           currentPageFootnotes.clear();
           // Don't push - field notes already created its own page
         } else if (chapterHasFieldNotes) {

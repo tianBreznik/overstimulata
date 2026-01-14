@@ -61,29 +61,41 @@ export const checkElementFits = ({
   contentWidth,
   isDesktop,
   measure,
-  applyParagraphStylesToContainer
+  applyParagraphStylesToContainer,
+  finalReservedSpace = 0
 }) => {
   const testElements = [...currentPageElements, element.outerHTML];
   const tempTotalContainer = document.createElement('div');
   tempTotalContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
-  measure.body.appendChild(tempTotalContainer);
+  // For desktop, append to pageContent to match actual DOM structure; for mobile, body is fine
+  const measureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+  measureParent.appendChild(tempTotalContainer);
+  
+  // Wrap in page-content-main with padding-bottom to match actual rendering
+  const contentWrapper = document.createElement('div');
+  contentWrapper.className = 'page-content-main';
+  if (finalReservedSpace > 0) {
+    contentWrapper.style.paddingBottom = finalReservedSpace + 'px';
+  }
   
   testElements.forEach(el => {
     const temp = document.createElement('div');
     temp.innerHTML = el;
-    tempTotalContainer.appendChild(temp.firstElementChild || temp);
+    contentWrapper.appendChild(temp.firstElementChild || temp);
   });
   
   // Apply base paragraph styles to match actual rendering
-  applyParagraphStylesToContainer(tempTotalContainer, isDesktop);
+  applyParagraphStylesToContainer(contentWrapper, isDesktop);
+  tempTotalContainer.appendChild(contentWrapper);
   
   const totalContentHeight = tempTotalContainer.offsetHeight;
-  measure.body.removeChild(tempTotalContainer);
+  measureParent.removeChild(tempTotalContainer);
   
-  // Element fits if total content height fits in contentAvailableHeight
+  // Element fits if total content height (with padding) fits in contentAvailableHeight + padding
   // Add safety margin to prevent overflow due to rounding/measurement differences
   const safetyMargin = isStandaloneFirstPage ? -100 : (pageHasHeading ? 8 : 2);
-  const elementFits = isStandaloneFirstPage ? true : (totalContentHeight <= contentAvailableHeight - safetyMargin);
+  const totalAvailableHeight = contentAvailableHeight + (finalReservedSpace || 0);
+  const elementFits = isStandaloneFirstPage ? true : (totalContentHeight <= totalAvailableHeight - safetyMargin);
   
   return { elementFits, totalContentHeight };
 };
@@ -101,7 +113,9 @@ export const calculateRemainingHeight = ({
 }) => {
   const tempCurrentPageContainer = document.createElement('div');
   tempCurrentPageContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
-  measure.body.appendChild(tempCurrentPageContainer);
+  // For desktop, append to pageContent to match actual DOM structure; for mobile, body is fine
+  const measureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+  measureParent.appendChild(tempCurrentPageContainer);
   
   currentPageElements.forEach(el => {
     const temp = document.createElement('div');
@@ -113,7 +127,7 @@ export const calculateRemainingHeight = ({
   applyParagraphStylesToContainer(tempCurrentPageContainer, isDesktop);
   
   const currentPageContentHeight = tempCurrentPageContainer.offsetHeight;
-  measure.body.removeChild(tempCurrentPageContainer);
+  measureParent.removeChild(tempCurrentPageContainer);
   
   const remainingContentHeight = Math.max(0, contentAvailableHeight - currentPageContentHeight);
   
@@ -183,8 +197,9 @@ export const shouldSplitElement = ({
                                             remainingContentHeight > 0 &&
                                             elementTextLength > 200;
     
+    // overflowAmount is already calculated correctly (finalTotalHeight - totalAvailableHeight)
+    // So we only need to check overflowAmount, not compare finalTotalHeight to baseAvailableHeight
     return (overflowAmount >= 10 || shouldTrySplitDueToSmallSpace) && 
-           finalTotalHeight > baseAvailableHeight && 
            !allowSmallOverflow && 
            !shouldSkipSplitDueToSmallSpace;
   } else {
@@ -304,9 +319,22 @@ export const processSplitResult = ({
   pushPage(block);
   startNewPage(false);
   if (second) {
+    if (isDesktop) {
+      const tempDiv = document.createElement('div');
+    }
     const secondFootnotes = extractFootnotesFromContent(second, footnoteContentToNumber);
     secondFootnotes.forEach(num => currentPageFootnotes.add(num));
     currentPageElements.push(second);
+  } else {
+    if (isDesktop) {
+      const elementText = element.textContent || '';
+      console.warn('[processSplitResult] Desktop - Second part is null/falsy for element:', {
+        tag: element.tagName,
+        textLength: elementText.length
+      });
+      console.warn('[processSplitResult] Desktop - Original element TEXT:', JSON.stringify(elementText));
+      console.warn('[processSplitResult] Desktop - Original element HTML:', JSON.stringify(element.outerHTML));
+    }
   }
 };
 
@@ -379,6 +407,18 @@ export const paginateElement = ({
   });
   
   // STEP 2: Check if element fits
+  // Calculate finalReservedSpace (padding-bottom) to pass to checkElementFits
+  // Desktop: padding-bottom is NOT added to content (body already has padding)
+  // Mobile: padding-bottom IS added to content wrapper
+  // For desktop, don't add padding-bottom in measurement (body padding already accounted for)
+  // For mobile, add padding-bottom to match actual rendering
+  const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPage 
+    ? 20 
+    : (isDesktop ? 24 : 32); // Desktop: 24px (reduced to allow visual overflow), Mobile: 32px
+  const finalReservedSpace = isDesktop 
+    ? 0  // Desktop: body padding already accounted for in contentAvailableHeight
+    : (testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES);
+  
   const { elementFits, totalContentHeight } = checkElementFits({
     element,
     currentPageElements,
@@ -388,11 +428,12 @@ export const paginateElement = ({
     contentWidth,
     isDesktop,
     measure,
-    applyParagraphStylesToContainer
+    applyParagraphStylesToContainer,
+    finalReservedSpace
   });
   
   // STEP 3: Calculate remaining height
-  const { remainingContentHeight } = calculateRemainingHeight({
+  const { remainingContentHeight, currentPageContentHeight } = calculateRemainingHeight({
     currentPageElements,
     contentAvailableHeight,
     contentWidth,
@@ -400,6 +441,21 @@ export const paginateElement = ({
     measure,
     applyParagraphStylesToContainer
   });
+  
+  // Log space status before processing element
+  if (isDesktop) {
+    const elementText = element.textContent || '';
+    const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
+    console.log('[Space] Before processing element:', {
+      elementText: textPreview,
+      availableHeight: Math.round(baseAvailableHeight),
+      usedHeight: Math.round(currentPageContentHeight),
+      remainingSpace: Math.round(remainingContentHeight),
+      elementFits,
+      totalContentHeight: Math.round(totalContentHeight),
+      elementsCount: currentPageElements.length
+    });
+  }
   
   // STEP 4: Handle element based on whether it fits and if it can be split
   if (isAtomicElement(element)) {
@@ -423,14 +479,17 @@ export const paginateElement = ({
       const finalTestElements = [...currentPageElements, element.outerHTML];
       const finalTestContainer = document.createElement('div');
       finalTestContainer.style.width = isDesktop ? contentWidth + 'px' : measure.body.clientWidth + 'px';
-      measure.body.appendChild(finalTestContainer);
+      // For desktop, append to pageContent to match actual DOM structure; for mobile, body is fine
+      const finalMeasureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+      finalMeasureParent.appendChild(finalTestContainer);
       
       // Simulate the actual rendering with padding-bottom
       const isStandaloneFirstPageCheck = chapter.isFirstPage && chapterPageIndex === 0;
-      // NOTE: This uses 32px to match getAvailableHeight() calculation behavior.
-      // The actual page padding uses 48px (see calculatePagePadding in pageCreation.js).
-      // See CRITICAL comment in paginationHelpers.js for details about this mismatch.
-      const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPageCheck ? 20 : 32;
+      // Match getAvailableHeight() calculation: desktop uses 24px for non-first pages (reduced to allow visual overflow), 20px for first page
+      // Mobile uses 32px for non-first pages, 20px for first page
+      const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPageCheck 
+        ? 20 
+        : (isDesktop ? 24 : 32); // Desktop: 24px (reduced to allow visual overflow), Mobile: 32px
       const finalReservedSpace = testFootnotes.size > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
       const finalContentWrapper = document.createElement('div');
       finalContentWrapper.className = 'page-content-main';
@@ -445,19 +504,38 @@ export const paginateElement = ({
       applyParagraphStylesToContainer(finalContentWrapper, isDesktop);
       finalTestContainer.appendChild(finalContentWrapper);
       const finalTotalHeight = finalTestContainer.offsetHeight;
-      measure.body.removeChild(finalTestContainer);
+      finalMeasureParent.removeChild(finalTestContainer);
       
       // Calculate overflow amount
+      // finalTotalHeight includes content + padding (finalReservedSpace)
+      // baseAvailableHeight is the available height for content (excluding reserved space)
+      // On desktop: baseAvailableHeight = 508px, finalReservedSpace = 32px, so total = 540px (body height)
+      // On mobile: baseAvailableHeight already accounts for reserved space
+      // So we compare finalTotalHeight to baseAvailableHeight + finalReservedSpace
       let overflowAmount;
+      let totalAvailableHeight;
       if (isStandaloneFirstPage) {
         overflowAmount = 0;
-      } else if (isDesktop && pageHeight) {
-        const containerPaddingTop = 32;
-        const containerPaddingBottom = 8;
-        const fullPageHeight = pageHeight - containerPaddingTop - containerPaddingBottom;
-        overflowAmount = finalTotalHeight - fullPageHeight;
+        totalAvailableHeight = baseAvailableHeight + finalReservedSpace;
       } else {
-        overflowAmount = finalTotalHeight - baseAvailableHeight;
+        // Compare against the total available height (content area + reserved space)
+        // This matches the actual body height on desktop (540px)
+        totalAvailableHeight = baseAvailableHeight + finalReservedSpace;
+        overflowAmount = finalTotalHeight - totalAvailableHeight;
+      }
+      
+      // Log final check before deciding to split
+      if (isDesktop) {
+        const elementText = element.textContent || '';
+        const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
+        console.log('[Space] Final check (with padding):', {
+          elementText: textPreview,
+          finalTotalHeight: Math.round(finalTotalHeight),
+          totalAvailableHeight: Math.round(totalAvailableHeight),
+          overflowAmount: Math.round(overflowAmount),
+          baseAvailableHeight: Math.round(baseAvailableHeight),
+          finalReservedSpace: Math.round(finalReservedSpace)
+        });
       }
       
       // Check if we should split
@@ -474,7 +552,8 @@ export const paginateElement = ({
       });
       
       if (shouldSplit) {
-        // Try to split it
+        // Use remainingContentHeight to split - this accounts for existing page content
+        // The split functions measure just the element, so we need to pass the remaining space
         let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary, {
           contentWidth,
           isDesktop
@@ -510,33 +589,33 @@ export const paginateElement = ({
         // Content fits - add to current page
         elementFootnotes.forEach(num => currentPageFootnotes.add(num));
         currentPageElements.push(element.outerHTML);
+        
+        // Log space usage after adding element
+        if (isDesktop) {
+          const { currentPageContentHeight: usedHeight } = calculateRemainingHeight({
+            currentPageElements,
+            contentAvailableHeight: baseAvailableHeight,
+            contentWidth,
+            isDesktop,
+            measure,
+            applyParagraphStylesToContainer
+          });
+          const remainingSpace = baseAvailableHeight - usedHeight;
+          const elementText = element.textContent || '';
+          const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
+          console.log('[Space] After adding element:', {
+            elementText: textPreview,
+            usedHeight: Math.round(usedHeight),
+            availableHeight: Math.round(baseAvailableHeight),
+            remainingSpace: Math.round(remainingSpace),
+            elementsCount: currentPageElements.length
+          });
+        }
       }
     } else {
-      // Element doesn't fit - check if we should even attempt to split
-      const shouldSplit = shouldSplitElement({
-        element,
-        elementFits: false,
-        remainingContentHeight,
-        finalTotalHeight: 0,
-        baseAvailableHeight,
-        overflowAmount: 0,
-        isStandaloneFirstPage,
-        elementIndex,
-        elementsLength
-      });
-      
-      if (!shouldSplit) {
-        // Skip splitting - push whole element to next page
-        if (currentPageElements.length > 0) {
-          pushPage(block);
-        }
-        startNewPage(false);
-        elementFootnotes.forEach(num => currentPageFootnotes.add(num));
-        currentPageElements.push(element.outerHTML);
-        return { pageHasHeading };
-      }
-      
+      // Element doesn't fit - try to split it first
       if (remainingContentHeight > 0) {
+        // Use remainingContentHeight to split - this accounts for existing page content
         // Try sentence-level splitting first, then word boundary
         let splitResult = splitTextAtSentenceBoundary(element, remainingContentHeight, measure, splitTextAtWordBoundary, {
           contentWidth,
@@ -551,6 +630,7 @@ export const paginateElement = ({
         
         const { first, second } = splitResult;
         
+        // If split succeeded, process it
         if (first) {
           // Verify first part actually fits with updated footnotes
           const firstFootnotes = extractFootnotesFromContent(first, footnoteContentToNumber);
@@ -587,6 +667,30 @@ export const paginateElement = ({
             firstFootnotes.forEach(num => currentPageFootnotes.add(num));
             currentPageElements.push(first);
             
+            // Log space usage before finalizing page
+            if (isDesktop) {
+              const { currentPageContentHeight: usedHeight } = calculateRemainingHeight({
+                currentPageElements,
+                contentAvailableHeight: baseAvailableHeight,
+                contentWidth,
+                isDesktop,
+                measure,
+                applyParagraphStylesToContainer
+              });
+              const remainingSpace = baseAvailableHeight - usedHeight;
+              const tempFirst = document.createElement('div');
+              tempFirst.innerHTML = first || '';
+              const firstText = tempFirst.textContent || '';
+              const firstPreview = firstText.substring(0, 100) + (firstText.length > 100 ? '...' : '');
+              console.log('[Space] Before finalizing page (split):', {
+                firstPartText: firstPreview,
+                usedHeight: Math.round(usedHeight),
+                availableHeight: Math.round(baseAvailableHeight),
+                remainingSpace: Math.round(remainingSpace),
+                elementsCount: currentPageElements.length
+              });
+            }
+            
             // Finalize current page
             if (currentPageElements.length > 0) {
               pushPage(block);
@@ -599,6 +703,30 @@ export const paginateElement = ({
               const secondFootnotes = extractFootnotesFromContent(second, footnoteContentToNumber);
               secondFootnotes.forEach(num => currentPageFootnotes.add(num));
               currentPageElements.push(second);
+              
+              // Log space usage after adding second part to new page
+              if (isDesktop) {
+                const { currentPageContentHeight: usedHeight } = calculateRemainingHeight({
+                  currentPageElements,
+                  contentAvailableHeight: baseAvailableHeight,
+                  contentWidth,
+                  isDesktop,
+                  measure,
+                  applyParagraphStylesToContainer
+                });
+                const remainingSpace = baseAvailableHeight - usedHeight;
+                const tempSecond = document.createElement('div');
+                tempSecond.innerHTML = second || '';
+                const secondText = tempSecond.textContent || '';
+                const secondPreview = secondText.substring(0, 100) + (secondText.length > 100 ? '...' : '');
+                console.log('[Space] After adding second part to new page:', {
+                  secondPartText: secondPreview,
+                  usedHeight: Math.round(usedHeight),
+                  availableHeight: Math.round(baseAvailableHeight),
+                  remainingSpace: Math.round(remainingSpace),
+                  elementsCount: currentPageElements.length
+                });
+              }
             }
           } else {
             // First part doesn't actually fit - start new page with entire element

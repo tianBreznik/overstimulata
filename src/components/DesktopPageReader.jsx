@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { PDFViewer } from './PDFViewer';
+import { PDFTopBar } from './PDFTopBar';
 import { ReaderTopBar } from './ReaderTopBar';
 import { DesktopTOC } from './DesktopTOC';
 import { useKaraokePlayer } from '../hooks/useKaraokePlayer';
@@ -34,6 +35,9 @@ export const DesktopPageReader = ({
   
   const initializedPagesRef = useRef(new Set());
   const [mostVisiblePage, setMostVisiblePage] = useState(null);
+  const [mostVisiblePageIndex, setMostVisiblePageIndex] = useState(null);
+  // Track ALL pages (including first/cover/TOC) for PDFTopBar navigation
+  const [topBarPageIndex, setTopBarPageIndex] = useState(0);
   
   // Create pagesWithTOC array early (before hooks that depend on it)
   const pagesWithTOC = useMemo(() => {
@@ -85,6 +89,11 @@ export const DesktopPageReader = ({
       let minDistance = Infinity;
       let mostCenteredPage = null;
       
+      let mostCenteredIndex = null;
+      // Track ALL pages for top bar (including first/cover/TOC)
+      let mostCenteredIndexForTopBar = null;
+      let minDistanceForTopBar = Infinity;
+      
       pagesWithTOC.forEach((page, index) => {
         const pageElement = document.getElementById(`pdf-page-${index}`);
         if (!pageElement) return;
@@ -105,19 +114,35 @@ export const DesktopPageReader = ({
           const visibleHeight = Math.max(0, visibleBottom - visibleTop);
           const visibilityRatio = visibleHeight / Math.min(rect.height, window.innerHeight);
           
-          // Only consider pages that are at least 30% visible and prefer those closer to center
-          if (visibilityRatio >= 0.3 && distanceFromCenter < minDistance) {
-            minDistance = distanceFromCenter;
-            mostCenteredPage = page;
+          // Track ALL pages for top bar (including first/cover/TOC)
+          if (visibilityRatio >= 0.3 && distanceFromCenter < minDistanceForTopBar) {
+            minDistanceForTopBar = distanceFromCenter;
+            mostCenteredIndexForTopBar = index;
+          }
+          
+          // Only consider regular pages (not first, cover, or TOC) for progress bar
+          if (!page.isFirstPage && !page.isCover && !page.isTOC) {
+            if (visibilityRatio >= 0.3 && distanceFromCenter < minDistance) {
+              minDistance = distanceFromCenter;
+              mostCenteredPage = page;
+              mostCenteredIndex = index;
+            }
           }
         }
       });
       
-      // Only update if it's a regular page (not first, cover, or TOC)
+      // Update top bar page index (ALL pages)
+      if (mostCenteredIndexForTopBar !== null) {
+        setTopBarPageIndex(mostCenteredIndexForTopBar);
+      }
+      
+      // Only update progress bar tracking if it's a regular page (not first, cover, or TOC)
       if (mostCenteredPage && !mostCenteredPage.isFirstPage && !mostCenteredPage.isCover && !mostCenteredPage.isTOC) {
         setMostVisiblePage(mostCenteredPage);
+        setMostVisiblePageIndex(mostCenteredIndex);
       } else {
         setMostVisiblePage(null);
+        setMostVisiblePageIndex(null);
       }
     };
     
@@ -140,6 +165,11 @@ export const DesktopPageReader = ({
       };
     }
   }, [pagesWithTOC]);
+  
+  // Calculate current page number (1-based) from topBarPageIndex (tracks ALL pages)
+  const currentPageNumber = useMemo(() => {
+    return topBarPageIndex + 1; // Convert 0-based index to 1-based page number
+  }, [topBarPageIndex]);
   
   // Calculate chapter progress based on most visible page
   const chapterProgress = useMemo(() => {
@@ -164,6 +194,54 @@ export const DesktopPageReader = ({
       ? (currentPageInChapter + 1) / totalPagesInChapter 
       : 0;
   }, [mostVisiblePage, pagesWithTOC]);
+  
+  // Handler to scroll to a specific page number
+  const handlePageChange = (pageNum) => {
+    const pageIndex = pageNum - 1;
+    if (pageIndex >= 0 && pageIndex < pagesWithTOC.length) {
+      const pageElement = document.getElementById(`pdf-page-${pageIndex}`);
+      if (pageElement) {
+        pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+  
+  // Handler for previous page
+  const handlePreviousPage = () => {
+    if (topBarPageIndex > 0) {
+      const prevPageIndex = topBarPageIndex - 1;
+      const pageElement = document.getElementById(`pdf-page-${prevPageIndex}`);
+      if (pageElement) {
+        pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+  
+  // Handler for next page
+  const handleNextPage = () => {
+    if (topBarPageIndex < pagesWithTOC.length - 1) {
+      const nextPageIndex = topBarPageIndex + 1;
+      const pageElement = document.getElementById(`pdf-page-${nextPageIndex}`);
+      if (pageElement) {
+        pageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+  };
+  
+  // Handler for zoom in (placeholder for now)
+  const handleZoomIn = () => {
+    console.log('Zoom in');
+  };
+  
+  // Handler for zoom out (placeholder for now)
+  const handleZoomOut = () => {
+    console.log('Zoom out');
+  };
+  
+  // Handler for download (placeholder for now)
+  const handleDownload = () => {
+    console.log('Download PDF');
+  };
   
   // Initialize karaoke for all pages after render
   // This hook must be called even when pages.length === 0 to maintain hook order
@@ -298,6 +376,16 @@ export const DesktopPageReader = ({
 
     // Add class when background image is present for CSS targeting
     const hasBackgroundImage = !!page?.backgroundImageUrl || page?.isTOC;
+    
+    // Extract field notes image URL from content if it's a field notes page
+    let fieldNotesImageUrl = null;
+    if (page?.hasFieldNotes && page?.content) {
+      // Field notes content is: <div class="field-notes-page" ... style="background-image: url('...');"></div>
+      const match = page.content.match(/background-image:\s*url\(['"]?([^'"]+)['"]?\)/);
+      if (match && match[1]) {
+        fieldNotesImageUrl = match[1];
+      }
+    }
 
     return (
       <article 
@@ -307,18 +395,20 @@ export const DesktopPageReader = ({
         data-page-index={page.pageIndex}
       >
         {/* Background image as absolutely positioned element behind content */}
-        {hasBackgroundImage && (
+        {(hasBackgroundImage || fieldNotesImageUrl) && (
           <img
-            src={page.isTOC ? paperTexture : page.backgroundImageUrl}
+            src={fieldNotesImageUrl || (page.isTOC ? paperTexture : page.backgroundImageUrl)}
             alt=""
             className="pdf-page-background-image"
+            loading="eager"
+            decoding="async"
             style={{
               position: 'absolute',
               inset: 0,
               width: '100%',
               height: '100%',
               objectFit: 'cover',
-              objectPosition: page.isTOC ? 'center center' : 'left center',
+              objectPosition: fieldNotesImageUrl ? 'center center' : (page.isTOC ? 'center center' : 'left center'),
               zIndex: 0,
               pointerEvents: 'none',
             }}
@@ -390,8 +480,24 @@ export const DesktopPageReader = ({
           ) : page?.hasFieldNotes ? (
             <div 
               className="page-content field-notes-content"
-              dangerouslySetInnerHTML={{ __html: page?.content || '' }} 
-            />
+              style={{ position: 'relative' }}
+            >
+              {/* Field notes content without the background-image div (background is now rendered as img above) */}
+              {/* Remove the field-notes-page div with background-image from content */}
+              {(() => {
+                if (!page?.content) return null;
+                const temp = document.createElement('div');
+                temp.innerHTML = page.content;
+                // Remove the field-notes-page div that has the background-image
+                const fieldNotesDiv = temp.querySelector('.field-notes-page[style*="background-image"]');
+                if (fieldNotesDiv) {
+                  // Keep any content inside but remove the div itself
+                  const innerContent = fieldNotesDiv.innerHTML;
+                  return <div dangerouslySetInnerHTML={{ __html: innerContent || '' }} />;
+                }
+                return <div dangerouslySetInnerHTML={{ __html: page.content }} />;
+              })()}
+            </div>
           ) : (
             <div 
               className="page-content"
@@ -420,6 +526,17 @@ export const DesktopPageReader = ({
   
   return (
     <>
+      <PDFTopBar
+        currentPage={currentPageNumber}
+        totalPages={pagesWithTOC.length}
+        onPageChange={handlePageChange}
+        onPreviousPage={handlePreviousPage}
+        onNextPage={handleNextPage}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
+        onDownload={handleDownload}
+        filename="weird-attachments.pdf"
+      />
       <PDFViewer
         currentPage={1}
         totalPages={pagesWithTOC.length}

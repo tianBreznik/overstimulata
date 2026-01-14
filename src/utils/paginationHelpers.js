@@ -247,8 +247,9 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
   if (isDesktop) {
     // Desktop: In actual rendering, height: auto and flex: 1 1 auto allows growth
     // But for measurement, we need max-height constraint to match available space
-    // Calculate available height: body height (540px) - bottom margin (48px) = 492px
-    const availableHeight = pageHeight - 48 - 48 - 48; // pageHeight - top padding - bottom padding - bottom margin
+        // Calculate available height: body height (540px) - bottom margin (24px) = 516px
+        // Algorithm splits at 516px, but visual overflow is allowed via CSS
+        const availableHeight = pageHeight - 48 - 48 - 24; // pageHeight - top padding - bottom padding - bottom margin (24px on desktop)
     pageContent.style.height = 'auto';
     pageContent.style.flex = '1 1 auto';
     pageContent.style.minHeight = '0';
@@ -281,10 +282,11 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
       // IMPORTANT: Reserve bottom margin even when there are no footnotes (like a real book)
       // Allow the first page a slightly smaller bottom margin so text can sit lower
       // 
-      // For desktop: .page-body has padding: 3rem 2.5rem (48px bottom), so reserve 48px
+      // For desktop: use 24px bottom margin (reduced from 32px) for calculation
+      // Algorithm splits at (540px - 24px = 516px), but visual overflow is allowed via CSS
       // For mobile: calculatePagePadding() adds padding-bottom, so reserve 32px (more conservative)
       const BOTTOM_MARGIN_NO_FOOTNOTES = isDesktop 
-        ? (isFirstPage ? 20 : 48) // Desktop: match body padding (48px) or 20px for first page
+        ? (isFirstPage ? 20 : 24) // Desktop: 24px (for calculation, visual overflow allowed) or 20px for first page
         : (isFirstPage ? 20 : 32); // Mobile: 32px (calculatePagePadding adds padding-bottom)
       
       // For desktop PDF viewer, use fixed page height minus page-body padding
@@ -304,8 +306,8 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
         height = body.clientHeight;
       }
       
-      // When footnotes exist, they replace the bottom margin (footnotes are larger)
-      // When no footnotes, use the bottom margin for consistent spacing
+      // Reserve bottom margin for calculation (algorithm splits at this height)
+      // Visual overflow is allowed via CSS (overflow: visible), so content can extend beyond
       const reservedSpace = footnotesHeight > 0 ? footnotesHeight : BOTTOM_MARGIN_NO_FOOTNOTES;
       const availableHeight = Math.max(0, height - reservedSpace);
       return availableHeight;
@@ -319,8 +321,8 @@ export const createMeasureContainer = (isDesktop, pageWidth, pageHeight) => {
  * with the same base font/line-height/margin as .page-content p
  */
 export const applyParagraphStylesToContainer = (container, isDesktop) => {
-  // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
-  const desktopFontSize = isDesktop ? '1.18rem' : '1.3rem';
+  // Desktop PDF uses 1.35rem (matches PDFViewer.css), mobile uses 1.3rem
+  const desktopFontSize = isDesktop ? '1.35rem' : '1.3rem';
   // Desktop PDF uses 1.62 line-height (matches PDFViewer.css), mobile uses 1.35
   const desktopLineHeight = isDesktop ? '1.62' : '1.35';
   
@@ -476,9 +478,9 @@ export const checkContentWithFootnotesFits = (contentElements, footnoteNumbers, 
   const tempContainer = document.createElement('div');
   tempContainer.style.width = contentWidth + 'px';
   // Apply the same font/line-height/margin rules that .page-content p uses
-  // Desktop PDF uses 1.18rem (matches PDFViewer.css), mobile uses 1.3rem
+  // Desktop PDF uses 1.4rem (matches PDFViewer.css), mobile uses 1.3rem
   tempContainer.style.fontFamily = "'Times New Roman', 'Times', 'Garamond', 'Baskerville', 'Caslon', 'Hoefler Text', 'Minion Pro', 'Palatino', 'Georgia', serif";
-  tempContainer.style.fontSize = isDesktop ? '1.18rem' : '1.3rem';
+  tempContainer.style.fontSize = isDesktop ? '1.4rem' : '1.3rem';
   tempContainer.style.lineHeight = isDesktop ? '1.62' : '1.35';
   measure.pageContent.appendChild(tempContainer);
   
@@ -649,15 +651,25 @@ export const splitTextAtWordBoundary = (element, maxHeight, measure, options = {
     clone.innerHTML = '';
     clone.appendChild(cloneRange);
     
+    // Apply font styles to clone to match actual rendering
+    const desktopFontSize = isDesktop ? '1.35rem' : '1.3rem';
+    const desktopLineHeight = isDesktop ? '1.62' : '1.35';
+    if (!clone.style.fontSize) clone.style.fontSize = desktopFontSize;
+    if (!clone.style.lineHeight) clone.style.lineHeight = desktopLineHeight;
+    
     // Create a temporary container to measure just the clone
+    // Use same measurement approach as final check: contentWidth for desktop, body.clientWidth for mobile
     const tempMeasureContainer = document.createElement('div');
-    tempMeasureContainer.style.width = measure.body.clientWidth + 'px';
+    const measureWidth = (isDesktop && contentWidth) ? contentWidth : measure.body.clientWidth;
+    tempMeasureContainer.style.width = measureWidth + 'px';
     tempMeasureContainer.style.position = 'absolute';
     tempMeasureContainer.style.visibility = 'hidden';
-    measure.body.appendChild(tempMeasureContainer);
+    // For desktop, append to pageContent to match structure; for mobile, body is fine
+    const measureParent = (isDesktop && measure.pageContent) ? measure.pageContent : measure.body;
+    measureParent.appendChild(tempMeasureContainer);
     tempMeasureContainer.appendChild(clone);
     const height = clone.offsetHeight; // Measure the clone itself, not the body
-    measure.body.removeChild(tempMeasureContainer);
+    measureParent.removeChild(tempMeasureContainer);
     
     if (height <= maxHeight + 2) {
       bestSplit = mid;
@@ -677,6 +689,12 @@ export const splitTextAtWordBoundary = (element, maxHeight, measure, options = {
   
   // Check if entire element fits (for returnCharCount calculation)
   const fullClone = element.cloneNode(true);
+  // Apply font styles to clone to match actual rendering (same as binary search)
+  const desktopFontSize = isDesktop ? '1.35rem' : '1.3rem';
+  const desktopLineHeight = isDesktop ? '1.62' : '1.35';
+  if (!fullClone.style.fontSize) fullClone.style.fontSize = desktopFontSize;
+  if (!fullClone.style.lineHeight) fullClone.style.lineHeight = desktopLineHeight;
+  
   // Create a temporary container to measure just the clone
   const tempMeasureContainer2 = document.createElement('div');
   const measureWidth2 = (isDesktop && contentWidth) ? contentWidth : measure.body.clientWidth;
@@ -891,6 +909,12 @@ export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTe
     clone.innerHTML = '';
     clone.appendChild(cloneRange);
     
+    // Apply font styles to clone to match actual rendering
+    const desktopFontSize = isDesktop ? '1.35rem' : '1.3rem';
+    const desktopLineHeight = isDesktop ? '1.62' : '1.35';
+    if (!clone.style.fontSize) clone.style.fontSize = desktopFontSize;
+    if (!clone.style.lineHeight) clone.style.lineHeight = desktopLineHeight;
+    
     // Create a temporary container to measure just the clone
     // Use contentWidth for desktop (accounts for padding), body.clientWidth for mobile
     const tempMeasureContainer = document.createElement('div');
@@ -953,8 +977,33 @@ export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTe
   secondPart.innerHTML = '';
   const secondRange = document.createRange();
   secondRange.setStart(range.endContainer, range.endOffset);
-  secondRange.setEnd(element, element.childNodes.length);
-  secondPart.appendChild(secondRange.cloneContents());
+  // Set end to after the last child node to ensure we capture all remaining content
+  if (element.childNodes.length > 0) {
+    const lastChild = element.childNodes[element.childNodes.length - 1];
+    if (lastChild.nodeType === Node.TEXT_NODE) {
+      secondRange.setEnd(lastChild, lastChild.textContent.length);
+    } else {
+      // For element nodes, set end to after the last child
+      secondRange.setEnd(element, element.childNodes.length);
+    }
+  } else {
+    secondRange.setEnd(element, 0);
+  }
+  
+  // Check if range is collapsed (empty) - if so, there's no remaining content
+  const isRangeCollapsed = secondRange.collapsed;
+  let secondHasContent = !isRangeCollapsed;
+  
+  if (secondHasContent) {
+    const secondContents = secondRange.cloneContents();
+    secondPart.appendChild(secondContents);
+    // Double-check that second part has actual text content (not just empty tags)
+    const hasTextContent = secondPart.textContent && secondPart.textContent.trim().length > 0;
+    if (!hasTextContent) {
+      secondPart.innerHTML = '';
+      secondHasContent = false;
+    }
+  }
   
   // Trim leading whitespace from second part to prevent gaps
   // This ensures clean breaks at sentence boundaries

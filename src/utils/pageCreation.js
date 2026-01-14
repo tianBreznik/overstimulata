@@ -21,8 +21,6 @@ export const removeEmptyParagraphs = (elements, isStandaloneFirstPage, isDesktop
   const initialLength = elements.length;
   let removedFromArray = 0;
   
-  console.log('[removeEmptyParagraphs] isDesktop:', isDesktop, 'maxRemovals:', maxRemovals);
-  
   const filteredElements = [...elements];
   
   while (removedFromArray < maxRemovals && filteredElements.length > 0) {
@@ -46,7 +44,6 @@ export const removeEmptyParagraphs = (elements, isStandaloneFirstPage, isDesktop
         if (isEmpty) {
           filteredElements.shift();
           removedFromArray++;
-          console.log('[removeEmptyParagraphs] Removed empty paragraph, removed:', removedFromArray, 'remaining elements:', filteredElements.length);
         } else {
           break;
         }
@@ -58,9 +55,6 @@ export const removeEmptyParagraphs = (elements, isStandaloneFirstPage, isDesktop
     }
   }
   
-  if (removedFromArray > 0) {
-    console.log('[removeEmptyParagraphs] Successfully removed', removedFromArray, 'empty paragraphs. Initial length:', initialLength, 'Final length:', filteredElements.length);
-  }
   
   return filteredElements;
 };
@@ -109,14 +103,11 @@ export const calculatePagePadding = (pageFootnotes, currentPageFootnotes, hasKar
   
   // Standard bottom margin when there are no footnotes (for consistent page spacing)
   // CRITICAL: ONLY standalone first page uses smaller bottom margin (20px) to allow text to sit lower
-  // 
-  // NOTE: This uses 48px, but getAvailableHeight() uses 32px for calculations.
-  // This mismatch was present in the original code and is preserved to maintain exact pagination behavior.
-  // The algorithm calculates with 32px (more conservative), but pages use 48px padding (more space).
-  const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPage ? 20 : 48; // standalone first page: 20px, others: 48px (matches original pushPage)
+  // Regular text now uses 32px (same as karaoke) to fill pages more fully
+  const BOTTOM_MARGIN_NO_FOOTNOTES = isStandaloneFirstPage ? 20 : 32; // standalone first page: 20px, others: 32px (same as karaoke)
   
-  // Bottom margin for karaoke pages (reduced to fit more content)
-  const BOTTOM_MARGIN_KARAOKE = 32; // Reduced from 48px to fit one more line
+  // Bottom margin for karaoke pages (same as regular text now)
+  const BOTTOM_MARGIN_KARAOKE = 32; // Same as regular text
   
   // Always wrap content with padding-bottom: either for footnotes or for bottom margin
   // Use larger margin for karaoke pages
@@ -150,6 +141,19 @@ export const createPageFromElements = ({
   // CRITICAL: For standalone first page, remove empty paragraphs from the start BEFORE processing
   const isStandaloneFirstPage = chapter.isFirstPage && chapterPageIndex === 0;
   const filteredElements = removeEmptyParagraphs(elements, isStandaloneFirstPage, isDesktop);
+  
+  // Log elements being used to create page on desktop
+  if (isDesktop) {
+    const pageElements = filteredElements.map((el, idx) => {
+      const temp = document.createElement('div');
+      temp.innerHTML = el;
+      return {
+        index: idx,
+        text: temp.textContent || '', // Full text
+        html: el // Full HTML
+      };
+    });
+  }
   
   // Process footnotes in content: replace ^[content] with superscript numbers
   let processedContent = filteredElements.join('');
@@ -209,17 +213,6 @@ export const createPageFromElements = ({
     isFirstPage: chapter.isFirstPage || false,
     isCover: chapter.isCover || false,
   };
-  
-  console.log('[PageOrder] Creating page from content:', {
-    chapterIndex: newPage.chapterIndex,
-    chapterId: newPage.chapterId,
-    chapterTitle: newPage.chapterTitle,
-    isCover: newPage.isCover,
-    isFirstPage: newPage.isFirstPage,
-    pageIndex: newPage.pageIndex,
-    contentLength: newPage.content.length,
-    hasContent: newPage.content.length > 0
-  });
   
   return newPage;
 };

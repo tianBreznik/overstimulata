@@ -27,6 +27,7 @@
   max-width: 1200px;
   margin: 0 auto;
   padding: 6.5rem 1rem 3rem; /* Increased top padding so first pages sit lower */
+  padding-top: calc(6.5rem + 48px); /* Account for top bar height (48px) */
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -69,7 +70,7 @@
   flex-direction: column !important;
   page-break-after: always;
   border-radius: 2px;
-  overflow: hidden !important; /* Prevent content from overflowing fixed height */
+  overflow: visible !important; /* Allow visual overflow for content */
 }
 
 /* When background image is set, make background transparent so image shows through */
@@ -146,13 +147,19 @@
   z-index: 10 !important; /* Lower z-index than mobile (99999) since it's within page context */
 }
 
-/* Desktop: Reduce font size slightly for better readability in PDF-style layout */
+/* Desktop: Font size for PDF-style layout */
 .pdf-viewer .page-content {
-  font-size: 1.18rem !important; /* Reduced from 1.18rem (mobile) */
+  font-size: 1.35rem !important; /* Desktop font size */
 }
 
 .pdf-viewer .page-content * {
   font-size: inherit !important; /* Ensure all child elements inherit the reduced size */
+}
+
+/* Desktop: Allow overflow on page-content-main */
+.pdf-viewer .page-content-main {
+  overflow: visible !important; /* Allow all overflow on desktop */
+  max-height: none !important; /* Remove height constraint */
 }
 
 /* Ensure karaoke text has the same shadow as mobile (not stronger) */
