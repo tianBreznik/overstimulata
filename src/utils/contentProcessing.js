@@ -138,6 +138,8 @@ export const buildChapterContentBlocks = (chapter) => {
       epigraph: chapter.epigraph ?? null,
       chapterId: chapter.id,
       subchapterId: null,
+      pageBorder: !!chapter.pageBorder,
+      pageBorderImageUrl: chapter.pageBorderImageUrl || null,
     });
   }
   
@@ -152,6 +154,8 @@ export const buildChapterContentBlocks = (chapter) => {
           epigraph: subchapter.epigraph ?? null,
           chapterId: chapter.id,
           subchapterId: subchapter.id,
+          pageBorder: !!subchapter.pageBorder,
+          pageBorderImageUrl: subchapter.pageBorderImageUrl || null,
           includeChapterTitle: !hasChapterContent && isFirstSubchapter, // Include chapter title if chapter has no content
         });
         isFirstSubchapter = false;

@@ -430,6 +430,8 @@ function App() {
                         epigraph: updated.epigraph ?? chapter.epigraph,
                         content: html,
                         contentHtml: updated.contentHtml ?? chapter.contentHtml,
+                        pageBorder: typeof updated.pageBorder === 'boolean' ? updated.pageBorder : chapter.pageBorder,
+                        pageBorderImageUrl: updated.pageBorderImageUrl ?? chapter.pageBorderImageUrl,
                         version: updated.version ?? chapter.version,
                       };
                     })
@@ -454,6 +456,8 @@ function App() {
                               epigraph: updated.epigraph ?? child.epigraph,
                               content: html,
                               contentHtml: updated.contentHtml ?? child.contentHtml,
+                              pageBorder: typeof updated.pageBorder === 'boolean' ? updated.pageBorder : child.pageBorder,
+                              pageBorderImageUrl: updated.pageBorderImageUrl ?? child.pageBorderImageUrl,
                               version: updated.version ?? child.version,
                             };
                           }),

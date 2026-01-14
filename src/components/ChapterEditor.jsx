@@ -19,6 +19,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [epigraph, setEpigraph] = useState(chapter?.epigraph || null);
   const [content, setContent] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState(chapter?.backgroundImageUrl || '');
+  const [pageBorder, setPageBorder] = useState(!!chapter?.pageBorder);
+  const [pageBorderImageUrl, setPageBorderImageUrl] = useState(chapter?.pageBorderImageUrl || '');
   const [saving, setSaving] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
   const [highlightColor, setHighlightColor] = useState('#ffeb3b');
@@ -83,6 +85,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   });
   const backgroundVideoFileInputRef = useRef(null);
   const backgroundImageInputRef = useRef(null);
+  const pageBorderImageInputRef = useRef(null);
   const [showLinkDialog, setShowLinkDialog] = useState(false);
   const [linkDraft, setLinkDraft] = useState({
     url: '',
@@ -594,8 +597,10 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     if (chapter && editor) {
       const chapterContent = chapter.contentHtml || chapter.content || '';
       const rawEpigraph = chapter.epigraph;
-      // Load existing chapter-level background image if present
+      // Load existing chapter-level background image and border settings if present
       setBackgroundImageUrl(chapter?.backgroundImageUrl || '');
+      setPageBorder(!!chapter?.pageBorder);
+      setPageBorderImageUrl(chapter?.pageBorderImageUrl || '');
       if (rawEpigraph && typeof rawEpigraph === 'object') {
         setEpigraph({
           text: rawEpigraph.text || '',
@@ -1206,6 +1211,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         contentHtml: currentContent,
         version: entityVersion,
         backgroundImageUrl: backgroundImageUrl || null,
+        pageBorder: !!pageBorder,
+        pageBorderImageUrl: pageBorderImageUrl || null,
       });
     } catch (err) {
       if (err?.code === 'version-conflict') {
@@ -2400,7 +2407,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       <div className="editor-modal side-panel-modal">
         <button className="close-btn close-top" onClick={onCancel}>✕</button>
         
-        <div className="editor-content">
+            <div className="editor-content">
           <div className="page-frame">
             <div className="editor-toolbar attached">
               <div className="toolbar-buttons">
@@ -2477,6 +2484,61 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <option value="36">36</option>
                   <option value="48">48</option>
                 </select>
+                {/* Toggle page border for this chapter/subchapter */}
+                <button
+                  type="button"
+                  onClick={() => setPageBorder((prev) => !prev)}
+                  className={`toolbar-btn ${pageBorder ? 'active' : ''}`}
+                  title={pageBorder ? 'Remove page border' : 'Add border around pages'}
+                >
+                  <span className="toolbar-btn-icon">▢</span>
+                </button>
+                {/* Upload border image for this chapter/subchapter */}
+                <button
+                  type="button"
+                  onClick={() => pageBorderImageInputRef.current?.click()}
+                  className={`toolbar-btn ${pageBorderImageUrl ? 'active' : ''} ${uploadingImage ? 'uploading' : ''}`}
+                  title={uploadingImage ? "Nalaganje..." : (pageBorderImageUrl ? 'Change border image' : 'Upload border image')}
+                  disabled={uploadingImage}
+                  style={uploadingImage ? {
+                    '--upload-progress': `${imageUploadProgress}%`
+                  } : {}}
+                >
+                  <span className="toolbar-btn-icon">🖼▢</span>
+                  {uploadingImage && <div className="toolbar-btn-progress" />}
+                </button>
+                <input
+                  ref={pageBorderImageInputRef}
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  disabled={uploadingImage}
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setUploadingImage(true);
+                    try {
+                      const url = await uploadImageToStorage(file, {
+                        compress: true,
+                        onProgress: (p) => setImageUploadProgress(p),
+                      });
+                      setPageBorderImageUrl(url);
+                      // Automatically enable border if not already enabled
+                      if (!pageBorder) {
+                        setPageBorder(true);
+                      }
+                    } catch (err) {
+                      console.error('Border image upload failed', err);
+                      alert(err?.message || 'Nalaganje slike okvirja je spodletelo.');
+                    } finally {
+                      setUploadingImage(false);
+                      setImageUploadProgress(0);
+                      if (pageBorderImageInputRef.current) {
+                        pageBorderImageInputRef.current.value = '';
+                      }
+                    }
+                  }}
+                />
                 <button
                   onClick={handleImageButtonClick}
                   className={`toolbar-btn ${uploadingImage ? 'uploading' : ''}`}

@@ -6,6 +6,7 @@ import { ReaderTopBar } from './ReaderTopBar';
 import { DesktopTOC } from './DesktopTOC';
 import { useKaraokePlayer } from '../hooks/useKaraokePlayer';
 import paperTexture from '../assets/paper-7-origami-TEX.png';
+import borderFrame from '../assets/smallerborder.png';
 
 /**
  * DesktopPageReader - Desktop-specific page reader component
@@ -387,10 +388,14 @@ export const DesktopPageReader = ({
       }
     }
 
+    // TEMPORARY: Apply smaller 8px frame border to all pages for testing
+    // NOTE: For now we hard-code the border image in CSS, so we only need the class here.
+    const hasBorderForTesting = true;
+
     return (
       <article 
-        className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''} ${page?.isTOC ? 'toc-page' : ''} ${page?.hasFieldNotes ? 'field-notes-page' : ''} ${hasBackgroundImage ? 'has-background-image' : ''}`}
-        style={pageStyle}
+        className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''} ${page?.isTOC ? 'toc-page' : ''} ${page?.hasFieldNotes ? 'field-notes-page' : ''} ${hasBorderForTesting ? 'page-border' : ''} ${hasBackgroundImage ? 'has-background-image' : ''}`}
+        style={{ ...pageStyle }}
         data-chapter-index={page.chapterIndex}
         data-page-index={page.pageIndex}
       >

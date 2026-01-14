@@ -73,6 +73,24 @@
   overflow: visible !important; /* Allow visual overflow for content */
 }
 
+/* Border image styling - uses CSS border-image for frame-style images */
+/* DESKTOP ONLY - isolated to desktop PDF viewer */
+@media (min-width: 769px) {
+  .pdf-viewer .page-sheet.page-border {
+    /* Set transparent border first - required for border-image to work */
+    /* Border width determines how thick the border appears - adjust to match your frame (8px here) */
+    border: 8px solid transparent !important;
+    /* Use border-image shorthand: source slice fill repeat */
+    /* Slice values: 32 26 = 32px top/bottom, 26px left/right from each edge */
+    border-image: url('/smallerborder.png') 32 26 fill stretch !important;
+    /* Push border outward - extends the border beyond the element's border box */
+    /* This makes the border appear outside without affecting the content area */
+    border-image-outset: 16px !important;
+    /* Remove border-radius as it conflicts with border-image */
+    border-radius: 0 !important;
+  }
+}
+
 /* When background image is set, make background transparent so image shows through */
 .pdf-viewer .page-sheet.has-background-image,
 .pdf-viewer .page-sheet.has-background-image.content-page,
