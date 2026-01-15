@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, useMemo } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { PDFViewer } from './PDFViewer';
 import { PDFTopBar } from './PDFTopBar';
@@ -39,6 +39,10 @@ export const DesktopPageReader = ({
   const [mostVisiblePageIndex, setMostVisiblePageIndex] = useState(null);
   // Track ALL pages (including first/cover/TOC) for PDFTopBar navigation
   const [topBarPageIndex, setTopBarPageIndex] = useState(0);
+  // Use refs to track previous values to prevent unnecessary state updates
+  const prevTopBarPageIndexRef = useRef(0);
+  const prevMostVisiblePageRef = useRef(null);
+  const prevMostVisiblePageIndexRef = useRef(null);
   
   // Create pagesWithTOC array early (before hooks that depend on it)
   const pagesWithTOC = useMemo(() => {
@@ -132,18 +136,28 @@ export const DesktopPageReader = ({
         }
       });
       
-      // Update top bar page index (ALL pages)
-      if (mostCenteredIndexForTopBar !== null) {
+      // Update top bar page index (ALL pages) - only if it changed to prevent unnecessary re-renders
+      if (mostCenteredIndexForTopBar !== null && mostCenteredIndexForTopBar !== prevTopBarPageIndexRef.current) {
+        prevTopBarPageIndexRef.current = mostCenteredIndexForTopBar;
         setTopBarPageIndex(mostCenteredIndexForTopBar);
       }
       
       // Only update progress bar tracking if it's a regular page (not first, cover, or TOC)
+      // Only update if the value actually changed to prevent unnecessary re-renders
       if (mostCenteredPage && !mostCenteredPage.isFirstPage && !mostCenteredPage.isCover && !mostCenteredPage.isTOC) {
-        setMostVisiblePage(mostCenteredPage);
-        setMostVisiblePageIndex(mostCenteredIndex);
+        if (mostCenteredPage !== prevMostVisiblePageRef.current || mostCenteredIndex !== prevMostVisiblePageIndexRef.current) {
+          prevMostVisiblePageRef.current = mostCenteredPage;
+          prevMostVisiblePageIndexRef.current = mostCenteredIndex;
+          setMostVisiblePage(mostCenteredPage);
+          setMostVisiblePageIndex(mostCenteredIndex);
+        }
       } else {
-        setMostVisiblePage(null);
-        setMostVisiblePageIndex(null);
+        if (prevMostVisiblePageRef.current !== null || prevMostVisiblePageIndexRef.current !== null) {
+          prevMostVisiblePageRef.current = null;
+          prevMostVisiblePageIndexRef.current = null;
+          setMostVisiblePage(null);
+          setMostVisiblePageIndex(null);
+        }
       }
     };
     
@@ -336,22 +350,140 @@ export const DesktopPageReader = ({
     };
   }, [pages, initializeKaraokeSlices, observePage, unobservePage]);
 
-  console.log('[DesktopPageReader] Rendering with', pages.length, 'pages');
+  // Cache for processed HTML (without images) and extracted image data
+  const processedContentCache = useRef(new Map());
   
-  // Early return AFTER all hooks
-  if (pages.length === 0) {
-    console.log('[DesktopPageReader] No pages, showing loading');
-    return (
-      <div className="page-reader-loading" />
-    );
-  }
-
+  // Extract images from HTML and return both the HTML without images and image data
+  const extractImagesFromHtml = useMemo(() => {
+    return (html) => {
+      if (!html || typeof window === 'undefined') {
+        return { htmlWithoutImages: html, images: [] };
+      }
+      
+      // Check cache first
+      if (processedContentCache.current.has(html)) {
+        return processedContentCache.current.get(html);
+      }
+      
+      const container = document.createElement('div');
+      container.innerHTML = html;
+      
+      const images = [];
+      const imgElements = container.querySelectorAll('img');
+      
+      imgElements.forEach((img, index) => {
+        // Extract all attributes
+        // Use a stable ID based on src and position to ensure consistency across renders
+        const imgSrc = img.getAttribute('src') || '';
+        const imageData = {
+          id: `img-${imgSrc}-${index}`.replace(/[^a-zA-Z0-9-]/g, '-'), // Sanitize for use as ID
+          src: imgSrc,
+          alt: img.getAttribute('alt') || '',
+          dataAlign: img.getAttribute('data-align') || '',
+          dataInline: img.getAttribute('data-inline') || '',
+          className: img.getAttribute('class') || '',
+          style: img.getAttribute('style') || '',
+          width: img.getAttribute('width') || '',
+          height: img.getAttribute('height') || '',
+        };
+        
+        images.push(imageData);
+        
+        // Replace img with a placeholder that has a data attribute
+        const placeholder = document.createElement('span');
+        placeholder.setAttribute('data-image-placeholder', imageData.id);
+        placeholder.style.display = 'none'; // Hidden placeholder
+        img.parentNode?.replaceChild(placeholder, img);
+      });
+      
+      const htmlWithoutImages = container.innerHTML;
+      const result = { htmlWithoutImages, images };
+      
+      // Cache the result
+      processedContentCache.current.set(html, result);
+      
+      return result;
+    };
+  }, []);
+  
+  // Track which pages have had their content set
+  const pageContentSetRef = useRef(new Map());
+  
+  // Store image refs to prevent garbage collection
+  const imageRefsRef = useRef(new Map());
+  
+  // Create a ref callback factory that sets content and images
+  // Use a stable ref to store the callback functions to prevent recreation
+  const createPageContentRefCallbacks = useRef(new Map());
+  
+  const createPageContentRef = useCallback((pageKey, content) => {
+    // Return a stable callback - reuse if it already exists for this pageKey
+    if (!createPageContentRefCallbacks.current.has(pageKey)) {
+      const callback = (node) => {
+        if (!node) return;
+        
+        // Check if content has already been set for this page - early return with NO DOM queries
+        if (pageContentSetRef.current.has(pageKey)) {
+          return;
+        }
+        
+        // Extract images from HTML (cache this so we don't re-process)
+        const { htmlWithoutImages, images } = extractImagesFromHtml(content || '');
+        
+        // Set HTML content (without images)
+        node.innerHTML = htmlWithoutImages;
+        
+        // Insert images as React-managed elements
+        images.forEach((imgData) => {
+          const imgId = `${pageKey}-${imgData.id}`;
+          const placeholder = node.querySelector(`[data-image-placeholder="${imgData.id}"]`);
+          if (placeholder) {
+            const img = document.createElement('img');
+            img.setAttribute('data-react-img-id', imgId);
+            img.src = imgData.src;
+            img.alt = imgData.alt;
+            if (imgData.dataAlign) img.setAttribute('data-align', imgData.dataAlign);
+            if (imgData.dataInline) img.setAttribute('data-inline', imgData.dataInline);
+            if (imgData.className) img.className = imgData.className;
+            if (imgData.style) img.setAttribute('style', imgData.style);
+            if (imgData.width) img.setAttribute('width', imgData.width);
+            if (imgData.height) img.setAttribute('height', imgData.height);
+            img.setAttribute('loading', 'eager');
+            img.setAttribute('decoding', 'async');
+            img.setAttribute('fetchpriority', 'high');
+            // Force image to stay rendered - use CSS classes instead of inline styles to prevent repaints
+            img.classList.add('pdf-image-stable');
+            
+            // Preload the image and keep reference
+            const preloadImg = new Image();
+            preloadImg.src = imgData.src;
+            imageRefsRef.current.set(imgId, { domImg: img, preloadImg });
+            
+            placeholder.parentNode?.replaceChild(img, placeholder);
+          }
+        });
+        
+        // Mark content as set IMMEDIATELY to prevent re-execution
+        pageContentSetRef.current.set(pageKey, true);
+      };
+      
+      createPageContentRefCallbacks.current.set(pageKey, callback);
+    }
+    
+    return createPageContentRefCallbacks.current.get(pageKey);
+  }, [extractImagesFromHtml]);
 
   // Helper function to render a single page
-  const renderPage = (page, index, allPages) => {
+  // MUST be defined before hooks that use it (like renderedPages useMemo)
+  const renderPage = useCallback((page, index, allPages) => {
     if (!page) return null;
     
-    const pageKey = `pdf-page-${index}-${page.chapterIndex}-${page.pageIndex}`;
+    // Create stable pageKey that includes content hash to detect content changes
+    const contentHash = page.content ? 
+      page.content.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20) : 
+      'empty';
+    const pageKey = `pdf-page-${index}-${page.chapterIndex}-${page.pageIndex}-${contentHash}`;
+    const contentKey = pageKey; // Use same key for content
     
     // Calculate page number excluding first page, cover, and TOC (for display)
     const regularPages = allPages.filter(p => !p.isFirstPage && !p.isCover && !p.isTOC);
@@ -455,12 +587,12 @@ export const DesktopPageReader = ({
           ) : page?.isCover ? (
             <div 
               className="page-content"
-              dangerouslySetInnerHTML={{ __html: page.content || '' }}
+              ref={createPageContentRef(`${contentKey}-cover`, page.content || '')}
             />
           ) : page?.isFirstPage ? (
             <div 
               className="page-content"
-              dangerouslySetInnerHTML={{ __html: page.content || '' }}
+              ref={createPageContentRef(`${contentKey}-first`, page.content || '')}
             />
           ) : page?.isEpigraph ? (
             <div className="page-content epigraph-content">
@@ -498,15 +630,15 @@ export const DesktopPageReader = ({
                 if (fieldNotesDiv) {
                   // Keep any content inside but remove the div itself
                   const innerContent = fieldNotesDiv.innerHTML;
-                  return <div dangerouslySetInnerHTML={{ __html: innerContent || '' }} />;
+                  return <div ref={createPageContentRef(`${contentKey}-fieldnotes-inner`, innerContent || '')} />;
                 }
-                return <div dangerouslySetInnerHTML={{ __html: page.content }} />;
+                return <div ref={createPageContentRef(`${contentKey}-fieldnotes`, page.content)} />;
               })()}
             </div>
           ) : (
             <div 
               className="page-content"
-              dangerouslySetInnerHTML={{ __html: page?.content || '' }} 
+              ref={createPageContentRef(`${contentKey}-regular`, page?.content || '')}
             />
           )}
         </section>
@@ -524,7 +656,76 @@ export const DesktopPageReader = ({
         )}
       </article>
     );
-  };
+  }, [chapters, pages, currentChapterIndex, currentPageIndex, currentSubchapterId, onJumpToPage, onEditChapter, onAddSubchapter, onDeleteChapter, onEditSubchapter, onDeleteSubchapter, onReorderChapters, createPageContentRef, paperTexture]);
+
+  // Clean up refs when pages change to prevent memory leaks and handle content updates
+  useEffect(() => {
+    // Get current page keys based on actual page content
+    const currentPageKeys = new Set();
+    pagesWithTOC.forEach((page, index) => {
+      const contentHash = page.content ? 
+        page.content.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20) : 
+        'empty';
+      const pageKey = page.isTOC 
+        ? `toc-${index}` 
+        : `pdf-page-${index}-${page.chapterIndex}-${page.pageIndex}-${contentHash}`;
+      currentPageKeys.add(pageKey);
+    });
+    
+    // Clean up refs for pages that no longer exist or have changed content
+    const keysToRemove = [];
+    pageContentSetRef.current.forEach((_, key) => {
+      if (!currentPageKeys.has(key)) {
+        keysToRemove.push(key);
+      }
+    });
+    keysToRemove.forEach(key => {
+      pageContentSetRef.current.delete(key);
+      createPageContentRefCallbacks.current.delete(key);
+      // Clean up image refs for this page
+      imageRefsRef.current.forEach((_, imgId) => {
+        if (imgId.startsWith(key)) {
+          imageRefsRef.current.delete(imgId);
+        }
+      });
+    });
+  }, [pagesWithTOC]);
+
+  // Memoize pages rendering to prevent re-renders when only page number state changes
+  // Use stable keys based on page identity and content hash to detect content changes
+  // MUST be before early return to maintain hook order
+  const renderedPages = useMemo(() => {
+    if (pagesWithTOC.length === 0) return [];
+    return pagesWithTOC.map((page, index) => {
+      // Use a stable key based on page identity + content hash to detect content changes
+      const contentHash = page.content ? 
+        page.content.substring(0, 50).replace(/[^a-zA-Z0-9]/g, '').substring(0, 20) : 
+        'empty';
+      const pageKey = page.isTOC 
+        ? `toc-${index}` 
+        : `page-${page.chapterIndex}-${page.pageIndex}-${contentHash}`;
+      
+      return (
+        <div
+          key={pageKey}
+          id={`pdf-page-${index}`}
+          className="pdf-page-wrapper"
+        >
+          {renderPage(page, index, pagesWithTOC)}
+        </div>
+      );
+    });
+  }, [pagesWithTOC, renderPage]);
+
+  console.log('[DesktopPageReader] Rendering with', pages.length, 'pages');
+  
+  // Early return AFTER all hooks
+  if (pages.length === 0) {
+    console.log('[DesktopPageReader] No pages, showing loading');
+    return (
+      <div className="page-reader-loading" />
+    );
+  }
 
   // Render pages vertically (stacked one after another)
   console.log('[DesktopPageReader] Rendering', pagesWithTOC.length, 'pages vertically (including TOC)');
@@ -559,17 +760,7 @@ export const DesktopPageReader = ({
         filename="weird-attachments.pdf"
       >
         <div className="pdf-pages-container">
-          {pagesWithTOC.map((page, index) => {
-            return (
-              <div
-                key={`page-${index}`}
-                id={`pdf-page-${index}`}
-                className="pdf-page-wrapper"
-              >
-                {renderPage(page, index, pagesWithTOC)}
-              </div>
-            );
-          })}
+          {renderedPages}
         </div>
       </PDFViewer>
       {/* Desktop Progress Bar - only show for regular pages */}

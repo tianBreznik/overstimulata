@@ -70,7 +70,7 @@
   flex-direction: column !important;
   page-break-after: always;
   border-radius: 2px;
-  overflow: visible !important; /* Allow visual overflow for content */
+  overflow: hidden !important; /* Prevent content from overflowing fixed height - this keeps images in rendering context */
 }
 
 /* Border image styling - uses CSS border-image for frame-style images */
@@ -155,6 +155,34 @@
   overflow: visible !important; /* Allow content to be visible, don't clip */
   flex: 1 1 auto !important; /* Grow to fit content */
   background: transparent !important; /* Allow parent background image to show through */
+}
+
+/* Prevent browser from unloading images when scrolling - keep them in memory */
+.pdf-viewer .page-content img {
+  content-visibility: visible !important;
+  contain-intrinsic-size: auto !important;
+  /* Force images into their own compositing layer to prevent unloading */
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+  will-change: transform;
+  /* Prevent browser from unloading images */
+  image-rendering: auto;
+  -webkit-backface-visibility: visible;
+  backface-visibility: visible;
+  /* Ensure images are always loaded */
+  object-fit: contain;
+}
+
+/* Stable images that should never flicker */
+.pdf-viewer .page-content img.pdf-image-stable {
+  content-visibility: visible !important;
+  contain-intrinsic-size: auto !important;
+  transform: translateZ(0) !important;
+  -webkit-transform: translateZ(0) !important;
+  will-change: transform !important;
+  /* Prevent any repaints */
+  backface-visibility: visible !important;
+  -webkit-backface-visibility: visible !important;
 }
 
 /* Desktop: Position page number relative to page-sheet, not viewport */

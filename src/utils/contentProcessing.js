@@ -112,6 +112,13 @@ export const processHTMLContent = async (htmlContent, isDesktop) => {
   contentDiv.innerHTML = contentWithHyphens;
   tempContainer.appendChild(contentDiv);
   
+  // Set loading="eager" on all images to prevent lazy loading
+  // This ensures images are always loaded, not lazy-loaded when scrolling
+  contentDiv.querySelectorAll('img').forEach((img) => {
+    img.setAttribute('loading', 'eager');
+    img.setAttribute('decoding', 'async');
+  });
+  
   // Wait for images to load
   await waitForImagesToLoad(contentDiv);
   
