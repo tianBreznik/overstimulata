@@ -147,6 +147,7 @@ export const buildChapterContentBlocks = (chapter) => {
       subchapterId: null,
       pageBorder: !!chapter.pageBorder,
       pageBorderImageUrl: chapter.pageBorderImageUrl || null,
+      hideTitle: !!chapter.hideTitle,
     });
   }
   
@@ -164,6 +165,7 @@ export const buildChapterContentBlocks = (chapter) => {
           pageBorder: !!subchapter.pageBorder,
           pageBorderImageUrl: subchapter.pageBorderImageUrl || null,
           includeChapterTitle: !hasChapterContent && isFirstSubchapter, // Include chapter title if chapter has no content
+          hideTitle: !!subchapter.hideTitle,
         });
         isFirstSubchapter = false;
       }

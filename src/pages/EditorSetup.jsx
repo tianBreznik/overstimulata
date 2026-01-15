@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useEditorMode } from '../hooks/useEditorMode';
-import { signOutUser, getCurrentUser, onAuthStateChange } from '../services/auth';
+import { signOutUser, getCurrentUser, onAuthStateChange, isEmailAllowed } from '../services/auth';
 import { refreshAuthStatus } from '../utils/deviceAuth';
 import { LoginModal } from '../components/LoginModal';
 import './EditorSetup.css';
@@ -9,17 +9,47 @@ export const EditorSetup = ({ onClose }) => {
   const { isEditor, deviceId } = useEditorMode();
   const [showLogin, setShowLogin] = useState(false);
   const [user, setUser] = useState(getCurrentUser());
+  const [emailAllowed, setEmailAllowed] = useState(null); // null = checking, true/false = result
 
   useEffect(() => {
     const unsubscribe = onAuthStateChange((authUser) => {
       setUser(authUser);
       if (authUser) {
+        // Check if email is allowed
+        checkEmailStatus(authUser.email);
         // Refresh device whitelist status after login
         refreshAuthStatus();
+      } else {
+        setEmailAllowed(null);
       }
     });
     return unsubscribe;
   }, []);
+
+  // Check email status when user changes
+  useEffect(() => {
+    if (user?.email) {
+      checkEmailStatus(user.email);
+    } else {
+      setEmailAllowed(null);
+    }
+  }, [user]);
+
+  const checkEmailStatus = async (email) => {
+    if (!email) {
+      setEmailAllowed(null);
+      return;
+    }
+    setEmailAllowed(null); // Set to checking
+    try {
+      const allowed = await isEmailAllowed(email);
+      setEmailAllowed(allowed);
+      console.log('[EditorSetup] Email check result:', email, allowed);
+    } catch (error) {
+      console.error('[EditorSetup] Failed to check email status', error);
+      setEmailAllowed(false);
+    }
+  };
 
   const handleLoginSuccess = async () => {
     setShowLogin(false);
@@ -60,10 +90,16 @@ export const EditorSetup = ({ onClose }) => {
                   <p className="label">Signed in as:</p>
                   <div className="user-info">
                     <p className="user-email">{user.email}</p>
-                    {!isEditor && (
+                    {emailAllowed === false && (
                       <p className="user-note">
                         Your email is not in the allowed list. 
                         Contact an administrator to add your email to the allowed emails list.
+                      </p>
+                    )}
+                    {emailAllowed === true && !isEditor && (
+                      <p className="user-note" style={{ background: '#f0f9ff', borderColor: '#bae6fd', color: '#0369a1' }}>
+                        Your email is allowed, but this device hasn't been whitelisted yet. 
+                        Try signing out and signing back in to whitelist this device.
                       </p>
                     )}
                   </div>
@@ -79,12 +115,27 @@ export const EditorSetup = ({ onClose }) => {
                         Use the toggle in the bottom bar to switch between editor and reader preview.
                       </p>
                     </>
+                  ) : emailAllowed === true ? (
+                    <>
+                      <h3>Email allowed, device not whitelisted</h3>
+                      <p className="note">
+                        Your email is in the allowed list, but this device hasn't been whitelisted yet. 
+                        Try signing out and signing back in to automatically whitelist this device.
+                      </p>
+                    </>
+                  ) : emailAllowed === false ? (
+                    <>
+                      <h3>Email not in allowed list</h3>
+                      <p className="note">
+                        Your email is not in the allowed list. 
+                        Once your email is added to the allowed emails, logging in will automatically whitelist this device.
+                      </p>
+                    </>
                   ) : (
                     <>
-                      <h3>Device not whitelisted</h3>
+                      <h3>Checking email status...</h3>
                       <p className="note">
-                        You're signed in, but your email is not in the allowed list. 
-                        Once your email is added to the allowed emails, logging in will automatically whitelist this device.
+                        Verifying if your email is in the allowed list...
                       </p>
                     </>
                   )}

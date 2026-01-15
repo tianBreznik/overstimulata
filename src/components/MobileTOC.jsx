@@ -28,9 +28,12 @@ export const MobileTOC = ({
   const { isEditor, canToggleEditorMode, previewingAsReader } = useEditorMode();
   const [expandedChapters, setExpandedChapters] = useState(new Set());
   const [isClosing, setIsClosing] = useState(false);
+  const [showSettingsButton, setShowSettingsButton] = useState(false);
   // Track double-tap state
   const lastTapRef = useRef({ time: 0, chapterId: null });
   const singleTapTimeoutRef = useRef(null);
+  // Track triple-tap for revealing settings button
+  const tripleTapRef = useRef({ taps: 0, lastTapTime: 0, timeout: null });
 
   const handleClose = () => {
     // Clear any pending single-tap timeout
@@ -45,11 +48,14 @@ export const MobileTOC = ({
     }, 300); // Match CSS transition duration (2s + 0.6s delay)
   };
 
-  // Cleanup timeout on unmount
+  // Cleanup timeouts on unmount
   useEffect(() => {
     return () => {
       if (singleTapTimeoutRef.current) {
         clearTimeout(singleTapTimeoutRef.current);
+      }
+      if (tripleTapRef.current.timeout) {
+        clearTimeout(tripleTapRef.current.timeout);
       }
     };
   }, []);
@@ -238,9 +244,6 @@ export const MobileTOC = ({
           className={`mobile-toc-chapter-item ${isCurrent ? 'mobile-toc-current' : ''} ${isExpanded ? 'mobile-toc-expanded' : ''}`}
           onClick={() => handleChapterClick(chapter, chapterIndex)}
         >
-          {pageNum && (
-            <span className="mobile-toc-page-number">p. {pageNum}:</span>
-          )}
           <span className="mobile-toc-chapter-title">{chapter.title}</span>
           {isEditor && (
             <div className="mobile-toc-editor-controls-inline">
@@ -284,6 +287,9 @@ export const MobileTOC = ({
               </span>
             </div>
           )}
+          {pageNum && (
+            <span className="mobile-toc-page-number">{pageNum}</span>
+          )}
         </div>
 
         {isExpanded && hasSubchapters && (
@@ -298,9 +304,6 @@ export const MobileTOC = ({
                   className={`mobile-toc-subchapter-item ${isCurrentSub ? 'mobile-toc-current' : ''}`}
                   onClick={() => handleSubchapterClick(subchapter, chapter.id)}
                 >
-                  {subPageNum && (
-                    <span className="mobile-toc-page-number">p. {subPageNum}:</span>
-                  )}
                   <span className="mobile-toc-subchapter-title">{subchapter.title}</span>
                   {isEditor && (
                     <div className="mobile-toc-editor-controls-inline">
@@ -325,6 +328,9 @@ export const MobileTOC = ({
                         ×
                       </button>
                     </div>
+                  )}
+                  {subPageNum && (
+                    <span className="mobile-toc-page-number">{subPageNum}</span>
                   )}
                 </div>
               );
@@ -375,7 +381,43 @@ export const MobileTOC = ({
         }}
       >
         <div className="mobile-toc-header">
-          <h2 className="mobile-toc-title">Table of Contents</h2>
+          <h2 
+            className="mobile-toc-title"
+            style={{ visibility: 'hidden', height: 0, margin: 0, padding: 0 }}
+            onTouchStart={(e) => {
+              // Triple tap detection for revealing settings button
+              const now = Date.now();
+              const taps = tripleTapRef.current.taps;
+              
+              // Clear existing timeout
+              if (tripleTapRef.current.timeout) {
+                clearTimeout(tripleTapRef.current.timeout);
+              }
+              
+              // Check if this is a new tap (within 500ms of last tap)
+              if (taps === 0 || (now - tripleTapRef.current.lastTapTime) < 500) {
+                tripleTapRef.current.taps = taps + 1;
+                tripleTapRef.current.lastTapTime = now;
+                
+                // If we've reached 3 taps, reveal settings button
+                if (tripleTapRef.current.taps >= 3) {
+                  setShowSettingsButton(true);
+                  tripleTapRef.current.taps = 0;
+                } else {
+                  // Set timeout to reset tap count
+                  tripleTapRef.current.timeout = setTimeout(() => {
+                    tripleTapRef.current.taps = 0;
+                  }, 500);
+                }
+              } else {
+                // Reset if too much time passed
+                tripleTapRef.current.taps = 1;
+                tripleTapRef.current.lastTapTime = now;
+              }
+            }}
+          >
+            {/* Hidden - kept for triple tap functionality */}
+          </h2>
           <button className="mobile-toc-close" onClick={handleClose}>
             ×
           </button>
@@ -513,10 +555,6 @@ export const MobileTOC = ({
                   className={`mobile-toc-chapter-item ${isCurrent ? 'mobile-toc-current' : ''} ${isExpanded ? 'mobile-toc-expanded' : ''}`}
                   onClick={() => handleChapterClick(chapter, chapterIndex)}
                 >
-                  {/* Don't show page numbers for special pages */}
-                  {pageNum && !chapter.isFirstPage && !chapter.isCover && (
-                    <span className="mobile-toc-page-number">p. {pageNum}:</span>
-                  )}
                   <span className="mobile-toc-chapter-title">{chapter.title}</span>
                   {isEditor && (
                     <div className="mobile-toc-editor-controls-inline">
@@ -553,6 +591,10 @@ export const MobileTOC = ({
                       <span className="mobile-toc-drag-handle-inline" title="Drag to reorder">☰</span>
                     </div>
                   )}
+                  {/* Don't show page numbers for special pages */}
+                  {pageNum && !chapter.isFirstPage && !chapter.isCover && (
+                    <span className="mobile-toc-page-number">{pageNum}</span>
+                  )}
                 </div>
 
                 {isExpanded && hasSubchapters && (
@@ -567,9 +609,6 @@ export const MobileTOC = ({
                           className={`mobile-toc-subchapter-item ${isCurrentSub ? 'mobile-toc-current' : ''}`}
                           onClick={() => handleSubchapterClick(subchapter, chapter.id)}
                         >
-                          {subPageNum && (
-                            <span className="mobile-toc-page-number">p. {subPageNum}:</span>
-                          )}
                           <span className="mobile-toc-subchapter-title">{subchapter.title}</span>
                           {isEditor && (
                             <div className="mobile-toc-editor-controls-inline">
@@ -595,6 +634,9 @@ export const MobileTOC = ({
                               </button>
                             </div>
                           )}
+                          {subPageNum && (
+                            <span className="mobile-toc-page-number">{subPageNum}</span>
+                          )}
                         </div>
                       );
                     })}
@@ -607,15 +649,18 @@ export const MobileTOC = ({
           
           {/* Footer with action buttons - inside scrollable content */}
           <div className="mobile-toc-footer">
-            <button
-              className="mobile-toc-footer-btn"
-              onClick={() => {
-                if (onOpenSettings) onOpenSettings();
-                handleClose();
-              }}
-            >
-              Nastavitve
-            </button>
+            {/* Settings button - hidden by default, revealed with triple tap on TOC header */}
+            {(showSettingsButton || isEditor) && (
+              <button
+                className="mobile-toc-footer-btn"
+                onClick={() => {
+                  if (onOpenSettings) onOpenSettings();
+                  handleClose();
+                }}
+              >
+                Nastavitve
+              </button>
+            )}
             {isEditor && (
               <button
                 className="mobile-toc-footer-btn"

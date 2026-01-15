@@ -69,6 +69,9 @@ export async function addChapter(bookId, { title, slug, contentHtml, epigraph, o
 }
 
 export async function updateChapter(bookId, chapterId, data, expectedVersion = 0) {
+  // Note: Device whitelist check is handled at app level (useEditorMode hook)
+  // Email authentication is only used to whitelist devices, not for ongoing access
+  
   return runTransaction(db, async (transaction) => {
     const ref = chapterDoc(bookId, chapterId);
     const snapshot = await transaction.get(ref);

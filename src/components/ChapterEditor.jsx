@@ -21,6 +21,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [backgroundImageUrl, setBackgroundImageUrl] = useState(chapter?.backgroundImageUrl || '');
   const [pageBorder, setPageBorder] = useState(!!chapter?.pageBorder);
   const [pageBorderImageUrl, setPageBorderImageUrl] = useState(chapter?.pageBorderImageUrl || '');
+  const [hideTitle, setHideTitle] = useState(!!chapter?.hideTitle);
   const [saving, setSaving] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
   const [highlightColor, setHighlightColor] = useState('#ffeb3b');
@@ -1213,11 +1214,15 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         backgroundImageUrl: backgroundImageUrl || null,
         pageBorder: !!pageBorder,
         pageBorderImageUrl: pageBorderImageUrl || null,
+        hideTitle: !!hideTitle,
       });
     } catch (err) {
       if (err?.code === 'version-conflict') {
         setAutosaveStatus('Chapter updated elsewhere. Reloaded latest content.');
         alert('This chapter was updated in another session. The latest version has been loaded—please review and reapply your changes.');
+      } else if (err?.code === 'permission-denied') {
+        setAutosaveStatus('Permission denied.');
+        alert('Your device is not whitelisted for editor access. Please sign in with an allowed email to whitelist this device.');
       } else {
         console.error('Save failed', err);
         setAutosaveStatus('Save failed.');
@@ -2936,6 +2941,14 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   title="Povezava"
                 >
                   <span style={{textDecoration: 'none'}}>🔗</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHideTitle(!hideTitle)}
+                  className={`toolbar-btn ${hideTitle ? 'active' : ''}`}
+                  title={hideTitle ? "Prikaži naslov" : "Skrij naslov"}
+                >
+                  <span>🫥</span>
                 </button>
                 {/* Chapter-level background image (used as full-bleed background in reader) */}
                 {!parentChapter && (

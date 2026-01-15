@@ -190,10 +190,20 @@ export const usePagePagination = ({
           const element = elements[elementIndex];
           const isHeadingElement = /^H[1-6]$/i.test(element.tagName || '');
           const isSubchapterTitle = /^H[4-6]$/i.test(element.tagName || '');
+          const isChapterTitle = /^H[1-3]$/i.test(element.tagName || '');
           
           // Skip heading elements if chapter has field notes (title should be hidden)
           if (chapterHasFieldNotes && isHeadingElement) {
             continue; // Don't reset flag on skipped elements
+          }
+          
+          // Skip heading elements if hideTitle is enabled
+          // For chapters, skip h1-h3; for subchapters, skip h4-h6
+          if (block.hideTitle) {
+            if ((block.type === 'chapter' && isChapterTitle) || 
+                (block.type === 'subchapter' && isSubchapterTitle)) {
+              continue; // Don't reset flag on skipped elements
+            }
           }
           
           // Reset flag only when we actually process a non-field-notes element

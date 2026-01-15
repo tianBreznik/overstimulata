@@ -206,9 +206,9 @@
   color: inherit;
   position: relative;
   display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 1rem;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 0.25rem;
   transition: color 0.3s ease-out;
 }
 
@@ -298,10 +298,12 @@
   font-size: 0.9rem;
   color: inherit;
   flex-shrink: 0;
-  font-weight: normal;
+  font-weight: bold;
   text-shadow: 0 1px 2px rgba(255, 255, 255, 0.3), 0 0 1px rgba(255, 255, 255, 0.2);
   white-space: nowrap;
   transition: color 0.3s ease-out;
+  margin-left: auto;
+  padding-left: 0.5rem;
 }
 
 .mobile-toc-dots {
@@ -321,18 +323,19 @@
   white-space: normal;
   word-break: normal;
   overflow-wrap: break-word;
-  text-align: right;
+  text-align: left;
   text-transform: lowercase;
-  flex: 1;
+  flex: 0 1 auto;
+  min-width: 0;
   transition: color 0.3s ease-out;
 }
 
 .mobile-toc-chapter-title {
-  font-weight: normal;
+  font-weight: bold;
 }
 
 .mobile-toc-subchapter-title {
-  font-weight: normal;
+  font-weight: bold;
   font-size: 0.85rem;
 }
 
@@ -382,8 +385,9 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  margin-left: 0.5rem;
+  margin-left: 0.15rem;
   flex-shrink: 0;
+  align-self: center;
 }
 
 .mobile-toc-btn {
