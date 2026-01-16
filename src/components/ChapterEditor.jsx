@@ -19,7 +19,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [epigraph, setEpigraph] = useState(chapter?.epigraph || null);
   const [content, setContent] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState(chapter?.backgroundImageUrl || '');
-  const [pageBorder, setPageBorder] = useState(!!chapter?.pageBorder);
   const [pageBorderImageUrl, setPageBorderImageUrl] = useState(chapter?.pageBorderImageUrl || '');
   const [hideTitle, setHideTitle] = useState(!!chapter?.hideTitle);
   const [saving, setSaving] = useState(false);
@@ -600,7 +599,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       const rawEpigraph = chapter.epigraph;
       // Load existing chapter-level background image and border settings if present
       setBackgroundImageUrl(chapter?.backgroundImageUrl || '');
-      setPageBorder(!!chapter?.pageBorder);
       setPageBorderImageUrl(chapter?.pageBorderImageUrl || '');
       if (rawEpigraph && typeof rawEpigraph === 'object') {
         setEpigraph({
@@ -1212,7 +1210,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         contentHtml: currentContent,
         version: entityVersion,
         backgroundImageUrl: backgroundImageUrl || null,
-        pageBorder: !!pageBorder,
+        pageBorder: !!(pageBorderImageUrl),
         pageBorderImageUrl: pageBorderImageUrl || null,
         hideTitle: !!hideTitle,
       });
@@ -2489,29 +2487,39 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   <option value="36">36</option>
                   <option value="48">48</option>
                 </select>
-                {/* Toggle page border for this chapter/subchapter */}
-                <button
-                  type="button"
-                  onClick={() => setPageBorder((prev) => !prev)}
-                  className={`toolbar-btn ${pageBorder ? 'active' : ''}`}
-                  title={pageBorder ? 'Remove page border' : 'Add border around pages'}
-                >
-                  <span className="toolbar-btn-icon">▢</span>
-                </button>
-                {/* Upload border image for this chapter/subchapter */}
-                <button
-                  type="button"
-                  onClick={() => pageBorderImageInputRef.current?.click()}
-                  className={`toolbar-btn ${pageBorderImageUrl ? 'active' : ''} ${uploadingImage ? 'uploading' : ''}`}
-                  title={uploadingImage ? "Nalaganje..." : (pageBorderImageUrl ? 'Change border image' : 'Upload border image')}
-                  disabled={uploadingImage}
-                  style={uploadingImage ? {
-                    '--upload-progress': `${imageUploadProgress}%`
-                  } : {}}
-                >
-                  <span className="toolbar-btn-icon">🖼▢</span>
-                  {uploadingImage && <div className="toolbar-btn-progress" />}
-                </button>
+                {/* Border controls container */}
+                <div className="toolbar-border-controls">
+                  {/* Upload border image for this chapter/subchapter */}
+                  <button
+                    type="button"
+                    onClick={() => pageBorderImageInputRef.current?.click()}
+                    className={`toolbar-btn ${pageBorderImageUrl ? 'active' : ''} ${uploadingImage ? 'uploading' : ''}`}
+                    title={uploadingImage ? "Nalaganje..." : (pageBorderImageUrl ? 'Change border image' : 'Upload border image')}
+                    disabled={uploadingImage}
+                    style={uploadingImage ? {
+                      '--upload-progress': `${imageUploadProgress}%`
+                    } : {}}
+                  >
+                    <span className="toolbar-btn-icon">🔲</span>
+                    {uploadingImage && <div className="toolbar-btn-progress" />}
+                  </button>
+                  {/* Border width/number dropdown */}
+                  <select
+                    className="toolbar-border-dropdown"
+                    defaultValue="8"
+                    title="Border size"
+                  >
+                    <option value="4">4</option>
+                    <option value="6">6</option>
+                    <option value="8">8</option>
+                    <option value="10">10</option>
+                    <option value="12">12</option>
+                    <option value="16">16</option>
+                    <option value="20">20</option>
+                    <option value="24">24</option>
+                    <option value="32">32</option>
+                  </select>
+                </div>
                 <input
                   ref={pageBorderImageInputRef}
                   type="file"
@@ -2528,10 +2536,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                         onProgress: (p) => setImageUploadProgress(p),
                       });
                       setPageBorderImageUrl(url);
-                      // Automatically enable border if not already enabled
-                      if (!pageBorder) {
-                        setPageBorder(true);
-                      }
                     } catch (err) {
                       console.error('Border image upload failed', err);
                       alert(err?.message || 'Nalaganje slike okvirja je spodletelo.');

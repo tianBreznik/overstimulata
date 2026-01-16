@@ -315,6 +315,12 @@ export const DesktopPageReader = ({
           return;
         }
         
+        // Check if already initialized (might have been initialized from ref callback)
+        if (initializedPagesRef.current.has(pageKey)) {
+          console.log('[DesktopPageReader] Page already initialized from ref callback:', pageKey);
+          return;
+        }
+        
         // Initialize karaoke slices immediately (don't wait for scroll)
         const initPromise = initializeKaraokeSlices(pageContent).then(() => {
           console.log('[DesktopPageReader] Initialized karaoke for page', index);
@@ -465,13 +471,56 @@ export const DesktopPageReader = ({
         
         // Mark content as set IMMEDIATELY to prevent re-execution
         pageContentSetRef.current.set(pageKey, true);
+        
+        // Initialize karaoke slices after content is set
+        // Use requestAnimationFrame to ensure DOM is fully updated
+        requestAnimationFrame(() => {
+          const slices = node.querySelectorAll('.karaoke-slice');
+          if (slices.length > 0) {
+            // Find the page element by traversing up from the node
+            let current = node;
+            let pageElement = null;
+            while (current && current !== document.body) {
+              if (current.id && current.id.startsWith('pdf-page-')) {
+                pageElement = current;
+                break;
+              }
+              current = current.parentElement;
+            }
+            
+            if (pageElement) {
+              const pageSheet = pageElement.querySelector('.page-sheet');
+              if (pageSheet) {
+                // Extract a simpler pageKey for data-page-key (without content hash)
+                const pageKeyParts = pageKey.split('-');
+                const simplePageKey = `pdf-page-${pageKeyParts[2] || '0'}-${pageKeyParts[3] || '0'}-${pageKeyParts[4] || '0'}`;
+                
+                // Set data-page-key if not already set
+                if (!pageSheet.getAttribute('data-page-key')) {
+                  pageSheet.setAttribute('data-page-key', simplePageKey);
+                }
+                
+                // Initialize karaoke slices
+                initializeKaraokeSlices(node).then(() => {
+                  console.log('[DesktopPageReader] Initialized karaoke from ref callback for', pageKey);
+                  // Mark as initialized to prevent duplicate initialization
+                  initializedPagesRef.current.add(simplePageKey);
+                  // Observe page for visibility (desktop) - for pause/resume on scroll
+                  observePage(pageSheet);
+                }).catch((err) => {
+                  console.error('[DesktopPageReader] Error initializing karaoke from ref callback', pageKey, err);
+                });
+              }
+            }
+          }
+        });
       };
       
       createPageContentRefCallbacks.current.set(pageKey, callback);
     }
     
     return createPageContentRefCallbacks.current.get(pageKey);
-  }, [extractImagesFromHtml]);
+  }, [extractImagesFromHtml, initializeKaraokeSlices, observePage]);
 
   // Helper function to render a single page
   // MUST be defined before hooks that use it (like renderedPages useMemo)
