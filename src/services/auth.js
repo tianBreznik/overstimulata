@@ -18,10 +18,8 @@ export const isEmailAllowed = async (email) => {
     const emailDocRef = doc(db, 'allowedEmails', email);
     const emailDoc = await getDoc(emailDocRef);
     const exists = emailDoc.exists();
-    console.log('[Auth] Checking email:', email, 'exists:', exists);
     return exists;
   } catch (error) {
-    console.error('[Auth] Failed to check allowed email', email, error);
     return false;
   }
 };
@@ -29,31 +27,24 @@ export const isEmailAllowed = async (email) => {
 // Automatically whitelist device UUID if user's email is allowed
 export const autoWhitelistDevice = async (user) => {
   if (!user || !user.email) {
-    console.log('[Auth] autoWhitelistDevice: no user or email');
     return false;
   }
   
   try {
-    console.log('[Auth] Checking if email is allowed:', user.email);
     const emailAllowed = await isEmailAllowed(user.email);
-    console.log('[Auth] Email allowed result:', emailAllowed);
     if (!emailAllowed) {
-      console.log('[Auth] Email not allowed, device not whitelisted');
       return false;
     }
     
     const deviceId = getDeviceId();
-    console.log('[Auth] Adding device to whitelist:', deviceId);
     await setDoc(doc(db, 'editorWhitelist', deviceId), {
       addedAt: new Date().toISOString(),
       deviceId: deviceId,
       email: user.email,
       userId: user.uid,
     });
-    console.log('[Auth] Device whitelisted successfully');
     return true;
   } catch (error) {
-    console.error('[Auth] Failed to auto-whitelist device', error);
     return false;
   }
 };

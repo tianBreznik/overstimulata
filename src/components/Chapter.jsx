@@ -355,7 +355,6 @@ const initializeKaraokePlayer = (rootElement, karaokeData) => {
       try {
         await audio.play();
       } catch (err) {
-        console.warn('Karaoke playback blocked until user interaction', err);
         return;
       }
       audio.pause();
@@ -370,7 +369,6 @@ const initializeKaraokePlayer = (rootElement, karaokeData) => {
       cancelAnimation();
       rafId = requestAnimationFrame(step);
     } catch (err) {
-      console.warn('Karaoke playback failed', err);
     }
   };
 
@@ -502,7 +500,6 @@ export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumbe
         try {
           parsed = decodeURIComponent(dataAttr);
         } catch (decodeErr) {
-          console.warn('Failed to decode karaoke data, attempting raw JSON', decodeErr);
         }
         const karaokeData = JSON.parse(parsed);
         const cleanup = initializeKaraokePlayer(element, karaokeData);
@@ -510,7 +507,6 @@ export const Chapter = ({ chapter, level = 0, chapterNumber = 1, subChapterNumbe
           cleanups.push(cleanup);
         }
       } catch (err) {
-        console.error('Failed to initialize karaoke element', err, { dataAttr });
       }
     });
 

@@ -126,13 +126,7 @@ export const handleKaraokeElement = ({
   // Use the normalized source text for slicing to ensure character positions align
   const sourceText = newKaraokeSources[karaokeId].text;
   let cursor = 0;
-  
-  console.log('[KaraokePagination] Starting karaoke pagination', {
-    karaokeId,
-    sourceTextLength: sourceText.length,
-    currentPageElementsLength: getCurrentPageElements().length
-  });
-  
+
   while (cursor < sourceText.length) {
     // Get current page state (these may change after startNewPage is called)
     const currentPageElements = getCurrentPageElements();
@@ -210,35 +204,17 @@ export const handleKaraokeElement = ({
     addToCurrentPageElements(sliceEl.outerHTML);
 
     cursor += charsToUse;
-    
-    console.log('[KaraokePagination] After slice', {
-      cursor,
-      sourceTextLength: sourceText.length,
-      charsToUse,
-      currentPageElementsLength: getCurrentPageElements().length,
-      hasMore: cursor < sourceText.length
-    });
-    
+
     if (cursor < sourceText.length) {
       // Push current page before continuing to next slice
-      console.log('[KaraokePagination] Pushing page and starting new page', {
-        currentPageElementsLength: getCurrentPageElements().length
-      });
+
       pushPage(blockMeta);
       startNewPage(false);
-      console.log('[KaraokePagination] After startNewPage', {
-        currentPageElementsLength: getCurrentPageElements().length
-      });
+
     }
     // Note: If cursor >= sourceText.length, the current page with the last slice
     // will be pushed by the caller after handleKaraokeElement returns
   }
-  
-  console.log('[KaraokePagination] Finished karaoke pagination', {
-    cursor,
-    sourceTextLength: sourceText.length,
-    currentPageElementsLength: getCurrentPageElements().length
-  });
 
   return true;
 };

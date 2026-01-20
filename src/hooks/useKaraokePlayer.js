@@ -176,22 +176,11 @@ export const useKaraokePlayer = ({
     
     // Add error handler
     audio.addEventListener('error', (e) => {
-      console.error('[KARAOKE AUDIO] Audio error', {
-        error: audio.error,
-        code: audio.error?.code,
-        message: audio.error?.message,
-        networkState: audio.networkState,
-        readyState: audio.readyState,
-        src: source.audioUrl
-      });
+
     });
     
     audio.addEventListener('loadeddata', () => {
-      console.log('[KARAOKE AUDIO] Audio loaded', {
-        readyState: audio.readyState,
-        duration: audio.duration,
-        src: source.audioUrl
-      });
+
     });
 
     let rafId = null;
@@ -468,7 +457,7 @@ export const useKaraokePlayer = ({
         if (!hasSpans) {
           const initialized = await ensureWordSliceInitialized(karaokeSourcesRef.current, karaokeId, sliceElement, startChar, endChar);
           if (!initialized) {
-            console.warn('[[PLAY]] Failed to initialize slice, cannot start playback');
+
             return;
           }
         }
@@ -523,10 +512,7 @@ export const useKaraokePlayer = ({
 
         try {
           if (audio.error) {
-            console.error('[KARAOKE PLAY] Audio has error in playSlice', {
-              code: audio.error.code,
-              message: audio.error.message
-            });
+
             // Remove data-playing from all slices if there's an error
             const allSlices = document.querySelectorAll(`[data-karaoke-id="${karaokeId}"].karaoke-slice`);
             allSlices.forEach((slice) => slice.removeAttribute('data-playing'));
@@ -578,7 +564,7 @@ export const useKaraokePlayer = ({
           cancelAnimation();
           rafId = requestAnimationFrame(step);
         } catch (err) {
-          console.error('Karaoke playback failed', err);
+
           // Remove data-playing from all slices if playback fails
           const allSlices = document.querySelectorAll(`[data-karaoke-id="${karaokeId}"].karaoke-slice`);
           allSlices.forEach((slice) => slice.removeAttribute('data-playing'));
@@ -763,12 +749,7 @@ export const useKaraokePlayer = ({
         slice.dataset.clickHandlerAdded = 'true';
         
         const handleInteraction = async (e) => {
-          console.log('[KARAOKE] Click/touch detected on karaoke slice', {
-            isDesktop,
-            eventType: e.type,
-            karaokeId: slice.getAttribute('data-karaoke-id')
-          });
-          
+
           // Desktop: use click, Mobile: use touchend with swipe detection
           if (!isDesktop && e.type === 'touchend') {
             // Mobile swipe detection logic would go here (from PageReader.jsx)
@@ -880,7 +861,7 @@ export const useKaraokePlayer = ({
                 audioUnlockedRef.current = true;
                 window.dispatchEvent(new CustomEvent('audioUnlocked'));
               } catch (unlockErr) {
-                console.warn('[KARAOKE PLAY] Unlock attempt had error', unlockErr);
+
                 audioUnlockedRef.current = true;
                 window.dispatchEvent(new CustomEvent('audioUnlocked'));
               }
@@ -891,7 +872,7 @@ export const useKaraokePlayer = ({
                 controller.playSlice(targetSlice, targetStartChar, targetEndChar, playOptions);
                 currentKaraokeSliceRef.current = { karaokeId, sliceElement: targetSlice, startChar: targetStartChar, endChar: targetEndChar };
               } catch (playErr) {
-                console.error('[KARAOKE PLAY] Failed to resume playback', playErr);
+
               }
             })();
             
@@ -927,7 +908,7 @@ export const useKaraokePlayer = ({
                 audioUnlockedRef.current = true;
                 window.dispatchEvent(new CustomEvent('audioUnlocked'));
               } catch (unlockErr) {
-                console.warn('[KARAOKE PLAY] Unlock attempt had error', unlockErr);
+
                 audioUnlockedRef.current = true;
                 window.dispatchEvent(new CustomEvent('audioUnlocked'));
               }
@@ -975,7 +956,7 @@ export const useKaraokePlayer = ({
                     }
                   });
                 } catch (loadErr) {
-                  console.error('[KARAOKE PLAY] Audio load failed', loadErr);
+
                 }
               }
               
@@ -992,7 +973,7 @@ export const useKaraokePlayer = ({
                 controller.playSlice(slice, startChar, endChar);
                 currentKaraokeSliceRef.current = { karaokeId, sliceElement: slice, startChar, endChar };
               } catch (playErr) {
-                console.error('[KARAOKE PLAY] Failed to start playback', playErr);
+
               }
             })();
           }

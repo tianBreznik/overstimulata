@@ -10,7 +10,7 @@ if (typeof window !== 'undefined' && window.screen && window.screen.orientation 
   // Try to lock orientation to portrait
   window.screen.orientation.lock('portrait').catch((err) => {
     // Ignore errors - orientation lock requires user gesture on some browsers
-    console.log('Orientation lock not available or requires user gesture');
+
   });
   
   // Also listen for orientation changes and try to lock again

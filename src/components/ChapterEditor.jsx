@@ -160,12 +160,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       const headingLevel = isSubchapter ? 4 : 3;
       const currentNode = editor.state.selection.$from.parent;
       const isInHeading = currentNode.type.name === 'heading' && currentNode.attrs.level === headingLevel;
-      console.log('[onSelectionUpdate] isHeading check:', {
-        nodeType: currentNode.type.name,
-        nodeLevel: currentNode.attrs.level,
-        headingLevel,
-        isInHeading
-      });
+
       setActiveFormats(prev => ({ ...prev, isHeading: isInHeading }));
     },
     onCreate: () => {},
@@ -591,13 +586,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   // Content loading effect - RE-ENABLED for testing
   useEffect(() => {
     if (!editor) return;
-    
-    console.log('[ChapterEditor] content init effect fired', {
-      hasChapter: !!chapter,
-      chapterId: chapter?.id,
-      hasParentChapter: !!parentChapter,
-    });
-    
+
     if (chapter && editor) {
       const chapterContent = chapter.contentHtml || chapter.content || '';
       const rawEpigraph = chapter.epigraph;
@@ -625,14 +614,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       // Determine if this is effectively an empty/new chapter (no meaningful text)
       const plainText = (chapterContent || '').replace(/<[^>]+>/g, '').trim();
       const isNewOrEmptyChapter = !chapterContent || !plainText;
-      console.log('[ChapterEditor] Content load:', {
-        chapterId: chapter?.id,
-        isSubchapter: !!parentChapter,
-        rawChapterContentLength: (chapterContent || '').length,
-        plainTextLength: plainText.length,
-        isNewOrEmptyChapter,
-      });
-      
+
       // Only set content if it's different from what's currently in the editor
       const currentContent = editor.getHTML();
       let processedContent = chapterContent; // Title is now part of content, don't prepend it
@@ -663,17 +645,11 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         if (isNewOrEmptyChapter && !isSpecialPage) {
           processedContent = `<h${headingLevel}></h${headingLevel}>`;
           createdDefaultHeading = true;
-          console.log('[ChapterEditor] Initializing new chapter with default heading', {
-            headingLevel,
-            processedContent,
-          });
+
         } else if (isNewOrEmptyChapter && isSpecialPage) {
           // For special pages, start with empty paragraph instead of heading
           processedContent = '<p></p>';
-          console.log('[ChapterEditor] Initializing special page without default heading', {
-            isFirstPage: chapter?.isFirstPage,
-            isCover: chapter?.isCover,
-          });
+
         }
         
         // Mark that we're programmatically setting content
@@ -746,7 +722,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                 .run();
               setActiveFormats(prev => ({ ...prev, isHeading: true }));
             } catch (e) {
-              console.warn('[ChapterEditor] Failed to set cursor in default heading', e);
             }
           }
         }
@@ -801,21 +776,14 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     } else if (parentChapter && editor) {
       // New subchapter: start with an empty heading (h4) and place cursor inside
       const currentContent = editor.getHTML();
-      console.log('[ChapterEditor] Subchapter content init:', {
-        parentChapterId: parentChapter?.id,
-        currentContentLength: currentContent.length,
-      });
+
       if (currentContent !== '') {
         setEpigraph('');
         setEntityVersion(0);
         
         const headingLevel = 4;
         const defaultContent = `<h${headingLevel}></h${headingLevel}>`;
-        console.log('[ChapterEditor] Initializing new subchapter with default heading', {
-          headingLevel,
-          defaultContent,
-        });
-        
+
         // Mark that we're programmatically setting content
         isSettingContentRef.current = true;
         lastSetContentRef.current = defaultContent;
@@ -842,7 +810,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               .run();
             setActiveFormats(prev => ({ ...prev, isHeading: true }));
           } catch (e) {
-            console.warn('[ChapterEditor] Failed to set cursor in new subchapter heading', e);
           }
         }
         
@@ -854,11 +821,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
     } else if (!chapter && !parentChapter && editor) {
       // Brand-new chapter created via "Add chapter" (no chapter object yet)
       const currentContent = editor.getHTML();
-      console.log('[ChapterEditor] New root chapter init:', {
-        currentContentLength: currentContent.length,
-        currentContent,
-      });
-      
+
       // Only auto-initialize if editor is effectively empty
       if (!currentContent || currentContent === '<p></p>' || currentContent === '<p><br></p>') {
         const headingLevel = 3;
@@ -889,7 +852,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
               .run();
             setActiveFormats(prev => ({ ...prev, isHeading: true }));
           } catch (e) {
-            console.warn('[ChapterEditor] Failed to set cursor in new root chapter heading', e);
           }
         }
         
@@ -1230,7 +1192,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         setAutosaveStatus('Permission denied.');
         alert('Your device is not whitelisted for editor access. Please sign in with an allowed email to whitelist this device.');
       } else {
-        console.error('Save failed', err);
         setAutosaveStatus('Save failed.');
         alert(err?.message || 'Failed to save changes. Please try again.');
       }
@@ -1547,7 +1508,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         attrs: { src: downloadURL, alt: '' },
       }).run();
     } catch (error) {
-      console.error('Error uploading inline image:', error);
     } finally {
       setUploadingImage(false);
       // Reset input
@@ -1815,7 +1775,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
 
   const handleInsertFootnote = () => {
     if (!editor) {
-      console.warn('Editor not available');
       return;
     }
     
@@ -1855,7 +1814,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       
       refreshToolbarState();
     } catch (error) {
-      console.error('Error inserting footnote:', error);
     }
   };
 
@@ -1914,7 +1872,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         refreshToolbarState();
       }
     } catch (error) {
-      console.error('Error converting text to footnote:', error);
     }
   };
 
@@ -1973,7 +1930,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         refreshToolbarState();
       }, 100);
     } catch (err) {
-      console.error('Video upload failed', err);
       alert(err.message || 'Video upload failed. Please try again.');
     } finally {
       setUploadingVideo(false);
@@ -2010,7 +1966,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         refreshToolbarState();
       }
     } catch (error) {
-      console.error('Error toggling video mode:', error);
     }
   };
 
@@ -2064,7 +2019,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       
       refreshToolbarState();
     } catch (err) {
-      console.error('Background video upload failed', err);
       alert(err.message || 'Video upload failed. Please try again.');
     } finally {
       setUploadingVideo(false);
@@ -2357,7 +2311,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       setUploadingFieldNotes(false);
       setImageUploadProgress(0);
     } catch (err) {
-      console.error('Failed to insert field notes:', err);
       alert('Failed to upload image: ' + err.message);
       setUploadingFieldNotes(false);
       setImageUploadProgress(0);
@@ -2389,7 +2342,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       
       refreshToolbarState();
     } catch (err) {
-      console.error('Image upload failed', err);
       alert(err.message || 'Image upload failed. Please try again.');
     } finally {
       setUploadingImage(false);
@@ -2562,7 +2514,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       });
                       setPageBorderImageUrl(url);
                     } catch (err) {
-                      console.error('Border image upload failed', err);
                       alert(err?.message || 'Nalaganje slike okvirja je spodletelo.');
                     } finally {
                       setUploadingImage(false);
@@ -2666,7 +2617,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                             karaokeData = JSON.parse(decodeURIComponent(karaokeDataAttr));
                             wordTimings = karaokeData.wordTimings || karaokeData.timings || [];
                           } catch (e) {
-                            console.error('Failed to parse karaoke data:', e);
                           }
                         }
                       }
@@ -2685,7 +2635,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                               found = true;
                               return false; // Stop traversal
                             } catch (e) {
-                              console.error('Failed to parse karaoke timings:', e);
                             }
                           }
                         }
@@ -2706,9 +2655,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       // Trigger download
                       try {
                         a.click();
-                        console.log('Download triggered for', wordTimings.length, 'word timings');
                       } catch (err) {
-                        console.error('Download failed:', err);
                         alert('Download failed. Please check browser console for details.');
                       }
                       
@@ -2717,7 +2664,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                         URL.revokeObjectURL(url);
                       }, 100);
                     } else {
-                      console.log('No word timings found. karaokeData:', karaokeData, 'wordTimings:', wordTimings);
                       alert('No karaoke block found. Please select or create a karaoke block first.');
                     }
                   }}
@@ -2948,7 +2894,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                   className="toolbar-btn epigraph-btn"
                   type="button"
                   onClick={() => {
-                    console.log('[Epigraph] Opening epigraph dialog');
                     const current = epigraph && typeof epigraph === 'object'
                       ? epigraph
                       : { text: '', author: '', align: 'center' };
@@ -3046,7 +2991,6 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                       });
                       setBackgroundImageUrl(url);
                     } catch (err) {
-                      console.error('Background image upload failed', err);
                       alert(err?.message || 'Nalaganje slike ozadja je spodletelo.');
                     } finally {
                       setUploadingImage(false);

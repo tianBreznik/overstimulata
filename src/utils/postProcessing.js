@@ -50,7 +50,6 @@ const applyHyphenationToHTML = (html) => {
     // No karaoke blocks, hyphenate entire content
     return hyphenateSync(html);
   } catch (error) {
-    console.warn('[Hyphenation] Error applying hyphenation:', error);
     return html;
   }
 };
@@ -87,7 +86,6 @@ export const verifyAndFixPageOrder = (newPages) => {
   const coverPageIndex = newPages.findIndex(p => p?.isCover && !p?.isFirstPage);
   
   if (firstPageIndex !== -1 && firstPageIndex !== 0) {
-    console.warn('[PageOrder] First page is not at position 0! Moving it.', { firstPageIndex });
     const firstPage = newPages[firstPageIndex];
     newPages.splice(firstPageIndex, 1);
     newPages.unshift(firstPage);
@@ -95,14 +93,12 @@ export const verifyAndFixPageOrder = (newPages) => {
   
   // Verify cover page is after first page (if both exist)
   if (coverPageIndex !== -1 && firstPageIndex !== -1 && coverPageIndex !== 1) {
-    console.warn('[PageOrder] Cover page is not after first page! Moving it.', { coverPageIndex, firstPageIndex });
     const coverPage = newPages[coverPageIndex];
     newPages.splice(coverPageIndex, 1);
     // Insert after first page (position 1)
     newPages.splice(1, 0, coverPage);
   } else if (coverPageIndex !== -1 && firstPageIndex === -1 && coverPageIndex !== 0) {
     // No first page, cover should be first
-    console.warn('[PageOrder] Cover page is not first! Moving it.', { coverPageIndex });
     const coverPage = newPages[coverPageIndex];
     newPages.splice(coverPageIndex, 1);
     newPages.unshift(coverPage);
@@ -115,18 +111,7 @@ export const verifyAndFixPageOrder = (newPages) => {
  * Finalize pages: calculate totalPages and verify order
  */
 export const finalizePages = (newPages) => {
-  console.log('[PageOrder] Setting pages, total:', newPages.length);
-  console.log('[PageOrder] First 5 pages:', newPages.slice(0, 5).map((p, i) => ({
-    index: i,
-    isFirstPage: p.isFirstPage,
-    isCover: p.isCover,
-    isVideo: p.isVideo,
-    isEpigraph: p.isEpigraph,
-    chapterIndex: p.chapterIndex,
-    pageIndex: p.pageIndex,
-    chapterId: p.chapterId
-  })));
-  
+
   const pagesWithTotals = calculateTotalPagesPerChapter(newPages);
   const orderedPages = verifyAndFixPageOrder(pagesWithTotals);
   
@@ -139,14 +124,10 @@ export const finalizePages = (newPages) => {
 export const applyHyphenationToPages = (newPages, setPages) => {
   const applyHyphenationBatch = () => {
     setPages(prevPages => {
-      console.log('[Hyphenation] Applying hyphenation, prevPages.length:', prevPages.length, 'newPages.length:', newPages.length);
       
       // Only apply if pages haven't changed (avoid race conditions)
       if (prevPages.length !== newPages.length) {
-        console.warn('[Hyphenation] Page count mismatch, skipping hyphenation', {
-          prevLength: prevPages.length,
-          newLength: newPages.length
-        });
+
         return prevPages;
       }
       
@@ -157,7 +138,6 @@ export const applyHyphenationToPages = (newPages, setPages) => {
       });
       
       if (orderChanged) {
-        console.warn('[Hyphenation] Page order changed, skipping hyphenation');
         return prevPages;
       }
       
@@ -176,7 +156,6 @@ export const applyHyphenationToPages = (newPages, setPages) => {
         };
       });
       
-      console.log('[Hyphenation] Hyphenation complete, returning', hyphenatedPages.length, 'pages');
       return hyphenatedPages;
     });
   };

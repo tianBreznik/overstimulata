@@ -15,7 +15,6 @@ export const getDeviceId = () => {
   }
   
   // Log device ID to console for whitelist setup
-  console.log('Device ID:', deviceId);
   
   return deviceId;
 };
@@ -45,7 +44,6 @@ const getCachedAuth = () => {
       }
     }
   } catch (e) {
-    console.warn('[DeviceAuth] Failed to read cache', e);
   }
   return null;
 };
@@ -56,7 +54,6 @@ const setCachedAuth = (deviceId, isAuthorized) => {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ deviceId, isAuthorized }));
     localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
   } catch (e) {
-    console.warn('[DeviceAuth] Failed to write cache', e);
   }
 };
 
@@ -68,7 +65,6 @@ const fetchWhitelistFromFirestore = async () => {
     const whitelist = snapshot.docs.map(doc => doc.id); // Use document ID as device ID
     return whitelist;
   } catch (error) {
-    console.error('[DeviceAuth] Failed to fetch whitelist from Firestore', error);
     return null;
   }
 };
@@ -79,7 +75,6 @@ const checkFirestoreWhitelist = async (deviceId) => {
     const deviceDoc = await getDoc(doc(db, 'editorWhitelist', deviceId));
     return deviceDoc.exists();
   } catch (error) {
-    console.error('[DeviceAuth] Failed to check Firestore whitelist', error);
     return false;
   }
 };
@@ -149,8 +144,6 @@ export const addDeviceToWhitelist = async (deviceId) => {
     
     return true;
   } catch (error) {
-    console.error('[DeviceAuth] Failed to add device to whitelist', error);
-    console.error('[DeviceAuth] Note: Client-side writes are blocked by Firestore security rules for security');
     return false;
   }
 };

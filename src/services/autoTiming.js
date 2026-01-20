@@ -38,12 +38,10 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
                        /\.(mp3|wav|m4a|ogg|webm|flac|aac|mp4|mov|avi)$/i.test(audioSource.name);
     
     if (!isSupported && fileType) {
-      console.warn(`Audio file type "${fileType}" may not be supported by Deepgram`);
     }
     
     // Verify file is readable (not corrupted)
     if (audioSource.size > 0 && audioSource.size < 100) {
-      console.warn('Audio file is very small, may be corrupted');
     }
     
     const formData = new FormData();
@@ -51,12 +49,6 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
     formData.append('audio', audioSource, audioSource.name || 'audio');
 
     // Log file info for debugging (without logging the actual file data)
-    console.log('[Deepgram] Uploading audio file:', {
-      name: audioSource.name,
-      type: audioSource.type,
-      size: audioSource.size,
-      lastModified: audioSource.lastModified
-    });
 
     response = await fetch(`${DEEPGRAM_API_URL}?${apiParams.toString()}`, {
       method: 'POST',
@@ -87,7 +79,6 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
     let errorDetails = null;
     try {
       const errorData = await response.json();
-      console.error('[Deepgram API Error]', errorData);
       
       if (errorData.err_msg) {
         errorMessage = errorData.err_msg;
@@ -105,13 +96,11 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
       // If JSON parsing fails, try to get text response
       try {
         const textResponse = await response.text();
-        console.error('[Deepgram API Error - Text Response]', textResponse);
         if (textResponse) {
           errorMessage = `${errorMessage}: ${textResponse}`;
         }
       } catch (textErr) {
         // If text parsing also fails, use the status text
-        console.error('[Deepgram API Error - Could not parse response]', e, textErr);
       }
     }
     
@@ -133,7 +122,6 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
         try {
           console.groupCollapsed('[Deepgram] Raw transcription');
           if (alternative.transcript) {
-            console.log('Transcript:', alternative.transcript);
           }
           console.groupEnd();
 
@@ -147,7 +135,6 @@ export async function generateWordTimingsWithDeepgram(audioSource, text) {
           })));
           console.groupEnd();
         } catch (err) {
-          console.warn('Failed to log Deepgram transcription', err);
         }
       }
 

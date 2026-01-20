@@ -143,7 +143,6 @@ export async function uploadImageToStorage(file, { onProgress, compress = true }
     
     // Log storage bucket for debugging
     const bucket = storage.app?.options?.storageBucket;
-    console.log('Storage bucket:', bucket);
     if (!bucket) {
       throw new Error('Storage bucket is not configured. Check VITE_FIREBASE_STORAGE_BUCKET in .env.local');
     }
@@ -189,7 +188,6 @@ export async function uploadImageToStorage(file, { onProgress, compress = true }
           onProgress(progress);
         },
         (error) => {
-          console.error('Upload error:', error);
           throw error;
         }
       );
@@ -197,17 +195,11 @@ export async function uploadImageToStorage(file, { onProgress, compress = true }
 
     // Wait for upload to complete
     const snapshot = await uploadTask;
-    console.log('Image upload completed:', snapshot.metadata.fullPath);
 
     // Get download URL
     const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('Image download URL:', downloadURL);
     return downloadURL;
   } catch (error) {
-    console.error('Image upload failed:', error);
-    console.error('Error code:', error.code);
-    console.error('Error message:', error.message);
-    console.error('Storage bucket:', storage.app.options.storageBucket);
     
     // Provide more helpful error messages
     if (error.code === 'storage/unauthorized' || error.code === 'storage/unknown') {
@@ -257,7 +249,6 @@ export async function uploadVideoToStorage(file, { onProgress } = {}) {
           onProgress(progress);
         },
         (error) => {
-          console.error('Upload error:', error);
           throw error;
         }
       );
@@ -265,14 +256,11 @@ export async function uploadVideoToStorage(file, { onProgress } = {}) {
 
     // Wait for upload to complete
     const snapshot = await uploadTask;
-    console.log('Video upload completed:', snapshot.metadata.fullPath);
 
     // Get download URL
     const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('Video download URL:', downloadURL);
     return downloadURL;
   } catch (error) {
-    console.error('Video upload failed:', error);
     
     // Provide more helpful error messages
     if (error.code === 'storage/unauthorized' || error.code === 'storage/unknown') {

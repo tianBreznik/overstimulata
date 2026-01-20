@@ -23,7 +23,6 @@ export const handleFieldNotesElement = ({
                   '';
   
   if (!imageUrl) {
-    console.warn('[FieldNotes] No image URL found for field notes block:', fieldNotesId);
     return null;
   }
   

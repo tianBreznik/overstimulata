@@ -102,7 +102,6 @@ export const assignLetterTimingsToChars = (text, wordTimings = []) => {
  */
 export const ensureWordSliceInitialized = async (karaokeSources, karaokeId, sliceElement, startChar, endChar) => {
   if (!sliceElement || !sliceElement.isConnected) {
-    console.warn('[[INIT]] Cannot initialize slice - not connected');
     return false;
   }
 
@@ -112,7 +111,6 @@ export const ensureWordSliceInitialized = async (karaokeSources, karaokeId, slic
 
   const source = karaokeSources[karaokeId];
   if (!source) {
-    console.warn('[[INIT]] Cannot initialize slice - no source found');
     return false;
   }
 
@@ -125,7 +123,6 @@ export const ensureWordSliceInitialized = async (karaokeSources, karaokeId, slic
   // Normalize apostrophes to match the original text format used in tokenization
   text = text.replace(/'/g, "'");
   if (!text.trim()) {
-    console.warn('[[INIT]] Cannot initialize slice - no text content');
     return false;
   }
 

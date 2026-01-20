@@ -47,7 +47,7 @@ export const KaraokeBlock = Node.create({
                 text: decoded.text || text,
               };
             } catch (e) {
-              console.warn('Failed to parse karaoke data:', e);
+
             }
           }
           
@@ -77,7 +77,7 @@ export const KaraokeBlock = Node.create({
                 text: decoded.text || text,
               };
             } catch (e) {
-              console.warn('Failed to parse karaoke data:', e);
+
             }
           }
           
@@ -222,7 +222,7 @@ export const Highlight = Mark.create({
           if (styleAttr.includes('background-color')) {
             const bgColorMatch = styleAttr.match(/background-color\s*:\s*([^;]+)/i);
             if (bgColorMatch) {
-              console.log('[Highlight] Found background-color in span:', bgColorMatch[1].trim(), 'full style:', styleAttr);
+
               return { color: bgColorMatch[1].trim() };
             }
           }
@@ -311,7 +311,7 @@ export const TextColor = Mark.create({
           
           // Accept ANY color value as-is (white, black, rgb, hex, named colors, etc.)
           if (color && color.trim() !== '') {
-            console.log('[TextColor] Found text color in mark:', color, 'from style:', styleAttr);
+
             return { color: color.trim() };
           }
           return false;
@@ -323,14 +323,13 @@ export const TextColor = Mark.create({
           // Get color from style attribute or inline style
           // This MUST work even if the span also has background-color (for Highlight mark)
           const styleAttr = node.getAttribute('style') || '';
-          console.log('[TextColor] Checking span with style:', styleAttr);
-          
+
           // Parse style string more carefully to avoid matching "background-color"
           let color = null;
           if (styleAttr) {
             // Split by semicolon and find the "color:" property (not "background-color:")
             const styleParts = styleAttr.split(';').map(s => s.trim()).filter(s => s);
-            console.log('[TextColor] Style parts:', styleParts);
+
             const colorPart = styleParts.find(part => {
               const normalized = part.trim().toLowerCase();
               return normalized.startsWith('color:') && !normalized.startsWith('background-color:');
@@ -340,7 +339,7 @@ export const TextColor = Mark.create({
               const colonIndex = colorPart.indexOf(':');
               if (colonIndex !== -1) {
                 color = colorPart.substring(colonIndex + 1).trim();
-                console.log('[TextColor] Found color in span:', color);
+
               }
             }
           }
@@ -349,7 +348,7 @@ export const TextColor = Mark.create({
           if (!color) {
             color = node.style?.color || node.getAttribute('data-color');
             if (color) {
-              console.log('[TextColor] Found color from computed style or data attribute:', color);
+
             }
           }
           
@@ -357,10 +356,10 @@ export const TextColor = Mark.create({
           // Accept ANY color value as-is (white, black, rgb, hex, named colors, etc.)
           // This MUST work even if the span also has background-color
           if (color && color.trim() !== '') {
-            console.log('[TextColor] Returning color for span:', color.trim());
+
             return { color: color.trim() };
           }
-          console.log('[TextColor] No color found in span, returning false');
+
           return false;
         },
       },
@@ -783,13 +782,7 @@ export const Video = Node.create({
         attrs['data-target-page'] = targetPage.toString();
       }
     }
-    
-    console.log('[Video renderHTML] Rendering video:', {
-      'node.attrs': node?.attrs,
-      'HTMLAttributes': HTMLAttributes,
-      'final attrs': attrs
-    });
-    
+
     return ['video', attrs];
   },
 });

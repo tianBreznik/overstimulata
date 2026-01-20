@@ -328,12 +328,9 @@ export const processSplitResult = ({
   } else {
     if (isDesktop) {
       const elementText = element.textContent || '';
-      console.warn('[processSplitResult] Desktop - Second part is null/falsy for element:', {
-        tag: element.tagName,
-        textLength: elementText.length
-      });
-      console.warn('[processSplitResult] Desktop - Original element TEXT:', JSON.stringify(elementText));
-      console.warn('[processSplitResult] Desktop - Original element HTML:', JSON.stringify(element.outerHTML));
+
+
+
     }
   }
 };
@@ -446,15 +443,7 @@ export const paginateElement = ({
   if (isDesktop) {
     const elementText = element.textContent || '';
     const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
-    console.log('[Space] Before processing element:', {
-      elementText: textPreview,
-      availableHeight: Math.round(baseAvailableHeight),
-      usedHeight: Math.round(currentPageContentHeight),
-      remainingSpace: Math.round(remainingContentHeight),
-      elementFits,
-      totalContentHeight: Math.round(totalContentHeight),
-      elementsCount: currentPageElements.length
-    });
+
   }
   
   // STEP 4: Handle element based on whether it fits and if it can be split
@@ -528,14 +517,7 @@ export const paginateElement = ({
       if (isDesktop) {
         const elementText = element.textContent || '';
         const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
-        console.log('[Space] Final check (with padding):', {
-          elementText: textPreview,
-          finalTotalHeight: Math.round(finalTotalHeight),
-          totalAvailableHeight: Math.round(totalAvailableHeight),
-          overflowAmount: Math.round(overflowAmount),
-          baseAvailableHeight: Math.round(baseAvailableHeight),
-          finalReservedSpace: Math.round(finalReservedSpace)
-        });
+
       }
       
       // Check if we should split
@@ -603,13 +585,7 @@ export const paginateElement = ({
           const remainingSpace = baseAvailableHeight - usedHeight;
           const elementText = element.textContent || '';
           const textPreview = elementText.substring(0, 100) + (elementText.length > 100 ? '...' : '');
-          console.log('[Space] After adding element:', {
-            elementText: textPreview,
-            usedHeight: Math.round(usedHeight),
-            availableHeight: Math.round(baseAvailableHeight),
-            remainingSpace: Math.round(remainingSpace),
-            elementsCount: currentPageElements.length
-          });
+
         }
       }
     } else {
@@ -682,13 +658,7 @@ export const paginateElement = ({
               tempFirst.innerHTML = first || '';
               const firstText = tempFirst.textContent || '';
               const firstPreview = firstText.substring(0, 100) + (firstText.length > 100 ? '...' : '');
-              console.log('[Space] Before finalizing page (split):', {
-                firstPartText: firstPreview,
-                usedHeight: Math.round(usedHeight),
-                availableHeight: Math.round(baseAvailableHeight),
-                remainingSpace: Math.round(remainingSpace),
-                elementsCount: currentPageElements.length
-              });
+
             }
             
             // Finalize current page
@@ -719,13 +689,7 @@ export const paginateElement = ({
                 tempSecond.innerHTML = second || '';
                 const secondText = tempSecond.textContent || '';
                 const secondPreview = secondText.substring(0, 100) + (secondText.length > 100 ? '...' : '');
-                console.log('[Space] After adding second part to new page:', {
-                  secondPartText: secondPreview,
-                  usedHeight: Math.round(usedHeight),
-                  availableHeight: Math.round(baseAvailableHeight),
-                  remainingSpace: Math.round(remainingSpace),
-                  elementsCount: currentPageElements.length
-                });
+
               }
             }
           } else {

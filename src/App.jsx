@@ -86,7 +86,7 @@ function App() {
       setLoadError('');
       return withChildren;
     } catch (e) {
-      console.error('[Firestore] Load error', e);
+
       setLoadError(e?.message || 'Failed to load data');
       return null;
     } finally {
@@ -171,7 +171,7 @@ function App() {
         });
       }
     } catch (err) {
-      console.error('Failed to load the latest content for editing', err);
+
       alert('Could not load the latest version. Please refresh and try again.');
     }
   };
@@ -318,7 +318,7 @@ function App() {
               try {
                 await reorderChapters(BOOK_ID, orderedIds);
               } catch (err) {
-                console.error('Failed to reorder chapters', err);
+
               }
             }}
             onOpenSettings={() => setShowSetup(true)}

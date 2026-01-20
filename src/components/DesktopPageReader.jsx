@@ -81,60 +81,76 @@ export const DesktopPageReader = ({
     return result;
   }, [pages]);
   
+  // Cache page element references to reduce DOM queries
+  const pageElementCacheRef = useRef(new Map());
+  
   // Track most centered/visible page for progress bar
   useEffect(() => {
     if (pagesWithTOC.length === 0) return;
     
     // Find most centered page based on scroll position
+    let rafId = null;
     const handleScroll = () => {
-      if (pagesWithTOC.length === 0) return;
+      // Throttle with requestAnimationFrame for better performance
+      if (rafId !== null) return;
       
-      // Calculate which page is most centered in viewport
-      const viewportCenter = window.innerHeight / 2;
-      let minDistance = Infinity;
-      let mostCenteredPage = null;
-      
-      let mostCenteredIndex = null;
-      // Track ALL pages for top bar (including first/cover/TOC)
-      let mostCenteredIndexForTopBar = null;
-      let minDistanceForTopBar = Infinity;
-      
-      pagesWithTOC.forEach((page, index) => {
-        const pageElement = document.getElementById(`pdf-page-${index}`);
-        if (!pageElement) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        if (pagesWithTOC.length === 0) return;
         
-        const pageSheet = pageElement.querySelector('.page-sheet');
-        if (!pageSheet) return;
+        // Calculate which page is most centered in viewport
+        const viewportCenter = window.innerHeight / 2;
+        let minDistance = Infinity;
+        let mostCenteredPage = null;
         
-        const rect = pageSheet.getBoundingClientRect();
+        let mostCenteredIndex = null;
+        // Track ALL pages for top bar (including first/cover/TOC)
+        let mostCenteredIndexForTopBar = null;
+        let minDistanceForTopBar = Infinity;
         
-        // Check if page is visible in viewport (at least partially)
-        if (rect.bottom >= 0 && rect.top <= window.innerHeight) {
-          const pageCenter = rect.top + rect.height / 2;
-          const distanceFromCenter = Math.abs(pageCenter - viewportCenter);
-          
-          // Calculate how much of the page is visible
-          const visibleTop = Math.max(0, rect.top);
-          const visibleBottom = Math.min(window.innerHeight, rect.bottom);
-          const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-          const visibilityRatio = visibleHeight / Math.min(rect.height, window.innerHeight);
-          
-          // Track ALL pages for top bar (including first/cover/TOC)
-          if (visibilityRatio >= 0.3 && distanceFromCenter < minDistanceForTopBar) {
-            minDistanceForTopBar = distanceFromCenter;
-            mostCenteredIndexForTopBar = index;
-          }
-          
-          // Only consider regular pages (not first, cover, or TOC) for progress bar
-          if (!page.isFirstPage && !page.isCover && !page.isTOC) {
-            if (visibilityRatio >= 0.3 && distanceFromCenter < minDistance) {
-              minDistance = distanceFromCenter;
-              mostCenteredPage = page;
-              mostCenteredIndex = index;
+        pagesWithTOC.forEach((page, index) => {
+          // Use cached element reference if available
+          let pageElement = pageElementCacheRef.current.get(index);
+          if (!pageElement) {
+            pageElement = document.getElementById(`pdf-page-${index}`);
+            if (pageElement) {
+              pageElementCacheRef.current.set(index, pageElement);
             }
           }
-        }
-      });
+          if (!pageElement) return;
+          
+          const pageSheet = pageElement.querySelector('.page-sheet');
+          if (!pageSheet) return;
+          
+          const rect = pageSheet.getBoundingClientRect();
+          
+          // Check if page is visible in viewport (at least partially)
+          if (rect.bottom >= 0 && rect.top <= window.innerHeight) {
+            const pageCenter = rect.top + rect.height / 2;
+            const distanceFromCenter = Math.abs(pageCenter - viewportCenter);
+            
+            // Calculate how much of the page is visible
+            const visibleTop = Math.max(0, rect.top);
+            const visibleBottom = Math.min(window.innerHeight, rect.bottom);
+            const visibleHeight = Math.max(0, visibleBottom - visibleTop);
+            const visibilityRatio = visibleHeight / Math.min(rect.height, window.innerHeight);
+            
+            // Track ALL pages for top bar (including first/cover/TOC)
+            if (visibilityRatio >= 0.3 && distanceFromCenter < minDistanceForTopBar) {
+              minDistanceForTopBar = distanceFromCenter;
+              mostCenteredIndexForTopBar = index;
+            }
+            
+            // Only consider regular pages (not first, cover, or TOC) for progress bar
+            if (!page.isFirstPage && !page.isCover && !page.isTOC) {
+              if (visibilityRatio >= 0.3 && distanceFromCenter < minDistance) {
+                minDistance = distanceFromCenter;
+                mostCenteredPage = page;
+                mostCenteredIndex = index;
+              }
+            }
+          }
+        });
       
       // Update top bar page index (ALL pages) - only if it changed to prevent unnecessary re-renders
       if (mostCenteredIndexForTopBar !== null && mostCenteredIndexForTopBar !== prevTopBarPageIndexRef.current) {
@@ -159,6 +175,7 @@ export const DesktopPageReader = ({
           setMostVisiblePageIndex(null);
         }
       }
+      });
     };
     
     const scrollContainer = document.querySelector('.pdf-viewer');
@@ -166,17 +183,23 @@ export const DesktopPageReader = ({
       // Call immediately to set initial state
       handleScroll();
       
-      // Then listen for scroll events
+      // Then listen for scroll events (throttled via requestAnimationFrame in handleScroll)
       scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
       
-      // Also check periodically in case IntersectionObserver misses updates
+      // Also check periodically in case scroll events are missed (throttled via RAF)
       const intervalId = setInterval(handleScroll, 200);
       
       return () => {
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+          rafId = null;
+        }
         if (scrollContainer) {
           scrollContainer.removeEventListener('scroll', handleScroll);
         }
         clearInterval(intervalId);
+        // Clear cache when component unmounts or pages change
+        pageElementCacheRef.current.clear();
       };
     }
   }, [pagesWithTOC]);
@@ -245,17 +268,17 @@ export const DesktopPageReader = ({
   
   // Handler for zoom in (placeholder for now)
   const handleZoomIn = () => {
-    console.log('Zoom in');
+    // Zoom in functionality
   };
   
   // Handler for zoom out (placeholder for now)
   const handleZoomOut = () => {
-    console.log('Zoom out');
+    // Zoom out functionality
   };
   
   // Handler for download (placeholder for now)
   const handleDownload = () => {
-    console.log('Download PDF');
+    // Download PDF functionality
   };
   
   // Initialize karaoke for all pages after render
@@ -269,27 +292,23 @@ export const DesktopPageReader = ({
     // This ensures dangerouslySetInnerHTML content is inserted before we query for slices
     const rafId = requestAnimationFrame(() => {
       // Initialize all pages immediately - don't wait for scroll/visibility
-      console.log('[DesktopPageReader] Initializing karaoke for', pages.length, 'pages');
       
       const initPromises = [];
       
       pages.forEach((page, index) => {
         const pageElement = document.getElementById(`pdf-page-${index}`);
         if (!pageElement) {
-          console.warn('[DesktopPageReader] Page element not found for index', index);
           return;
         }
         
         // The page-sheet is the direct child of pdf-page-wrapper
         const pageSheet = pageElement.querySelector('.page-sheet');
         if (!pageSheet) {
-          console.warn('[DesktopPageReader] Page sheet not found for index', index);
           return;
         }
         
         const pageContent = pageSheet.querySelector('.page-content');
         if (!pageContent) {
-          console.warn('[DesktopPageReader] Page content not found for index', index);
           return;
         }
         
@@ -297,7 +316,6 @@ export const DesktopPageReader = ({
         
         // Only initialize once per page
         if (initializedPagesRef.current.has(pageKey)) {
-          console.log('[DesktopPageReader] Page already initialized:', pageKey);
           return;
         }
         
@@ -306,7 +324,6 @@ export const DesktopPageReader = ({
         
         // Check for karaoke slices
         const slices = pageContent.querySelectorAll('.karaoke-slice');
-        console.log('[DesktopPageReader] Found', slices.length, 'karaoke slices on page', index);
         
         if (slices.length === 0) {
           // No slices on this page, but still mark as initialized and observe
@@ -317,19 +334,16 @@ export const DesktopPageReader = ({
         
         // Check if already initialized (might have been initialized from ref callback)
         if (initializedPagesRef.current.has(pageKey)) {
-          console.log('[DesktopPageReader] Page already initialized from ref callback:', pageKey);
           return;
         }
         
         // Initialize karaoke slices immediately (don't wait for scroll)
         const initPromise = initializeKaraokeSlices(pageContent).then(() => {
-          console.log('[DesktopPageReader] Initialized karaoke for page', index);
           initializedPagesRef.current.add(pageKey);
           
           // Observe page for visibility (desktop) - for pause/resume on scroll
           observePage(pageSheet);
         }).catch((err) => {
-          console.error('[DesktopPageReader] Error initializing karaoke for page', index, err);
         });
         
         initPromises.push(initPromise);
@@ -337,7 +351,6 @@ export const DesktopPageReader = ({
       
       // Wait for all initializations to complete
       Promise.all(initPromises).then(() => {
-        console.log('[DesktopPageReader] All karaoke pages initialized');
       });
     });
     
@@ -439,7 +452,8 @@ export const DesktopPageReader = ({
         // Set HTML content (without images)
         node.innerHTML = htmlWithoutImages;
         
-        // Insert images as React-managed elements
+        // Batch DOM updates: collect all image elements first, then insert them
+        const imageReplacements = [];
         images.forEach((imgData) => {
           const imgId = `${pageKey}-${imgData.id}`;
           const placeholder = node.querySelector(`[data-image-placeholder="${imgData.id}"]`);
@@ -452,6 +466,7 @@ export const DesktopPageReader = ({
             if (imgData.dataInline) img.setAttribute('data-inline', imgData.dataInline);
             if (imgData.className) img.className = imgData.className;
             if (imgData.style) img.setAttribute('style', imgData.style);
+            // Preserve dimensions to prevent layout shifts
             if (imgData.width) img.setAttribute('width', imgData.width);
             if (imgData.height) img.setAttribute('height', imgData.height);
             img.setAttribute('loading', 'eager');
@@ -460,14 +475,21 @@ export const DesktopPageReader = ({
             // Force image to stay rendered - use CSS classes instead of inline styles to prevent repaints
             img.classList.add('pdf-image-stable');
             
-            // Preload the image and keep reference
-            const preloadImg = new Image();
-            preloadImg.src = imgData.src;
-            imageRefsRef.current.set(imgId, { domImg: img, preloadImg });
-            
-            placeholder.parentNode?.replaceChild(img, placeholder);
+            imageReplacements.push({ placeholder, img, imgId });
           }
         });
+        
+        // Perform all DOM replacements in one batch using DocumentFragment for better performance
+        if (imageReplacements.length > 0) {
+          // Use requestAnimationFrame to batch DOM updates for smoother rendering
+          requestAnimationFrame(() => {
+            imageReplacements.forEach(({ placeholder, img, imgId }) => {
+              placeholder.parentNode?.replaceChild(img, placeholder);
+              // Store reference (no redundant preload needed - eager loading already handles it)
+              imageRefsRef.current.set(imgId, { domImg: img });
+            });
+          });
+        }
         
         // Mark content as set IMMEDIATELY to prevent re-execution
         pageContentSetRef.current.set(pageKey, true);
@@ -502,13 +524,11 @@ export const DesktopPageReader = ({
                 
                 // Initialize karaoke slices
                 initializeKaraokeSlices(node).then(() => {
-                  console.log('[DesktopPageReader] Initialized karaoke from ref callback for', pageKey);
                   // Mark as initialized to prevent duplicate initialization
                   initializedPagesRef.current.add(simplePageKey);
                   // Observe page for visibility (desktop) - for pause/resume on scroll
                   observePage(pageSheet);
                 }).catch((err) => {
-                  console.error('[DesktopPageReader] Error initializing karaoke from ref callback', pageKey, err);
                 });
               }
             }
@@ -787,18 +807,15 @@ export const DesktopPageReader = ({
     });
   }, [pagesWithTOC, renderPage]);
   
-  console.log('[DesktopPageReader] Rendering with', pages.length, 'pages');
   
   // Early return AFTER all hooks
   if (pages.length === 0) {
-    console.log('[DesktopPageReader] No pages, showing loading');
     return (
       <div className="page-reader-loading" />
     );
   }
 
   // Render pages vertically (stacked one after another)
-  console.log('[DesktopPageReader] Rendering', pagesWithTOC.length, 'pages vertically (including TOC)');
   
   return (
     <>

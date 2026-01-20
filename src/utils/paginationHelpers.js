@@ -158,7 +158,6 @@ export const applyHyphenationToHTML = (html) => {
     const hyphenated = hyphenateSync(html);
     return hyphenated;
   } catch (error) {
-    console.warn('[Hyphenation] Error applying hyphenation:', error);
     return html;
   }
 };

@@ -44,9 +44,9 @@ export const EditorSetup = ({ onClose }) => {
     try {
       const allowed = await isEmailAllowed(email);
       setEmailAllowed(allowed);
-      console.log('[EditorSetup] Email check result:', email, allowed);
+
     } catch (error) {
-      console.error('[EditorSetup] Failed to check email status', error);
+
       setEmailAllowed(false);
     }
   };
