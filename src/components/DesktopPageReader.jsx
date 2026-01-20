@@ -756,7 +756,7 @@ export const DesktopPageReader = ({
       imageRefsRef.current.forEach((_, imgId) => {
         if (imgId.startsWith(key)) {
           imageRefsRef.current.delete(imgId);
-        }
+    }
       });
     });
   }, [pagesWithTOC]);
@@ -786,7 +786,7 @@ export const DesktopPageReader = ({
       );
     });
   }, [pagesWithTOC, renderPage]);
-
+  
   console.log('[DesktopPageReader] Rendering with', pages.length, 'pages');
   
   // Early return AFTER all hooks
@@ -813,26 +813,26 @@ export const DesktopPageReader = ({
         onDownload={handleDownload}
         filename="weird-attachments.pdf"
       />
-      <PDFViewer
-        currentPage={1}
+    <PDFViewer
+      currentPage={1}
         totalPages={pagesWithTOC.length}
-        onPageChange={(pageNum) => {
+      onPageChange={(pageNum) => {
           // Scroll to the page
-          const pageIndex = pageNum - 1;
+        const pageIndex = pageNum - 1;
           const page = pagesWithTOC[pageIndex];
-          if (page) {
+        if (page) {
             const pageElement = document.getElementById(`pdf-page-${pageIndex}`);
             if (pageElement) {
               pageElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
           }
-        }}
-        filename="weird-attachments.pdf"
-      >
-        <div className="pdf-pages-container">
+        }
+      }}
+      filename="weird-attachments.pdf"
+    >
+      <div className="pdf-pages-container">
           {renderedPages}
-        </div>
-      </PDFViewer>
+      </div>
+    </PDFViewer>
       {/* Desktop Progress Bar - only show for regular pages */}
       {mostVisiblePage && !mostVisiblePage.isFirstPage && !mostVisiblePage.isCover && !mostVisiblePage.isTOC && chapterProgress > 0 && typeof document !== 'undefined' && createPortal(
         <div className="chapter-progress-bar desktop-progress-bar">

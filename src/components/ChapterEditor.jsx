@@ -2418,7 +2418,7 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       <div className="editor-modal side-panel-modal">
         <button className="close-btn close-top" onClick={onCancel}>✕</button>
         
-            <div className="editor-content">
+        <div className="editor-content">
           <div className="page-frame">
             <div className="editor-toolbar attached">
               <div className="toolbar-buttons">

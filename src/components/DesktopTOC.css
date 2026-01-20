@@ -42,7 +42,7 @@
 }
 
 .desktop-toc-chapter-item.desktop-toc-current {
-  border-bottom: 1px solid #000;
+  /* border-bottom: 1px solid #000; */
 }
 
 .desktop-toc-chapter-item.desktop-toc-current::after {
@@ -52,7 +52,7 @@
   top: 0;
   bottom: 0;
   width: 3px;
-  background-color: #000;
+  /* background-color: #000; */
 }
 
 /* Expand Icon */

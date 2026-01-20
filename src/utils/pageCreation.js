@@ -14,7 +14,7 @@ export const removeEmptyParagraphs = (elements, isStandaloneFirstPage, isDesktop
   if (isDesktop) {
     maxRemovals = 3; // Remove up to 6 empty paragraphs on desktop
   } else {
-    const deviceScreenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1000;
+  const deviceScreenHeight = typeof window !== 'undefined' && window.screen ? window.screen.height : 1000;
     maxRemovals = deviceScreenHeight <= 700 ? 5 : deviceScreenHeight <= 850 ? 1 : 0;
   }
   

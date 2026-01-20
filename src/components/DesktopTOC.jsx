@@ -279,12 +279,79 @@ export const DesktopTOC = ({
     );
   };
 
-  // Filter out special pages (first page, cover)
+  // Get special pages for editor mode
+  const firstPageChapter = chapters.find(c => c.isFirstPage);
+  const coverPageChapter = chapters.find(c => c.isCover);
+  
+  // Filter out special pages from regular chapters list (they're shown separately in editor mode)
   const regularChapters = chapters.filter(c => !c.isFirstPage && !c.isCover);
+
+  // Check if special page is current
+  const isCurrentSpecialPage = (chapter) => {
+    if (!pages || pages.length === 0) return false;
+    const currentPage = pages.find(
+      (p) => p.chapterIndex === currentChapterIndex && p.pageIndex === currentPageIndex
+    );
+    if (!currentPage) return false;
+    return currentPage.chapterId === chapter.id;
+  };
+
+  // Jump to special page
+  const jumpToSpecialPage = (chapter) => {
+    const specialPage = pages.find(p => p.chapterId === chapter.id);
+    if (specialPage) {
+      onJumpToPage(specialPage.chapterIndex, specialPage.pageIndex);
+    }
+  };
 
   return (
     <div className="desktop-toc-page">
       <div className="desktop-toc-content">
+        {/* Special pages for editor mode: First Page and Cover Page */}
+        {isEditor && (
+          <>
+            {firstPageChapter && (
+              <div
+                className={`desktop-toc-chapter-item ${isCurrentSpecialPage(firstPageChapter) ? 'desktop-toc-current' : ''}`}
+                onClick={() => jumpToSpecialPage(firstPageChapter)}
+              >
+                <span className="desktop-toc-chapter-title">{firstPageChapter.title || 'Prva stran'}</span>
+                <div className="desktop-toc-editor-controls">
+                  <button
+                    className="desktop-toc-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onEditChapter) onEditChapter(firstPageChapter);
+                    }}
+                    title="Edit"
+                  >
+                    ✎
+                  </button>
+                </div>
+              </div>
+            )}
+            {coverPageChapter && (
+              <div
+                className={`desktop-toc-chapter-item ${isCurrentSpecialPage(coverPageChapter) ? 'desktop-toc-current' : ''}`}
+                onClick={() => jumpToSpecialPage(coverPageChapter)}
+              >
+                <span className="desktop-toc-chapter-title">{coverPageChapter.title || 'Naslovna stran'}</span>
+                <div className="desktop-toc-editor-controls">
+                  <button
+                    className="desktop-toc-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (onEditChapter) onEditChapter(coverPageChapter);
+                    }}
+                    title="Edit"
+                  >
+                    ✎
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
         {isEditor && onReorderChapters ? (
           <DndContext
             collisionDetection={closestCenter}

@@ -69,20 +69,20 @@ export const EditorSetup = ({ onClose }) => {
           onSuccess={handleLoginSuccess}
         />
       )}
-      <div className="setup-overlay" onClick={onClose}>
-        <div className="setup-modal" onClick={(e) => e.stopPropagation()}>
-          <div className="setup-header">
-            <h2>Editor Setup</h2>
-            <button className="close-btn" onClick={onClose}>×</button>
+    <div className="setup-overlay" onClick={onClose}>
+      <div className="setup-modal" onClick={(e) => e.stopPropagation()}>
+        <div className="setup-header">
+          <h2>Editor Setup</h2>
+          <button className="close-btn" onClick={onClose}>×</button>
+        </div>
+        
+        <div className="setup-content">
+          <div className="status-section">
+            <p className="label">Current Status:</p>
+            <p className={`status ${isEditor ? 'editor' : 'reader'}`}>
+              {isEditor ? '✓ Editor Mode Active' : '✗ Reader Mode'}
+            </p>
           </div>
-          
-          <div className="setup-content">
-            <div className="status-section">
-              <p className="label">Current Status:</p>
-              <p className={`status ${isEditor ? 'editor' : 'reader'}`}>
-                {isEditor ? '✓ Editor Mode Active' : '✗ Reader Mode'}
-              </p>
-            </div>
 
             {user ? (
               <>
@@ -102,10 +102,10 @@ export const EditorSetup = ({ onClose }) => {
                         Try signing out and signing back in to whitelist this device.
                       </p>
                     )}
-                  </div>
-                </div>
+            </div>
+          </div>
 
-                <div className="instructions">
+          <div className="instructions">
                   {isEditor ? (
                     <>
                       <h3>You have editor access!</h3>
@@ -149,15 +149,15 @@ export const EditorSetup = ({ onClose }) => {
               <>
                 <div className="instructions">
                   <h3>Sign in to enable editor mode</h3>
-                  <p className="note">
+            <p className="note">
                     Sign in with an allowed email address. If your email is in the allowed list, 
                     this device will be automatically whitelisted for editor access.
-                  </p>
+            </p>
                 </div>
-
+            
                 <button onClick={() => setShowLogin(true)} className="login-btn">
                   Sign In
-                </button>
+              </button>
               </>
             )}
           </div>

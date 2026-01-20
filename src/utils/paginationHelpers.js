@@ -984,7 +984,7 @@ export const splitTextAtSentenceBoundary = (element, maxHeight, measure, splitTe
       secondRange.setEnd(lastChild, lastChild.textContent.length);
     } else {
       // For element nodes, set end to after the last child
-      secondRange.setEnd(element, element.childNodes.length);
+  secondRange.setEnd(element, element.childNodes.length);
     }
   } else {
     secondRange.setEnd(element, 0);
@@ -1083,6 +1083,11 @@ export const createEmptyPage = (chapter, chapterIndex, chapterPageIndex, hasFiel
     hasFieldNotes: hasFieldNotes,
     content: '',
     footnotes: [],
+    // Special pages can also have per-chapter border frames, same as regular chapters
+    hasBorder: !!chapter.pageBorder,
+    borderImageUrl: chapter.pageBorderImageUrl || null,
+    borderWidth: chapter.pageBorderWidth || null,
+    borderSlicePercent: chapter.pageBorderSlicePercent || null,
     backgroundImageUrl: chapter.backgroundImageUrl || null,
     isFirstPage: chapter.isFirstPage || false,
     isCover: chapter.isCover || false,

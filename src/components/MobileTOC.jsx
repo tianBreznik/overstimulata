@@ -651,15 +651,15 @@ export const MobileTOC = ({
           <div className="mobile-toc-footer">
             {/* Settings button - hidden by default, revealed with triple tap on TOC header */}
             {(showSettingsButton || isEditor) && (
-              <button
-                className="mobile-toc-footer-btn"
-                onClick={() => {
-                  if (onOpenSettings) onOpenSettings();
-                  handleClose();
-                }}
-              >
-                Nastavitve
-              </button>
+            <button
+              className="mobile-toc-footer-btn"
+              onClick={() => {
+                if (onOpenSettings) onOpenSettings();
+                handleClose();
+              }}
+            >
+              Nastavitve
+            </button>
             )}
             {isEditor && (
               <button

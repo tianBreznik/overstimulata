@@ -115,17 +115,17 @@ export const isEditorDeviceSync = () => {
   
   // Fallback to hardcoded list if no cache (for backwards compatibility during migration)
   const FALLBACK_WHITELIST = [
-    'mgjxds3q-1rekdb1eb7y',
-    'mi1jtuuj-9x6z4uj4kh',
-    'mi37kcqh-j4cmiln4r1l',
-    'mi38utyt-9colfarywk7',
-    'mi3iteoy-2j8voox4ec6',
-    'mi3jjwma-qsglzpy5daa',
-    'mi4yemvc-xp6j3uu12x',
-    'miiq366c-exsxgdbmp6m',
-    'mj025jwg-sdmgx7121dc',
-    'mj8ier44-uoqhx79db2n',
-    'mihhv6f0-5rzg6xc3zbq',
+  'mgjxds3q-1rekdb1eb7y',
+  'mi1jtuuj-9x6z4uj4kh',
+  'mi37kcqh-j4cmiln4r1l',
+  'mi38utyt-9colfarywk7',
+  'mi3iteoy-2j8voox4ec6',
+  'mi3jjwma-qsglzpy5daa',
+  'mi4yemvc-xp6j3uu12x',
+  'miiq366c-exsxgdbmp6m',
+  'mj025jwg-sdmgx7121dc',
+  'mj8ier44-uoqhx79db2n',
+  'mihhv6f0-5rzg6xc3zbq',
     'mk753qdp-b3p5uladgdu',
     'mk8c3f8f-t993ymje23c'
   ];
