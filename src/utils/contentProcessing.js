@@ -147,6 +147,8 @@ export const buildChapterContentBlocks = (chapter) => {
       subchapterId: null,
       pageBorder: !!chapter.pageBorder,
       pageBorderImageUrl: chapter.pageBorderImageUrl || null,
+      pageBorderWidth: chapter.pageBorderWidth || null,
+      pageBorderSlicePercent: chapter.pageBorderSlicePercent || null,
       hideTitle: !!chapter.hideTitle,
     });
   }
@@ -164,6 +166,8 @@ export const buildChapterContentBlocks = (chapter) => {
           subchapterId: subchapter.id,
           pageBorder: !!subchapter.pageBorder,
           pageBorderImageUrl: subchapter.pageBorderImageUrl || null,
+          pageBorderWidth: subchapter.pageBorderWidth || null,
+          pageBorderSlicePercent: subchapter.pageBorderSlicePercent || null,
           includeChapterTitle: !hasChapterContent && isFirstSubchapter, // Include chapter title if chapter has no content
           hideTitle: !!subchapter.hideTitle,
         });

@@ -42,7 +42,7 @@ export async function getSubchapters(bookId, chapterId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-export async function addChapter(bookId, { title, slug, contentHtml, epigraph, order, isFirstPage, isCover, backgroundImageUrl, pageBorder, pageBorderImageUrl }) {
+export async function addChapter(bookId, { title, slug, contentHtml, epigraph, order, isFirstPage, isCover, backgroundImageUrl, pageBorder, pageBorderImageUrl, pageBorderWidth, pageBorderSlicePercent }) {
   // If no order specified, get the next available order number
   if (!order) {
     const existingChapters = await getChapters(bookId);
@@ -58,6 +58,8 @@ export async function addChapter(bookId, { title, slug, contentHtml, epigraph, o
     backgroundImageUrl: backgroundImageUrl ?? null,
     pageBorder: !!pageBorder,
     pageBorderImageUrl: pageBorderImageUrl ?? null,
+    pageBorderWidth: pageBorderWidth ?? null,
+    pageBorderSlicePercent: pageBorderSlicePercent ?? null,
     order,
     isFirstPage: isFirstPage ?? false,
     isCover: isCover ?? false,
@@ -110,7 +112,7 @@ export async function deleteChapter(bookId, chapterId) {
   return deleteDoc(chapterDoc(bookId, chapterId));
 }
 
-export async function addSubchapter(bookId, chapterId, { title, slug, contentHtml, contentDelta, epigraph, order, audioUrl, wordTimings, pageBorder, pageBorderImageUrl }) {
+export async function addSubchapter(bookId, chapterId, { title, slug, contentHtml, contentDelta, epigraph, order, audioUrl, wordTimings, pageBorder, pageBorderImageUrl, pageBorderWidth, pageBorderSlicePercent }) {
   // If no order specified, get the next available order number
   if (!order) {
     const existingSubchapters = await getSubchapters(bookId, chapterId);
@@ -128,6 +130,8 @@ export async function addSubchapter(bookId, chapterId, { title, slug, contentHtm
     wordTimings: wordTimings ?? null,
     pageBorder: !!pageBorder,
     pageBorderImageUrl: pageBorderImageUrl ?? null,
+    pageBorderWidth: pageBorderWidth ?? null,
+    pageBorderSlicePercent: pageBorderSlicePercent ?? null,
     order,
     isPublished: true,
     createdAt: serverTimestamp(),

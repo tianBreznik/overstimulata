@@ -569,14 +569,35 @@ export const DesktopPageReader = ({
       }
     }
 
-    // TEMPORARY: Apply smaller 8px frame border to all pages for testing
-    // NOTE: For now we hard-code the border image in CSS, so we only need the class here.
-    const hasBorderForTesting = true;
+    // Per-chapter/subchapter border frame (desktop-only)
+    // Match original hard-coded styling, but swap in per-chapter image + width
+    // Original CSS:
+    // border: 8px solid transparent;
+    // border-image: url('/smallerborder.png') 32 26 fill stretch;
+    // border-image-outset: 16px;
+    const hasBorder = !!page?.borderImageUrl;
+    const borderWidth = page?.borderWidth || 8; // default 8px like original
+    const borderImageUrl = page?.borderImageUrl;
+
+    // Standardized border-image implementation:
+    // - slicePercent: user-configurable (default 4% for 1024x1024px images = ~41px corners)
+    // - borderOutset: equals borderWidth (1:1 ratio) for proper frame spacing
+    // - Use 'round' repeat to maintain aspect ratio on rectangular pages (prevents distortion)
+    const borderOutset = borderWidth; // 1:1 ratio (8px → 8px, 16px → 16px, etc.)
+    const slicePercent = page?.borderSlicePercent || 4; // Default 4% for 1024x1024px images
+
+    // Inline border-image styles so each chapter/subchapter can have its own frame
+    const borderStyle = hasBorder && borderImageUrl ? {
+      border: `${borderWidth}px solid transparent`,
+      borderImage: `url(${borderImageUrl}) ${slicePercent}% fill round`,
+      borderImageOutset: `${borderOutset}px`,
+      borderRadius: 0,
+    } : {};
 
     return (
       <article 
-        className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''} ${page?.isTOC ? 'toc-page' : ''} ${page?.hasFieldNotes ? 'field-notes-page' : ''} ${hasBorderForTesting ? 'page-border' : ''} ${hasBackgroundImage ? 'has-background-image' : ''}`}
-        style={{ ...pageStyle }}
+        className={`page-sheet content-page ${page?.isEpigraph ? 'epigraph-page' : ''} ${page?.isVideo ? 'video-page' : ''} ${page?.isCover ? 'cover-page' : ''} ${page?.isFirstPage ? 'first-page' : ''} ${page?.isTOC ? 'toc-page' : ''} ${page?.hasFieldNotes ? 'field-notes-page' : ''} ${hasBorder ? 'page-border' : ''} ${hasBackgroundImage ? 'has-background-image' : ''}`}
+        style={{ ...pageStyle, ...borderStyle }}
         data-chapter-index={page.chapterIndex}
         data-page-index={page.pageIndex}
       >

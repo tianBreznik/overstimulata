@@ -20,6 +20,10 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
   const [content, setContent] = useState('');
   const [backgroundImageUrl, setBackgroundImageUrl] = useState(chapter?.backgroundImageUrl || '');
   const [pageBorderImageUrl, setPageBorderImageUrl] = useState(chapter?.pageBorderImageUrl || '');
+  // Border width for chapter/subchapter frames (desktop reader only)
+  const [pageBorderWidth, setPageBorderWidth] = useState(chapter?.pageBorderWidth || 8);
+  // Border slice percentage for border-image (controls corner size, default 4% for 1024×1024px images)
+  const [pageBorderSlicePercent, setPageBorderSlicePercent] = useState(chapter?.pageBorderSlicePercent || 4);
   const [hideTitle, setHideTitle] = useState(!!chapter?.hideTitle);
   const [saving, setSaving] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('Ready');
@@ -600,6 +604,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
       // Load existing chapter-level background image and border settings if present
       setBackgroundImageUrl(chapter?.backgroundImageUrl || '');
       setPageBorderImageUrl(chapter?.pageBorderImageUrl || '');
+      setPageBorderWidth(chapter?.pageBorderWidth || 8);
+      setPageBorderSlicePercent(chapter?.pageBorderSlicePercent || 4);
       if (rawEpigraph && typeof rawEpigraph === 'object') {
         setEpigraph({
           text: rawEpigraph.text || '',
@@ -1212,6 +1218,8 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
         backgroundImageUrl: backgroundImageUrl || null,
         pageBorder: !!(pageBorderImageUrl),
         pageBorderImageUrl: pageBorderImageUrl || null,
+        pageBorderWidth: pageBorderImageUrl ? pageBorderWidth : null,
+        pageBorderSlicePercent: pageBorderImageUrl ? pageBorderSlicePercent : null,
         hideTitle: !!hideTitle,
       });
     } catch (err) {
@@ -2503,11 +2511,13 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     <span className="toolbar-btn-icon">🔲</span>
                     {uploadingImage && <div className="toolbar-btn-progress" />}
                   </button>
-                  {/* Border width/number dropdown */}
+                  {/* Border width dropdown */}
                   <select
                     className="toolbar-border-dropdown"
-                    defaultValue="8"
-                    title="Border size"
+                    value={pageBorderWidth}
+                    onChange={(e) => setPageBorderWidth(parseInt(e.target.value, 10))}
+                    disabled={!pageBorderImageUrl}
+                    title="Border width (px)"
                   >
                     <option value="4">4</option>
                     <option value="6">6</option>
@@ -2518,6 +2528,21 @@ export const ChapterEditor = ({ chapter, parentChapter, onSave, onCancel, onDele
                     <option value="20">20</option>
                     <option value="24">24</option>
                     <option value="32">32</option>
+                  </select>
+                  {/* Border slice percentage dropdown */}
+                  <select
+                    className="toolbar-border-dropdown"
+                    value={pageBorderSlicePercent}
+                    onChange={(e) => setPageBorderSlicePercent(parseInt(e.target.value, 10))}
+                    disabled={!pageBorderImageUrl}
+                    title="Corner size (%) - 4% optimal for 1024×1024px images"
+                  >
+                    <option value="2">2%</option>
+                    <option value="3">3%</option>
+                    <option value="4">4%</option>
+                    <option value="5">5%</option>
+                    <option value="6">6%</option>
+                    <option value="8">8%</option>
                   </select>
                 </div>
                 <input

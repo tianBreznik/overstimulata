@@ -206,6 +206,8 @@ export const createPageFromElements = ({
     // Pages inherit border setting from the source block (chapter or subchapter)
     hasBorder: !!(blockMeta.pageBorder),
     borderImageUrl: blockMeta.pageBorderImageUrl || null,
+    borderWidth: blockMeta.pageBorderWidth || null,
+    borderSlicePercent: blockMeta.pageBorderSlicePercent || null,
     pageIndex: chapterPageIndex,
     hasHeading: pageHasHeading,
     hasFieldNotes: hasFieldNotes || false,

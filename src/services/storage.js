@@ -67,9 +67,10 @@ export async function convertImageToBase64(file, { maxWidth = 1200, maxHeight = 
  * @param {number} options.maxWidth - Maximum width (default: 1920px)
  * @param {number} options.maxHeight - Maximum height (default: 1920px)
  * @param {number} options.quality - JPEG quality 0-1 (default: 0.85)
+ * @param {boolean} options.preserveTransparency - Preserve PNG transparency (default: false)
  * @returns {Promise<Blob>} Compressed image blob
  */
-async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality = 0.85 } = {}) {
+async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality = 0.85, preserveTransparency = false } = {}) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -88,7 +89,18 @@ async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality 
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
+        
+        // If preserving transparency (PNG), ensure canvas background is transparent
+        if (preserveTransparency || file.type === 'image/png') {
+          // Clear canvas to transparent (default for PNG)
+          ctx.clearRect(0, 0, width, height);
+        }
+        
         ctx.drawImage(img, 0, 0, width, height);
+
+        // Use PNG format if preserving transparency, otherwise JPEG
+        const outputFormat = (preserveTransparency || file.type === 'image/png') ? 'image/png' : 'image/jpeg';
+        const outputQuality = outputFormat === 'image/png' ? undefined : quality;
 
         canvas.toBlob(
           (blob) => {
@@ -98,8 +110,8 @@ async function compressImage(file, { maxWidth = 1920, maxHeight = 1920, quality 
               reject(new Error('Failed to compress image'));
             }
           },
-          'image/jpeg',
-          quality
+          outputFormat,
+          outputQuality
         );
       };
       img.onerror = () => reject(new Error('Failed to load image'));
@@ -141,18 +153,23 @@ export async function uploadImageToStorage(file, { onProgress, compress = true }
       file.type === 'image/gif' ||
       /\.gif$/i.test(file.name);
 
+    // Auto-detect PNG files and preserve transparency
+    const isPNG = file.type === 'image/png' || /\.png$/i.test(file.name);
+    const shouldPreserveTransparency = isPNG;
+
     // Only compress when requested AND it's safe to do so (non-animated formats)
     const shouldCompress = compress && !isAnimatedFormat;
 
-    // Compress image if requested and safe
+    // Compress image if requested and safe, preserving transparency for PNG
     const fileToUpload = shouldCompress
-      ? await compressImage(file)
+      ? await compressImage(file, { preserveTransparency: shouldPreserveTransparency })
       : file;
 
     // Generate unique filename
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substring(2, 15);
-    const extension = file.name.split('.').pop() || 'jpg';
+    // Preserve original extension, especially for PNG to maintain transparency
+    const extension = file.name.split('.').pop() || (isPNG ? 'png' : 'jpg');
     const fileName = `images/${timestamp}_${randomId}.${extension}`;
 
     // Create storage reference
