@@ -17,8 +17,10 @@ export const EditorSetup = ({ onClose }) => {
       if (authUser) {
         // Check if email is allowed
         checkEmailStatus(authUser.email);
-        // Refresh device whitelist status after login
-        refreshAuthStatus();
+        // Refresh device whitelist status after login (with delay to allow autoWhitelistDevice to complete)
+        setTimeout(async () => {
+          await refreshAuthStatus();
+        }, 500);
       } else {
         setEmailAllowed(null);
       }
@@ -53,8 +55,11 @@ export const EditorSetup = ({ onClose }) => {
 
   const handleLoginSuccess = async () => {
     setShowLogin(false);
-    // Refresh device whitelist status after login
-    await refreshAuthStatus();
+    // Wait a moment for autoWhitelistDevice to complete and cache to update
+    // Then refresh to ensure UI updates
+    setTimeout(async () => {
+      await refreshAuthStatus();
+    }, 300);
   };
 
   const handleLogout = async () => {
@@ -98,8 +103,8 @@ export const EditorSetup = ({ onClose }) => {
                     )}
                     {emailAllowed === true && !isEditor && (
                       <p className="user-note" style={{ background: '#f0f9ff', borderColor: '#bae6fd', color: '#0369a1' }}>
-                        Your email is allowed, but this device hasn't been whitelisted yet. 
-                        Try signing out and signing back in to whitelist this device.
+                        Your email is allowed. Device whitelisting is in progress... 
+                        If this message persists, the device may need to be manually whitelisted.
                       </p>
                     )}
             </div>

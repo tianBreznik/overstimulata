@@ -8,7 +8,7 @@ import {
   signInWithPopup,
 } from 'firebase/auth';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { getDeviceId } from '../utils/deviceAuth';
+import { getDeviceId, setCachedAuth, clearAuthCache } from '../utils/deviceAuth';
 
 // Check if user's email is in the allowedEmails collection
 export const isEmailAllowed = async (email) => {
@@ -27,13 +27,13 @@ export const isEmailAllowed = async (email) => {
 // Automatically whitelist device UUID if user's email is allowed
 export const autoWhitelistDevice = async (user) => {
   if (!user || !user.email) {
-    return false;
+    return { success: false, reason: 'no_user_or_email' };
   }
   
   try {
     const emailAllowed = await isEmailAllowed(user.email);
     if (!emailAllowed) {
-      return false;
+      return { success: false, reason: 'email_not_allowed' };
     }
     
     const deviceId = getDeviceId();
@@ -43,9 +43,14 @@ export const autoWhitelistDevice = async (user) => {
       email: user.email,
       userId: user.uid,
     });
-    return true;
+    
+    // CRITICAL: Immediately update cache to true after successful write
+    // This prevents race condition where refreshAuthStatus() runs before Firestore write is visible
+    setCachedAuth(deviceId, true);
+    
+    return { success: true, deviceId };
   } catch (error) {
-    return false;
+    return { success: false, reason: 'write_failed', error: error.message };
   }
 };
 

@@ -49,10 +49,19 @@ const getCachedAuth = () => {
 };
 
 // Cache authorization status
-const setCachedAuth = (deviceId, isAuthorized) => {
+export const setCachedAuth = (deviceId, isAuthorized) => {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ deviceId, isAuthorized }));
     localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
+  } catch (e) {
+  }
+};
+
+// Clear cache (force refresh on next check)
+export const clearAuthCache = () => {
+  try {
+    localStorage.removeItem(CACHE_KEY);
+    localStorage.removeItem(CACHE_TIMESTAMP_KEY);
   } catch (e) {
   }
 };

@@ -41,13 +41,16 @@ const ensureInitialised = () => {
     authListenerInitialized = true;
     onAuthStateChange(async (user) => {
       if (user) {
-        // When user logs in, refresh device whitelist status
-        await refreshAuthStatus();
-        const isAuthorized = await isEditorDevice();
-        if (sharedState.baseEditor !== isAuthorized) {
-          sharedState.baseEditor = isAuthorized;
-          notify();
-        }
+        // When user logs in, wait a bit for autoWhitelistDevice() to complete
+        // Then refresh device whitelist status
+        // Small delay ensures Firestore write from autoWhitelistDevice is visible
+        setTimeout(async () => {
+          const isAuthorized = await refreshAuthStatus();
+          if (sharedState.baseEditor !== isAuthorized) {
+            sharedState.baseEditor = isAuthorized;
+            notify();
+          }
+        }, 500); // 500ms delay to allow Firestore write to propagate
       }
     });
   }
