@@ -93,8 +93,8 @@ export const FeatherCursor = () => {
         cursorRef.current.style.left = `${e.clientX}px`;
         cursorRef.current.style.top = `${e.clientY}px`;
         // Ensure transform with rotation is applied (Safari fix)
-        cursorRef.current.style.transform = 'translate(-50%, -50%) rotate(70deg) translateZ(0)';
-        cursorRef.current.style.webkitTransform = 'translate(-50%, -50%) rotate(70deg) translateZ(0)';
+        cursorRef.current.style.transform = 'translate(-50%, -50%) rotate(90deg) translateZ(0)';
+        cursorRef.current.style.webkitTransform = 'translate(-50%, -50%) rotate(90deg) translateZ(0)';
       }
       
       // Create particles periodically (throttle to avoid too many)
@@ -252,8 +252,8 @@ export const FeatherCursor = () => {
       style={{
         left: `${mousePositionRef.current.x}px`,
         top: `${mousePositionRef.current.y}px`,
-        transform: 'translate(-50%, -50%) rotate(70deg) translateZ(0)',
-        WebkitTransform: 'translate(-50%, -50%) rotate(70deg) translateZ(0)',
+        transform: 'translate(-50%, -50%) rotate(90deg) translateZ(0)',
+        WebkitTransform: 'translate(-50%, -50%) rotate(90deg) translateZ(0)',
       }}
     />
   );
