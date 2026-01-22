@@ -25,6 +25,10 @@ export const FeatherCursor = () => {
   useEffect(() => {
     if (isMobile) return;
 
+    // Preload feather image for Safari compatibility
+    const preloadImg = new Image();
+    preloadImg.src = '/feather.png';
+
     const createParticle = (x, y) => {
       const particleId = `feather-${particleIdRef.current++}`;
       const particle = document.createElement('div');
@@ -84,10 +88,13 @@ export const FeatherCursor = () => {
     const handleMouseMove = (e) => {
       mousePositionRef.current = { x: e.clientX, y: e.clientY };
       
-      // Update cursor position
+      // Update cursor position and ensure rotation is applied
       if (cursorRef.current) {
         cursorRef.current.style.left = `${e.clientX}px`;
         cursorRef.current.style.top = `${e.clientY}px`;
+        // Ensure transform with rotation is applied (Safari fix)
+        cursorRef.current.style.transform = 'translate(-50%, -50%) rotate(70deg) translateZ(0)';
+        cursorRef.current.style.webkitTransform = 'translate(-50%, -50%) rotate(70deg) translateZ(0)';
       }
       
       // Create particles periodically (throttle to avoid too many)
@@ -98,9 +105,12 @@ export const FeatherCursor = () => {
       }
     };
 
+    // Show cursor immediately when mouse moves (Safari fix)
+    let hasShownCursor = false;
     const handleMouseEnter = () => {
       if (cursorRef.current) {
         cursorRef.current.style.opacity = '1';
+        hasShownCursor = true;
       }
     };
 
@@ -110,16 +120,26 @@ export const FeatherCursor = () => {
       }
     };
 
+    // Enhanced mouse move handler that shows cursor on first move
+    const handleMouseMoveWithShow = (e) => {
+      // Show cursor on first mouse move (Safari fix)
+      if (!hasShownCursor && cursorRef.current) {
+        cursorRef.current.style.opacity = '1';
+        hasShownCursor = true;
+      }
+      handleMouseMove(e);
+    };
+
     // Hide default cursor
     document.body.style.cursor = 'none';
     
-    window.addEventListener('mousemove', handleMouseMove);
+    window.addEventListener('mousemove', handleMouseMoveWithShow);
     document.addEventListener('mouseenter', handleMouseEnter);
     document.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
       document.body.style.cursor = '';
-      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mousemove', handleMouseMoveWithShow);
       document.removeEventListener('mouseenter', handleMouseEnter);
       document.removeEventListener('mouseleave', handleMouseLeave);
       
@@ -232,6 +252,8 @@ export const FeatherCursor = () => {
       style={{
         left: `${mousePositionRef.current.x}px`,
         top: `${mousePositionRef.current.y}px`,
+        transform: 'translate(-50%, -50%) rotate(70deg) translateZ(0)',
+        WebkitTransform: 'translate(-50%, -50%) rotate(70deg) translateZ(0)',
       }}
     />
   );

@@ -1,29 +1,20 @@
-/* Feather Cursor (Desktop) */
+/* Feather Cursor (Desktop) - Use same approach as particles which work in Safari */
 .feather-cursor {
   position: fixed;
-  width: 20px;
-  height: 20px;
+  width: 32px;
+  height: 32px;
   pointer-events: none;
   z-index: 99999;
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, -50%) rotate(-60deg) translateZ(0); /* Rotate feather upward for better touch point alignment */
   opacity: 0;
   transition: opacity 0.2s ease;
-}
-
-/* Feather shape using image */
-.feather-cursor::before {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 100%;
-  height: 100%;
+  will-change: transform, opacity; /* Optimize for Safari */
+  -webkit-transform: translate(-50%, -50%) rotate(-60deg) translateZ(0); /* Safari-specific - must match transform */
+  /* Use background-image exactly like particles (which work in Safari) */
   background-image: url('/feather.png');
   background-size: contain;
   background-repeat: no-repeat;
   background-position: center;
-  opacity: 0.8;
 }
 
 /* Feather particles */
