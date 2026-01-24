@@ -19,8 +19,8 @@ export const FeatherCursor = ({ children }) => {
   // Configurable tip offset - adjust these values to align the feather tip with cursor
   // Positive X moves right, positive Y moves down
   // These values will be fine-tuned to align the tip (bottom-left of feather) with cursor position
-  const TIP_OFFSET_X = 0; // Adjust this to move tip left/right (in pixels)
-  const TIP_OFFSET_Y = 0; // Adjust this to move tip up/down (in pixels)
+  const TIP_OFFSET_X = 15; // Adjust this to move tip left/right (in pixels)
+  const TIP_OFFSET_Y = -5; // Adjust this to move tip up/down (in pixels)
 
   // Detect mobile/desktop
   useEffect(() => {
