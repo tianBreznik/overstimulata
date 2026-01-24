@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './FeatherCursor.css';
 
-export const FeatherCursor = () => {
+export const FeatherCursor = ({ children }) => {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 768;
@@ -9,8 +9,18 @@ export const FeatherCursor = () => {
   const cursorRef = useRef(null);
   const particlesRef = useRef([]);
   const lastParticleTimeRef = useRef(0);
-  const mousePositionRef = useRef({ x: 0, y: 0 });
+  const mousePositionRef = useRef({ x: 0, y: 0 }); // Target position
+  const currentPositionRef = useRef({ x: 0, y: 0 }); // Current displayed position (for damping)
+  const animationFrameRef = useRef(null);
   const particleIdRef = useRef(0);
+  const isHoveringRef = useRef(false);
+  const isClickingRef = useRef(false);
+
+  // Configurable tip offset - adjust these values to align the feather tip with cursor
+  // Positive X moves right, positive Y moves down
+  // These values will be fine-tuned to align the tip (bottom-left of feather) with cursor position
+  const TIP_OFFSET_X = 0; // Adjust this to move tip left/right (in pixels)
+  const TIP_OFFSET_Y = 0; // Adjust this to move tip up/down (in pixels)
 
   // Detect mobile/desktop
   useEffect(() => {
@@ -28,6 +38,15 @@ export const FeatherCursor = () => {
     // Preload feather image for Safari compatibility
     const preloadImg = new Image();
     preloadImg.src = '/feather.png';
+
+    // Helper function to build transform with tip offset
+    const buildTransform = (scale = 1) => {
+      const baseTransform = 'translate(-50%, -50%)'; // Rotation removed for testing
+      const tipOffset = TIP_OFFSET_X !== 0 || TIP_OFFSET_Y !== 0 
+        ? ` translate(${TIP_OFFSET_X}px, ${TIP_OFFSET_Y}px)`
+        : '';
+      return `${baseTransform}${tipOffset} scale(${scale}) translateZ(0)`;
+    };
 
     const createParticle = (x, y) => {
       const particleId = `feather-${particleIdRef.current++}`;
@@ -85,22 +104,110 @@ export const FeatherCursor = () => {
       }, duration * 1000);
     };
 
+    // Smooth cursor animation with damping
+    const animateCursor = () => {
+      if (!cursorRef.current) {
+        animationFrameRef.current = null;
+        return;
+      }
+      
+      const targetX = mousePositionRef.current.x;
+      const targetY = mousePositionRef.current.y;
+      const currentX = currentPositionRef.current.x;
+      const currentY = currentPositionRef.current.y;
+      
+      // Damping factor (0.15 = smooth, lower = more damping, higher = less damping)
+      const damping = 0.15;
+      
+      // Interpolate towards target position
+      const newX = currentX + (targetX - currentX) * damping;
+      const newY = currentY + (targetY - currentY) * damping;
+      
+      // Update current position
+      currentPositionRef.current = { x: newX, y: newY };
+      
+      // Apply position to cursor
+      cursorRef.current.style.left = `${newX}px`;
+      cursorRef.current.style.top = `${newY}px`;
+      
+      // Always continue animation (it will naturally slow down as it approaches target)
+      animationFrameRef.current = requestAnimationFrame(animateCursor);
+    };
+
     const handleMouseMove = (e) => {
+      // Update target position
       mousePositionRef.current = { x: e.clientX, y: e.clientY };
       
-      // Update cursor position and ensure rotation is applied
-      if (cursorRef.current) {
-        cursorRef.current.style.left = `${e.clientX}px`;
-        cursorRef.current.style.top = `${e.clientY}px`;
-        // Ensure transform with rotation is applied (Safari fix)
-        cursorRef.current.style.transform = 'translate(-50%, -50%) rotate(90deg) translateZ(0)';
-        cursorRef.current.style.webkitTransform = 'translate(-50%, -50%) rotate(90deg) translateZ(0)';
+      // Initialize current position if it's the first move
+      if (currentPositionRef.current.x === 0 && currentPositionRef.current.y === 0) {
+        currentPositionRef.current = { x: e.clientX, y: e.clientY };
+        if (cursorRef.current) {
+          cursorRef.current.style.left = `${e.clientX}px`;
+          cursorRef.current.style.top = `${e.clientY}px`;
+        }
+      }
+      
+      // Start animation if not already running
+      if (!animationFrameRef.current && cursorRef.current) {
+        animationFrameRef.current = requestAnimationFrame(animateCursor);
+      }
+      
+      // Get element under mouse BEFORE modifying it
+      const target = document.elementFromPoint(e.clientX, e.clientY);
+      
+      // Check if hovering over a clickable or draggable element (BEFORE setting cursor to none)
+      let isHovering = false;
+      if (target && target !== document.body && target !== document.documentElement) {
+        // Check computed style BEFORE we modify it
+        const computedStyle = window.getComputedStyle(target);
+        const originalCursor = computedStyle.cursor;
+        
+        // Check if it's an interactive element - use multiple detection methods
+        const isButton = target.tagName === 'BUTTON';
+        const isLink = target.tagName === 'A';
+        const isInput = ['INPUT', 'SELECT', 'TEXTAREA'].includes(target.tagName);
+        const hasOnClick = target.onclick !== null || target.getAttribute('onclick') !== null;
+        const isDraggable = target.draggable === true || target.getAttribute('draggable') === 'true';
+        const hasRoleButton = target.getAttribute('role') === 'button';
+        const hasTabIndex = target.hasAttribute('tabindex') && target.getAttribute('tabindex') !== '-1';
+        const isClickableCursor = originalCursor === 'pointer' || originalCursor === 'grab' || originalCursor === 'grabbing';
+        const hasClickableParent = target.closest('button, a, [role="button"], [onclick], [draggable="true"], input, select, textarea, [tabindex]:not([tabindex="-1"])');
+        
+        // Also check for elements with cursor: pointer in their computed style (even if we haven't set it yet)
+        isHovering = isButton || isLink || isInput || hasOnClick || isDraggable || hasRoleButton || hasTabIndex || isClickableCursor || !!hasClickableParent;
+        
+        // Force cursor: none on element under mouse (Safari workaround)
+        target.style.setProperty('cursor', 'none', 'important');
+      }
+      
+      // Update hover state - apply transform directly for reliability
+      if (isHovering !== isHoveringRef.current || true) { // Always update to ensure state is correct
+        isHoveringRef.current = isHovering;
+        if (cursorRef.current) {
+          // Apply transform directly via inline styles for better reliability
+          const scale = isHovering ? 1.3 : 1;
+          const fullTransform = buildTransform(scale);
+          
+          cursorRef.current.style.transform = fullTransform;
+          cursorRef.current.style.webkitTransform = fullTransform;
+          
+          // Also toggle class for CSS transitions
+          if (isHovering) {
+            cursorRef.current.classList.add('feather-cursor-hover');
+          } else {
+            cursorRef.current.classList.remove('feather-cursor-hover');
+          }
+        }
       }
       
       // Create particles periodically (throttle to avoid too many)
+      // Use the cursor's current position (damped) instead of raw mouse position
       const now = Date.now();
       if (now - lastParticleTimeRef.current > 30) { // Every 30ms (more particles)
-        createParticle(e.clientX, e.clientY);
+        // Use current cursor position (with damping) for particle spawn location
+        const particleX = currentPositionRef.current.x || e.clientX;
+        const particleY = currentPositionRef.current.y || e.clientY;
+        createParticle(particleX, particleY);
         lastParticleTimeRef.current = now;
       }
     };
@@ -130,18 +237,53 @@ export const FeatherCursor = () => {
       handleMouseMove(e);
     };
 
-    // Hide default cursor
-    document.body.style.cursor = 'none';
+    // Handle click animation
+    const handleMouseDown = () => {
+      isClickingRef.current = true;
+      if (cursorRef.current) {
+        const fullTransform = buildTransform(0.8); // Scale down on click
+        
+        cursorRef.current.style.transform = fullTransform;
+        cursorRef.current.style.webkitTransform = fullTransform;
+        cursorRef.current.classList.add('feather-cursor-click');
+      }
+    };
+
+    const handleMouseUp = () => {
+      isClickingRef.current = false;
+      if (cursorRef.current) {
+        // Restore hover state transform
+        const scale = isHoveringRef.current ? 1.3 : 1;
+        const fullTransform = buildTransform(scale);
+        
+        cursorRef.current.style.transform = fullTransform;
+        cursorRef.current.style.webkitTransform = fullTransform;
+        cursorRef.current.classList.remove('feather-cursor-click');
+      }
+    };
+
+    // Add class to body to trigger global cursor: none CSS rule
+    document.body.classList.add('feather-cursor-active');
     
     window.addEventListener('mousemove', handleMouseMoveWithShow);
+    window.addEventListener('mousedown', handleMouseDown);
+    window.addEventListener('mouseup', handleMouseUp);
     document.addEventListener('mouseenter', handleMouseEnter);
     document.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
-      document.body.style.cursor = '';
+      document.body.classList.remove('feather-cursor-active');
       window.removeEventListener('mousemove', handleMouseMoveWithShow);
+      window.removeEventListener('mousedown', handleMouseDown);
+      window.removeEventListener('mouseup', handleMouseUp);
       document.removeEventListener('mouseenter', handleMouseEnter);
       document.removeEventListener('mouseleave', handleMouseLeave);
+      
+      // Cancel animation frame
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        animationFrameRef.current = null;
+      }
       
       // Clean up particles
       particlesRef.current.forEach(id => {
@@ -242,20 +384,31 @@ export const FeatherCursor = () => {
 
   // Only render cursor element on desktop
   if (isMobile) {
-    return null;
+    return <>{children}</>;
   }
-
+  
+  // Build initial transform with tip offset
+  const buildInitialTransform = (scale = 1) => {
+    const baseTransform = 'translate(-50%, -50%)'; // Rotation removed for testing
+    const tipOffset = TIP_OFFSET_X !== 0 || TIP_OFFSET_Y !== 0 
+      ? ` translate(${TIP_OFFSET_X}px, ${TIP_OFFSET_Y}px)`
+      : '';
+    return `${baseTransform}${tipOffset} scale(${scale}) translateZ(0)`;
+  };
+  
   return (
-    <div 
-      ref={cursorRef}
-      className="feather-cursor"
-      style={{
-        left: `${mousePositionRef.current.x}px`,
-        top: `${mousePositionRef.current.y}px`,
-        transform: 'translate(-50%, -50%) rotate(90deg) translateZ(0)',
-        WebkitTransform: 'translate(-50%, -50%) rotate(90deg) translateZ(0)',
-      }}
-    />
+    <>
+      <div 
+        ref={cursorRef}
+        className="feather-cursor"
+        style={{
+          left: `${mousePositionRef.current.x}px`,
+          top: `${mousePositionRef.current.y}px`,
+          transform: buildInitialTransform(1),
+          WebkitTransform: buildInitialTransform(1),
+        }}
+      />
+      {children}
+    </>
   );
 };
-

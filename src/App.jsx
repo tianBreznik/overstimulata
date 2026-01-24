@@ -292,8 +292,8 @@ function App() {
 
   return (
     <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
-      <FeatherCursor />
-      {/* PageReader: Rendered on both mobile and desktop (desktop shows PDF viewer) */}
+      <FeatherCursor>
+        {/* PageReader: Rendered on both mobile and desktop (desktop shows PDF viewer) */}
       {(loading || (isMobile && !backgroundsReady) || chapters.length === 0) ? (
         <div className="page-reader-loading">
           <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
@@ -588,6 +588,7 @@ function App() {
           }}
         />
       )}
+      </FeatherCursor>
     </div>
   );
 }
