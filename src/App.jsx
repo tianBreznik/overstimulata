@@ -12,6 +12,7 @@ import { DraggableChapter } from './components/DraggableChapter';
 import { PageReader } from './components/PageReader';
 import { useReadingPosition } from './hooks/useReadingPosition';
 import { FeatherCursor } from './components/FeatherCursor';
+import { DitheredLoader } from './components/DitheredLoader';
 
 const BOOK_ID = 'primary';
 
@@ -25,6 +26,7 @@ function App() {
   const [defaultExpandedChapterId, setDefaultExpandedChapterId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [backgroundsReady, setBackgroundsReady] = useState(false);
+  const [pagesReady, setPagesReady] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -49,6 +51,7 @@ function App() {
 
   const load = async () => {
     try {
+      setPagesReady(false); // Reset pages ready state when loading new data
       const chaps = await getChapters(BOOK_ID);
       const withChildren = await Promise.all(
         chaps.map(async (c) => {
@@ -294,37 +297,39 @@ function App() {
     <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
       <FeatherCursor>
         {/* PageReader: Rendered on both mobile and desktop (desktop shows PDF viewer) */}
-      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0) ? (
-        <div className="page-reader-loading">
-          <img src="/pigeondove.gif" alt="Loading..." className="loading-gif" />
-        </div>
-      ) : (
-          <PageReader
-            chapters={chapters}
-            onPageChange={handlePageChange}
-            initialPosition={readingPosition}
-            onEditChapter={openEditorWithLatest}
-            onAddSubchapter={(chapter) => setParentChapterForNewSub(chapter)}
-            onDeleteChapter={async (chapterId) => {
-              await deleteChapter(BOOK_ID, chapterId);
-              await refresh();
-            }}
-            onEditSubchapter={openEditorWithLatest}
-            onDeleteSubchapter={async (subchapterId, parentChapterId) => {
-              await deleteSubchapter(BOOK_ID, parentChapterId, subchapterId);
-              await refresh();
-            }}
-            onReorderChapters={async (orderedIds) => {
-              try {
-                await reorderChapters(BOOK_ID, orderedIds);
-              } catch (err) {
+      {/* Render PageReader when chapters are loaded, but keep loader visible until pages are ready */}
+      {!loading && chapters.length > 0 && (!isMobile || backgroundsReady) && (
+        <PageReader
+          chapters={chapters}
+          onPageChange={handlePageChange}
+          initialPosition={readingPosition}
+          onEditChapter={openEditorWithLatest}
+          onAddSubchapter={(chapter) => setParentChapterForNewSub(chapter)}
+          onDeleteChapter={async (chapterId) => {
+            await deleteChapter(BOOK_ID, chapterId);
+            await refresh();
+          }}
+          onEditSubchapter={openEditorWithLatest}
+          onDeleteSubchapter={async (subchapterId, parentChapterId) => {
+            await deleteSubchapter(BOOK_ID, parentChapterId, subchapterId);
+            await refresh();
+          }}
+          onReorderChapters={async (orderedIds) => {
+            try {
+              await reorderChapters(BOOK_ID, orderedIds);
+            } catch (err) {
 
-              }
-            }}
-            onOpenSettings={() => setShowSetup(true)}
-            onAddChapter={() => setShowNewChapterEditor(true)}
-            onToggleEditorReader={togglePreviewMode}
-          />
+            }
+          }}
+          onOpenSettings={() => setShowSetup(true)}
+          onAddChapter={() => setShowNewChapterEditor(true)}
+          onToggleEditorReader={togglePreviewMode}
+          onPagesReady={() => setPagesReady(true)}
+        />
+      )}
+      {/* Show loader until chapters are loaded, backgrounds ready (mobile), and pages are ready */}
+      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0 || !pagesReady) && (
+        <DitheredLoader />
       )}
 
       {/* Desktop: Old scroll-based layout - hidden (replaced by PageReader PDF viewer) */}

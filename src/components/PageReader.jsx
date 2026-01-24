@@ -450,6 +450,7 @@ export const PageReader = ({
   onOpenSettings,
   onAddChapter,
   onToggleEditorReader,
+  onPagesReady,
 }) => {
   const [currentChapterIndex, setCurrentChapterIndex] = useState(0);
   const [currentPageIndex, setCurrentPageIndex] = useState(0);
@@ -522,6 +523,13 @@ export const PageReader = ({
       cancelAnimationFrame(rafId1);
     };
   }, [chapters, initialPosition, pages.length, calculatePages]);
+
+  // Notify parent when pages are ready
+  useEffect(() => {
+    if (pages.length > 0 && onPagesReady) {
+      onPagesReady();
+    }
+  }, [pages.length, onPagesReady]);
 
   // OLD calculatePages implementation removed - now using usePagePagination hook
   // The old implementation was ~2500 lines and has been extracted into:
