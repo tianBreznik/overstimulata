@@ -6,6 +6,7 @@ export const DitheredLoader = () => {
   const sparkleCanvasRef = useRef(null);
   const imageRef = useRef(null);
   const sparkleAnimationRef = useRef(null);
+  const ditherDataRef = useRef(null); // Store dithered image data for influence map
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -90,6 +91,13 @@ export const DitheredLoader = () => {
       
       // Put dithered image data back
       ctx.putImageData(imageData, 0, 0);
+      
+      // Store dithered data for sparkle influence map
+      ditherDataRef.current = {
+        data: new Uint8ClampedArray(imageData.data),
+        width: canvas.width,
+        height: canvas.height
+      };
     };
 
     img.onerror = () => {
@@ -110,7 +118,7 @@ export const DitheredLoader = () => {
     };
   }, []);
 
-  // Sparkle effect - random white points appearing and disappearing
+  // Sparkle effect - random white points appearing and disappearing, influenced by dither pattern
   useEffect(() => {
     const sparkleCanvas = sparkleCanvasRef.current;
     if (!sparkleCanvas) return;
@@ -130,22 +138,61 @@ export const DitheredLoader = () => {
     resizeSparkleCanvas();
     window.addEventListener('resize', resizeSparkleCanvas);
 
-    // Create array of sparkle points
-    const sparkleCount = 4000; // Number of sparkles
-    const sparkles = [];
-    
-    for (let i = 0; i < sparkleCount; i++) {
-      sparkles.push({
-        x: Math.random() * sparkleCanvas.width,
-        y: Math.random() * sparkleCanvas.height,
-        size: Math.random() * 1.2 + 0.3, // Random size between 0.3 and 1.5 (smaller spots)
-        opacity: Math.random(), // Random starting opacity
-        speed: Math.random() * 0.15 + 0.1, // Much faster animation speed
-        phase: Math.random() * Math.PI * 2, // Random phase for sine wave
-      });
-    }
+    // Helper function to sample dither pattern at a position
+    const sampleDitherPattern = (x, y) => {
+      if (!ditherDataRef.current) return 0; // No dither data yet
+      
+      const { data, width, height } = ditherDataRef.current;
+      const px = Math.floor(x);
+      const py = Math.floor(y);
+      
+      if (px < 0 || px >= width || py < 0 || py >= height) return 0;
+      
+      const index = (py * width + px) * 4;
+      // Get luminance (since it's black/white, any channel works)
+      const luminance = data[index]; // R channel (0 = black, 255 = white)
+      return luminance / 255; // Normalize to 0-1
+    };
 
     let animationRunning = true;
+    let sparkles = [];
+
+    const createSparkles = () => {
+      if (!ditherDataRef.current) return; // Wait for dither data
+      
+      // Create array of sparkle points, influenced by dither pattern
+      const sparkleCount = 10000; // Number of sparkles
+      sparkles = [];
+      
+      // Try to place sparkles, with higher probability on white pixels
+      let attempts = 0;
+      const maxAttempts = sparkleCount * 3; // Allow more attempts to find good positions
+      
+      while (sparkles.length < sparkleCount && attempts < maxAttempts) {
+        attempts++;
+        const x = Math.random() * sparkleCanvas.width;
+        const y = Math.random() * sparkleCanvas.height;
+        
+        // Sample dither pattern at this position
+        const ditherValue = sampleDitherPattern(x, y);
+        
+        // Higher probability of placing sparkle on white pixels (ditherValue close to 1)
+        // Use weighted random: more likely on white, but still allow some on black
+        const placementProbability = ditherValue * 0.8 + 0.2; // 20% base chance, up to 100% on white
+        
+        if (Math.random() < placementProbability) {
+          sparkles.push({
+            x,
+            y,
+            size: Math.random() * 1.2 + 0.3, // Random size between 0.3 and 1.5
+            baseOpacity: ditherValue * 0.5 + 0.3, // Base opacity influenced by dither (0.3-0.8)
+            opacity: Math.random(), // Random starting opacity
+            speed: Math.random() * 0.15 + 0.1, // Much faster animation speed
+            phase: Math.random() * Math.PI * 2, // Random phase for sine wave
+          });
+        }
+      }
+    };
 
     const animateSparkles = () => {
       if (!animationRunning) return;
@@ -156,7 +203,10 @@ export const DitheredLoader = () => {
       // Update and draw each sparkle
       sparkles.forEach((sparkle) => {
         // Use sine wave for smooth fade in/out
-        sparkle.opacity = (Math.sin(sparkle.phase) + 1) / 2; // Convert to 0-1 range
+        const sineOpacity = (Math.sin(sparkle.phase) + 1) / 2; // Convert to 0-1 range
+        
+        // Combine sine wave with base opacity from dither pattern
+        sparkle.opacity = sineOpacity * sparkle.baseOpacity;
         
         // Update phase for animation
         sparkle.phase += sparkle.speed;
@@ -164,7 +214,7 @@ export const DitheredLoader = () => {
           sparkle.phase -= Math.PI * 2;
         }
 
-        // Draw white point - make it more visible
+        // Draw white point - influenced by dither pattern
         if (sparkle.opacity > 0.05) { // Lower threshold to show more sparkles
           sparkleCtx.fillStyle = `rgba(255, 255, 255, ${sparkle.opacity})`;
           sparkleCtx.beginPath();
@@ -176,10 +226,25 @@ export const DitheredLoader = () => {
       sparkleAnimationRef.current = requestAnimationFrame(animateSparkles);
     };
 
-    // Start animation
-    sparkleAnimationRef.current = requestAnimationFrame(animateSparkles);
+    // Wait for dither data, then create sparkles and start animation
+    const checkDitherData = setInterval(() => {
+      if (ditherDataRef.current) {
+        clearInterval(checkDitherData);
+        createSparkles();
+        // Start animation
+        sparkleAnimationRef.current = requestAnimationFrame(animateSparkles);
+      }
+    }, 100);
+    
+    // If dither data is already available, start immediately
+    if (ditherDataRef.current) {
+      clearInterval(checkDitherData);
+      createSparkles();
+      sparkleAnimationRef.current = requestAnimationFrame(animateSparkles);
+    }
 
     return () => {
+      clearInterval(checkDitherData);
       animationRunning = false;
       window.removeEventListener('resize', resizeSparkleCanvas);
       if (sparkleAnimationRef.current) {
