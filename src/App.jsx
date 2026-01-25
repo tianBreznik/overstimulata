@@ -27,6 +27,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [backgroundsReady, setBackgroundsReady] = useState(false);
   const [pagesReady, setPagesReady] = useState(false);
+  const [loaderDissolved, setLoaderDissolved] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -52,6 +53,7 @@ function App() {
   const load = async () => {
     try {
       setPagesReady(false); // Reset pages ready state when loading new data
+      setLoaderDissolved(false); // Reset dissolve state when loading new data
       const chaps = await getChapters(BOOK_ID);
       const withChildren = await Promise.all(
         chaps.map(async (c) => {
@@ -295,7 +297,7 @@ function App() {
 
   return (
     <div className={`app eink ${editingChapter || showNewChapterEditor || parentChapterForNewSub ? 'with-editor' : ''} ${isMobile && !isEditor && previewingAsReader ? 'with-page-reader' : ''}`}>
-      <FeatherCursor>
+      <FeatherCursor disabled={loading || (isMobile && !backgroundsReady) || chapters.length === 0 || !pagesReady || !loaderDissolved}>
         {/* PageReader: Rendered on both mobile and desktop (desktop shows PDF viewer) */}
       {/* Render PageReader when chapters are loaded, but keep loader visible until pages are ready */}
       {!loading && chapters.length > 0 && (!isMobile || backgroundsReady) && (
@@ -327,9 +329,12 @@ function App() {
           onPagesReady={() => setPagesReady(true)}
         />
       )}
-      {/* Show loader until chapters are loaded, backgrounds ready (mobile), and pages are ready */}
-      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0 || !pagesReady) && (
-        <DitheredLoader />
+      {/* Show loader until chapters are loaded, backgrounds ready (mobile), pages are ready, and dissolve is complete */}
+      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0 || !pagesReady || !loaderDissolved) && (
+        <DitheredLoader 
+          shouldDissolve={pagesReady && !loaderDissolved}
+          onDissolveComplete={() => setLoaderDissolved(true)}
+        />
       )}
 
       {/* Desktop: Old scroll-based layout - hidden (replaced by PageReader PDF viewer) */}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './FeatherCursor.css';
 
-export const FeatherCursor = ({ children }) => {
+export const FeatherCursor = ({ children, disabled = false }) => {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 768;
@@ -34,6 +34,15 @@ export const FeatherCursor = ({ children }) => {
   // Desktop: Track mouse movement and create trailing particles
   useEffect(() => {
     if (isMobile) return;
+    
+    // Disable cursor when disabled prop is true
+    if (disabled) {
+      document.body.classList.remove('feather-cursor-active');
+      if (cursorRef.current) {
+        cursorRef.current.style.opacity = '0';
+      }
+      return;
+    }
 
     // Preload feather image for Safari compatibility
     const preloadImg = new Image();
@@ -263,7 +272,9 @@ export const FeatherCursor = ({ children }) => {
     };
 
     // Add class to body to trigger global cursor: none CSS rule
-    document.body.classList.add('feather-cursor-active');
+    if (!disabled) {
+      document.body.classList.add('feather-cursor-active');
+    }
     
     window.addEventListener('mousemove', handleMouseMoveWithShow);
     window.addEventListener('mousedown', handleMouseDown);
@@ -272,7 +283,9 @@ export const FeatherCursor = ({ children }) => {
     document.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
-      document.body.classList.remove('feather-cursor-active');
+      if (!disabled) {
+        document.body.classList.remove('feather-cursor-active');
+      }
       window.removeEventListener('mousemove', handleMouseMoveWithShow);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -292,7 +305,7 @@ export const FeatherCursor = ({ children }) => {
       });
       particlesRef.current = [];
     };
-  }, [isMobile]);
+  }, [isMobile, disabled]);
 
   // Mobile: Create particles on touch
   useEffect(() => {
