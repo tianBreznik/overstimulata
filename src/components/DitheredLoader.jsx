@@ -1,12 +1,19 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import './DitheredLoader.css';
 
-export const DitheredLoader = () => {
+export const DitheredLoader = ({ active }) => {
   const canvasRef = useRef(null);
   const sparkleCanvasRef = useRef(null);
   const imageRef = useRef(null);
   const sparkleAnimationRef = useRef(null);
   const ditherDataRef = useRef(null); // Store dithered image data for influence map
+  // Extra refs for JS-driven pixel melt
+  const originalImageDataRef = useRef(null);
+  const pixelIndicesRef = useRef(null);
+  const dissolveAnimationRef = useRef(null);
+  const dissolveProgressRef = useRef(0);
+  const [isVisible, setIsVisible] = useState(false);
+  const [isDissolving, setIsDissolving] = useState(false);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -92,12 +99,27 @@ export const DitheredLoader = () => {
       // Put dithered image data back
       ctx.putImageData(imageData, 0, 0);
       
-      // Store dithered data for sparkle influence map
+      // Store dithered data for sparkle influence map and pixel melt
+      const dataCopy = new Uint8ClampedArray(imageData.data);
       ditherDataRef.current = {
-        data: new Uint8ClampedArray(imageData.data),
+        data: dataCopy,
         width: canvas.width,
         height: canvas.height
       };
+      originalImageDataRef.current = {
+        data: dataCopy,
+        width: canvas.width,
+        height: canvas.height
+      };
+
+      // Precompute a shuffled list of pixel indices once for dissolve
+      const pixelCount = canvas.width * canvas.height;
+      const indices = Array.from({ length: pixelCount }, (_, i) => i);
+      for (let i = indices.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [indices[i], indices[j]] = [indices[j], indices[i]];
+      }
+      pixelIndicesRef.current = indices;
     };
 
     img.onerror = () => {
@@ -114,6 +136,10 @@ export const DitheredLoader = () => {
       window.removeEventListener('resize', resizeCanvas);
       if (sparkleAnimationRef.current) {
         cancelAnimationFrame(sparkleAnimationRef.current);
+      }
+      if (dissolveAnimationRef.current) {
+        cancelAnimationFrame(dissolveAnimationRef.current);
+        dissolveAnimationRef.current = null;
       }
     };
   }, []);
@@ -254,8 +280,93 @@ export const DitheredLoader = () => {
     };
   }, []);
 
+  // Respond to active flag from parent: when active becomes false, start a local
+  // JS-driven pixel melt. We never tell the parent when we're done; this is purely visual.
+  useEffect(() => {
+    if (active) {
+      setIsVisible(true);
+      setIsDissolving(false);
+      // Reset sparkle opacity in case it was faded during a previous dissolve
+      if (sparkleCanvasRef.current) {
+        sparkleCanvasRef.current.style.opacity = '';
+      }
+    } else if (!active && isVisible && !isDissolving) {
+      // Start pixel melt only if we have image data ready
+      const canvas = canvasRef.current;
+      const ctx = canvas ? canvas.getContext('2d') : null;
+      if (!canvas || !ctx || !originalImageDataRef.current || !pixelIndicesRef.current) {
+        // If we can't safely animate, just hide
+        setIsVisible(false);
+        return;
+      }
+
+      setIsDissolving(true);
+      dissolveProgressRef.current = 0;
+
+      const dissolveSpeed = 0.08; // Higher = faster dissolve
+
+      const animateDissolve = () => {
+        if (!originalImageDataRef.current || !pixelIndicesRef.current) return;
+        const { data: orig, width, height } = originalImageDataRef.current;
+
+        // Start from the original dithered frame each time
+        const img = ctx.getImageData(0, 0, width, height);
+        const d = img.data;
+        const n = width * height;
+        for (let i = 0; i < orig.length; i++) d[i] = orig[i];
+
+        const toDissolve = Math.min(
+          Math.floor(dissolveProgressRef.current * n),
+          pixelIndicesRef.current.length
+        );
+
+        // Make the first "toDissolve" pixels transparent
+        for (let i = 0; i < toDissolve; i++) {
+          const idx = pixelIndicesRef.current[i] * 4;
+          d[idx + 3] = 0; // alpha channel
+        }
+
+        ctx.putImageData(img, 0, 0);
+
+        // Fade sparkles in sync with dissolve
+        if (sparkleCanvasRef.current) {
+          sparkleCanvasRef.current.style.opacity = String(1 - dissolveProgressRef.current);
+        }
+
+        dissolveProgressRef.current += dissolveSpeed;
+
+        if (dissolveProgressRef.current >= 1) {
+          // Melt complete
+          setIsDissolving(false);
+          setIsVisible(false);
+          dissolveAnimationRef.current = null;
+          return;
+        }
+
+        dissolveAnimationRef.current = requestAnimationFrame(animateDissolve);
+      };
+
+      dissolveAnimationRef.current = requestAnimationFrame(animateDissolve);
+    }
+  }, [active, isVisible, isDissolving]);
+
+  const classes = [
+    'dithered-loader',
+    !isVisible ? 'dithered-loader--hidden' : '',
+  ]
+    .filter(Boolean)
+    .join(' ');
+
   return (
-    <div className="dithered-loader">
+    <div
+      className={classes}
+      onAnimationEnd={(e) => {
+        if (e.animationName === 'dither-noise-dissolve') {
+          setIsDissolving(false);
+          setIsVisible(false);
+        }
+      }}
+    >
       <canvas ref={canvasRef} className="dithered-canvas" />
       <canvas ref={sparkleCanvasRef} className="sparkle-canvas" />
     </div>

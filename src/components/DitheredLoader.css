@@ -9,6 +9,13 @@
   overflow: hidden;
 }
 
+/* When the loader has finished dissolving, keep it non-blocking and invisible
+   but don't unmount it (to avoid disturbing siblings like PageReader). */
+.dithered-loader--hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
 .dithered-canvas {
   display: block;
   width: 100%;
@@ -27,4 +34,7 @@
   pointer-events: none;
   z-index: 1;
 }
+
+/* The JS-driven pixel melt is handled in DitheredLoader.jsx by modifying the
+   canvas alpha channel directly; CSS here only handles the final hidden state. */
 

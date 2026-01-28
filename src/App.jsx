@@ -327,10 +327,16 @@ function App() {
           onPagesReady={() => setPagesReady(true)}
         />
       )}
-      {/* Show loader until chapters are loaded, backgrounds ready (mobile), and pages are ready */}
-      {(loading || (isMobile && !backgroundsReady) || chapters.length === 0 || !pagesReady) && (
-        <DitheredLoader />
-      )}
+      {/* Show loader while app is preparing pages; the loader itself will handle
+          a local dissolve when this flag goes from true -> false. */}
+      <DitheredLoader
+        active={
+          loading ||
+          (isMobile && !backgroundsReady) ||
+          chapters.length === 0 ||
+          !pagesReady
+        }
+      />
 
       {/* Desktop: Old scroll-based layout - hidden (replaced by PageReader PDF viewer) */}
       {false && !isMobile && (
