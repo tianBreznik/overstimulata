@@ -1,17 +1,12 @@
 import { useEffect, useRef } from 'react';
 import './DitheredLoader.css';
 
-export const DitheredLoader = ({ shouldDissolve, onDissolveComplete }) => {
+export const DitheredLoader = () => {
   const canvasRef = useRef(null);
   const sparkleCanvasRef = useRef(null);
   const imageRef = useRef(null);
   const sparkleAnimationRef = useRef(null);
-  const dissolveAnimationRef = useRef(null);
   const ditherDataRef = useRef(null); // Store dithered image data for influence map
-  const isDissolvingRef = useRef(false);
-  const dissolveProgressRef = useRef(0);
-  const pixelIndicesRef = useRef(null);
-  const originalImageDataRef = useRef(null); // Store original dithered image data
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -97,13 +92,6 @@ export const DitheredLoader = ({ shouldDissolve, onDissolveComplete }) => {
       // Put dithered image data back
       ctx.putImageData(imageData, 0, 0);
       
-      // Store original image data for dissolve effect
-      originalImageDataRef.current = {
-        data: new Uint8ClampedArray(imageData.data),
-        width: canvas.width,
-        height: canvas.height
-      };
-      
       // Store dithered data for sparkle influence map
       ditherDataRef.current = {
         data: new Uint8ClampedArray(imageData.data),
@@ -127,102 +115,8 @@ export const DitheredLoader = ({ shouldDissolve, onDissolveComplete }) => {
       if (sparkleAnimationRef.current) {
         cancelAnimationFrame(sparkleAnimationRef.current);
       }
-      if (dissolveAnimationRef.current) {
-        cancelAnimationFrame(dissolveAnimationRef.current);
-      }
     };
   }, []);
-
-  // Dissolve effect - fade out pixels randomly to reveal content behind
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas || !originalImageDataRef.current) return;
-
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-
-    // Create and shuffle pixel indices once
-    if (!pixelIndicesRef.current && originalImageDataRef.current) {
-      const pixelCount = originalImageDataRef.current.width * originalImageDataRef.current.height;
-      const pixelIndices = Array.from({ length: pixelCount }, (_, i) => i);
-      
-      // Shuffle array for random dissolve order
-      for (let i = pixelIndices.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [pixelIndices[i], pixelIndices[j]] = [pixelIndices[j], pixelIndices[i]];
-      }
-      pixelIndicesRef.current = pixelIndices;
-    }
-
-    const dissolveSpeed = 0.1; // How fast pixels dissolve (0-1 per frame) - increased for faster dissolve
-
-    const animateDissolve = () => {
-      if (!originalImageDataRef.current || !pixelIndicesRef.current) return;
-
-      const { data: originalData, width, height } = originalImageDataRef.current;
-      const currentImageData = ctx.getImageData(0, 0, width, height);
-      const currentData = currentImageData.data;
-      const pixelCount = width * height;
-
-      // Copy original data
-      for (let i = 0; i < originalData.length; i++) {
-        currentData[i] = originalData[i];
-      }
-
-      // Dissolve pixels based on progress
-      const pixelsToDissolve = Math.floor(dissolveProgressRef.current * pixelCount);
-      
-      for (let i = 0; i < pixelsToDissolve && i < pixelIndicesRef.current.length; i++) {
-        const pixelIndex = pixelIndicesRef.current[i];
-        const dataIndex = pixelIndex * 4;
-        
-        // Set alpha to 0 to make pixel transparent
-        currentData[dataIndex + 3] = 0;
-      }
-
-      // Put modified image data back
-      ctx.putImageData(currentImageData, 0, 0);
-
-      // Also fade out sparkle canvas
-      if (sparkleCanvasRef.current) {
-        sparkleCanvasRef.current.style.opacity = String(1 - dissolveProgressRef.current);
-      }
-
-      dissolveProgressRef.current += dissolveSpeed;
-
-      if (dissolveProgressRef.current >= 1) {
-        // Dissolve complete
-        isDissolvingRef.current = false;
-        if (onDissolveComplete) {
-          onDissolveComplete();
-        }
-        return;
-      }
-
-      dissolveAnimationRef.current = requestAnimationFrame(animateDissolve);
-    };
-
-    // Start dissolve when shouldDissolve becomes true
-    if (shouldDissolve && !isDissolvingRef.current && originalImageDataRef.current && pixelIndicesRef.current) {
-      isDissolvingRef.current = true;
-      dissolveProgressRef.current = 0;
-      // Stop sparkles during dissolve
-      if (sparkleAnimationRef.current) {
-        cancelAnimationFrame(sparkleAnimationRef.current);
-        sparkleAnimationRef.current = null;
-      }
-      dissolveAnimationRef.current = requestAnimationFrame(animateDissolve);
-    }
-
-    return () => {
-      if (dissolveAnimationRef.current) {
-        cancelAnimationFrame(dissolveAnimationRef.current);
-      }
-    };
-  }, [shouldDissolve, onDissolveComplete]);
-
-  // Expose dissolve trigger via ref (we'll use a prop instead)
-  // Actually, let's use a prop to trigger the dissolve
 
   // Sparkle effect - random white points appearing and disappearing, influenced by dither pattern
   useEffect(() => {
@@ -361,7 +255,7 @@ export const DitheredLoader = ({ shouldDissolve, onDissolveComplete }) => {
   }, []);
 
   return (
-    <div className={`dithered-loader ${isDissolvingRef.current ? 'dissolving' : ''}`}>
+    <div className="dithered-loader">
       <canvas ref={canvasRef} className="dithered-canvas" />
       <canvas ref={sparkleCanvasRef} className="sparkle-canvas" />
     </div>

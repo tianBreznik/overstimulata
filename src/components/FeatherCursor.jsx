@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import './FeatherCursor.css';
 
-export const FeatherCursor = ({ children, disabled = false }) => {
+export const FeatherCursor = ({ children }) => {
   const [isMobile, setIsMobile] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth <= 768;
@@ -34,15 +34,6 @@ export const FeatherCursor = ({ children, disabled = false }) => {
   // Desktop: Track mouse movement and create trailing particles
   useEffect(() => {
     if (isMobile) return;
-    
-    // Disable cursor when disabled prop is true
-    if (disabled) {
-      document.body.classList.remove('feather-cursor-active');
-      if (cursorRef.current) {
-        cursorRef.current.style.opacity = '0';
-      }
-      return;
-    }
 
     // Preload feather image for Safari compatibility
     const preloadImg = new Image();
@@ -272,9 +263,7 @@ export const FeatherCursor = ({ children, disabled = false }) => {
     };
 
     // Add class to body to trigger global cursor: none CSS rule
-    if (!disabled) {
-      document.body.classList.add('feather-cursor-active');
-    }
+    document.body.classList.add('feather-cursor-active');
     
     window.addEventListener('mousemove', handleMouseMoveWithShow);
     window.addEventListener('mousedown', handleMouseDown);
@@ -283,9 +272,7 @@ export const FeatherCursor = ({ children, disabled = false }) => {
     document.addEventListener('mouseleave', handleMouseLeave);
 
     return () => {
-      if (!disabled) {
-        document.body.classList.remove('feather-cursor-active');
-      }
+      document.body.classList.remove('feather-cursor-active');
       window.removeEventListener('mousemove', handleMouseMoveWithShow);
       window.removeEventListener('mousedown', handleMouseDown);
       window.removeEventListener('mouseup', handleMouseUp);
@@ -305,7 +292,7 @@ export const FeatherCursor = ({ children, disabled = false }) => {
       });
       particlesRef.current = [];
     };
-  }, [isMobile, disabled]);
+  }, [isMobile]);
 
   // Mobile: Create particles on touch
   useEffect(() => {
