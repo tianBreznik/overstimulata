@@ -12,6 +12,7 @@ export const DitheredLoader = ({ active }) => {
   const pixelIndicesRef = useRef(null);
   const dissolveAnimationRef = useRef(null);
   const dissolveProgressRef = useRef(0);
+  const noiseAnimationRef = useRef(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isDissolving, setIsDissolving] = useState(false);
 
@@ -141,8 +142,105 @@ export const DitheredLoader = ({ active }) => {
         cancelAnimationFrame(dissolveAnimationRef.current);
         dissolveAnimationRef.current = null;
       }
+      if (noiseAnimationRef.current) {
+        cancelAnimationFrame(noiseAnimationRef.current);
+        noiseAnimationRef.current = null;
+      }
     };
   }, []);
+
+  // White-area noise effect: apply hash-based noise only to white pixels
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    if (!active || isDissolving) {
+      if (noiseAnimationRef.current) {
+        cancelAnimationFrame(noiseAnimationRef.current);
+        noiseAnimationRef.current = null;
+      }
+      return;
+    }
+
+    let frame = 0;
+    let baseCopy = null;
+    let width = 0;
+    let height = 0;
+
+    const amplitude = 45;
+    const holdFrames = 10;
+
+    const hash2 = (x, y, t) => {
+      let n = (x * 374761393) ^ (y * 668265263) ^ (t * 1274126177);
+      n = (n ^ (n >> 13)) * 1274126177;
+      n = (n ^ (n >> 16)) >>> 0;
+      return n / 4294967295;
+    };
+
+    const animateNoise = () => {
+      if (!active || isDissolving) {
+        noiseAnimationRef.current = null;
+        return;
+      }
+
+      if (!ditherDataRef.current) {
+        noiseAnimationRef.current = requestAnimationFrame(animateNoise);
+        return;
+      }
+
+      if (!baseCopy) {
+        const { data, width: w, height: h } = ditherDataRef.current;
+        baseCopy = new Uint8ClampedArray(data);
+        width = w;
+        height = h;
+      }
+
+      const img = ctx.getImageData(0, 0, width, height);
+      const d = img.data;
+      d.set(baseCopy);
+
+      const tBucket = Math.floor(frame / holdFrames);
+      const tFrac = (frame % holdFrames) / holdFrames;
+
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const idx = y * width + x;
+          const di = idx * 4;
+          const baseVal = baseCopy[di];
+
+          if (baseVal === 255) {
+            const n0 = 2 * hash2(x, y, tBucket) - 1;
+            const n1 = 2 * hash2(x, y, tBucket + 1) - 1;
+            const n = n0 + tFrac * (n1 - n0);
+
+            let val = baseVal + amplitude * n;
+            if (val < 0) val = 0;
+            if (val > 255) val = 255;
+
+            d[di] = val;
+            d[di + 1] = val;
+            d[di + 2] = val;
+          }
+        }
+      }
+
+      ctx.putImageData(img, 0, 0);
+      frame += 1;
+      noiseAnimationRef.current = requestAnimationFrame(animateNoise);
+    };
+
+    noiseAnimationRef.current = requestAnimationFrame(animateNoise);
+
+    return () => {
+      if (noiseAnimationRef.current) {
+        cancelAnimationFrame(noiseAnimationRef.current);
+        noiseAnimationRef.current = null;
+      }
+    };
+  }, [active, isDissolving]);
 
   // Sparkle effect - random white points appearing and disappearing, influenced by dither pattern
   useEffect(() => {
@@ -303,30 +401,27 @@ export const DitheredLoader = ({ active }) => {
       setIsDissolving(true);
       dissolveProgressRef.current = 0;
 
-      const dissolveSpeed = 0.08; // Higher = faster dissolve
+      const { width, height } = originalImageDataRef.current;
+      const n = width * height;
+      const dissolveSpeed = 0.08;
 
       const animateDissolve = () => {
-        if (!originalImageDataRef.current || !pixelIndicesRef.current) return;
-        const { data: orig, width, height } = originalImageDataRef.current;
-
-        // Start from the original dithered frame each time
-        const img = ctx.getImageData(0, 0, width, height);
-        const d = img.data;
-        const n = width * height;
-        for (let i = 0; i < orig.length; i++) d[i] = orig[i];
+        if (!pixelIndicesRef.current) return;
 
         const toDissolve = Math.min(
           Math.floor(dissolveProgressRef.current * n),
           pixelIndicesRef.current.length
         );
 
-        // Make the first "toDissolve" pixels transparent
-        for (let i = 0; i < toDissolve; i++) {
-          const idx = pixelIndicesRef.current[i] * 4;
-          d[idx + 3] = 0; // alpha channel
+        if (toDissolve > 0) {
+          const img = ctx.getImageData(0, 0, width, height);
+          const d = img.data;
+          for (let i = 0; i < toDissolve; i++) {
+            const idx = pixelIndicesRef.current[i] * 4;
+            d[idx + 3] = 0;
+          }
+          ctx.putImageData(img, 0, 0);
         }
-
-        ctx.putImageData(img, 0, 0);
 
         // Fade sparkles in sync with dissolve
         if (sparkleCanvasRef.current) {
